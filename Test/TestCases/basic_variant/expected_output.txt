@@ -1,0 +1,17 @@
+TEST(MyFeature, MyScenario)
+{
+    some_step("Foo", 42);
+    some_other_step("DocString");
+    {
+        std::vector<TableRow> table = {
+            {"John", "Doe"},
+            {"James", "Bond"}
+        };
+        some_table_step(table);
+    }
+}
+
+TEST(MyFeature, MyOtherScenario)
+{
+    some_strange_step();
+}

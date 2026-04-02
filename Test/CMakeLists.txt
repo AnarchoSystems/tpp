@@ -14,5 +14,4 @@ target_link_libraries(lib_cpp_test PRIVATE lib_tpp gtest_main)
 include(GoogleTest)
 
 gtest_discover_tests(lib_cpp_test
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    PREFIX "Acceptance/")
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
