@@ -18,7 +18,7 @@
                     "name": "some_other_step",
                     "regexArgs": [],
                     "argument": {
-                        "DocString": "DocString"
+                        "DocString": "\"DocString\""
                     }
                 },
                 {
@@ -27,12 +27,12 @@
                     "argument": {
                         "DataTable": [
                             [
-                                "John",
-                                "Doe"
+                                "\"John\"",
+                                "\"Doe\""
                             ],
                             [
-                                "James",
-                                "Bond"
+                                "\"James\"",
+                                "\"Bond\""
                             ]
                         ]
                     }

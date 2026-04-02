@@ -1,12 +1,6 @@
-struct Table
-{
-     name : string;
-     rows : list<list<string>>;
-};
-
 enum StepArgument
 {
-    None, DocString(string), DataTable(Table)
+    None, DocString(string), DataTable(list<list<string>>)
 };
 
 struct Step

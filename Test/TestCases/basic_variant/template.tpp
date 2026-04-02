@@ -1,23 +1,23 @@
 template main(feature: Feature)
-@for scenario in feature.scenarios@
-TEST(@feature.name@, @scenario.name@) 
+@for scenario in feature.scenarios | sep="\n"@
+TEST(@feature.name@, @scenario.name@)
 {
     @for step in scenario.steps@
     @switch step.argument@
     @case None@
     @step.name@(@for arg in step.regexArgs | sep=", "@@arg@@@end for@);
     @end case@
-    @case DocString(string)@
-    @step.name@(@for arg in step.regexArgs | sep=", " followedBy=", "@@arg@@@end for@ @string@);
+    @case DocString(docStr)@
+    @step.name@(@for arg in step.regexArgs | sep=", " followedBy=", "@@arg@@@end for@@docStr@);
     @end case@
-    @case DataTable(Table)@
+    @case DataTable(rows)@
     {
         std::vector<TableRow> table = {
-            @for row in step.argument.rows | sep=",\n"@
+            @for row in rows@
             {@for cell in row | sep=", "@@cell@@@end for@},
             @end for@
         };
-        @step.name@(@for arg in step.regexArgs | sep=", " followedBy=", "@@arg@@@end for@ table);
+        @step.name@(@for arg in step.regexArgs | sep=", " followedBy=", "@@arg@@@end for@table);
     }
     @end case@
     @end switch@

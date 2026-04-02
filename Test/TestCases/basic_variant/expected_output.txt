@@ -5,7 +5,7 @@ TEST(MyFeature, MyScenario)
     {
         std::vector<TableRow> table = {
             {"John", "Doe"},
-            {"James", "Bond"}
+            {"James", "Bond"},
         };
         some_table_step(table);
     }

@@ -4,14 +4,24 @@
 #include <nlohmann/json.hpp>
 #include <tpp/Compiler.h>
 
+namespace tpp
+{
+    void PrintTo(const Diagnostic &d, std::ostream *os)
+    {
+        nlohmann::json j = d;
+        *os << j.dump(2);
+    }
+}
+
 struct tTestCase
 {
     std::string name;
     std::string typedefs;
     std::string templateString;
     nlohmann::json input;
+    bool expectSuccess = true;
     std::string expectedOutput;
-    std::vector<tpp::Diagnostic> diagnostics;
+    std::vector<tpp::Diagnostic> expectedDiagnostics;
 };
 
 void PrintTo(const tTestCase &testCase, std::ostream *os)
@@ -66,6 +76,7 @@ std::vector<tTestCase> GetTestCases()
         auto &testCase = testCases.emplace_back();
 
         testCase.name = entry.path().filename().string();
+        testCase.expectSuccess = isSuccess;
         auto input = std::string((std::istreambuf_iterator<char>(inputFile)), std::istreambuf_iterator<char>());
         testCase.input = nlohmann::json::parse(input);
         testCase.typedefs = std::string((std::istreambuf_iterator<char>(typedefsFile)), std::istreambuf_iterator<char>());
@@ -77,7 +88,7 @@ std::vector<tTestCase> GetTestCases()
         else
         {
             auto diagnosticsJson = nlohmann::json::parse(std::string((std::istreambuf_iterator<char>(expectedOutputFile)), std::istreambuf_iterator<char>()));
-            testCase.diagnostics = diagnosticsJson.get<std::vector<tpp::Diagnostic>>();
+            testCase.expectedDiagnostics = diagnosticsJson.get<std::vector<tpp::Diagnostic>>();
         }
     }
 
@@ -106,9 +117,8 @@ TEST_P(AcceptanceTest, RunTestCase)
     tpp::Program program;
 
     const bool isSuccess = compiler.add_types(testCase.typedefs, diagnostics) && compiler.compile(testCase.templateString, output, diagnostics) && output.get_function("main", functionSymbol, diagnostics) && functionSymbol.bind(testCase.input, program, diagnostics);
-    const bool expectedSuccess = !testCase.expectedOutput.empty();
 
-    EXPECT_EQ(isSuccess, expectedSuccess) << "Test case: " << testCase.name;
+    EXPECT_EQ(isSuccess, testCase.expectSuccess) << "Test case: " << testCase.name;
     if (isSuccess)
     {
         std::string generatedCode = program.run();
@@ -116,7 +126,7 @@ TEST_P(AcceptanceTest, RunTestCase)
     }
     else
     {
-        EXPECT_EQ(diagnostics, testCase.diagnostics) << "Test case: " << testCase.name;
+        EXPECT_EQ(diagnostics, testCase.expectedDiagnostics) << "Test case: " << testCase.name;
     }
 }
 

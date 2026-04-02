@@ -1,0 +1,10 @@
+[
+    {
+        "range": {
+            "start": {"line": 2, "character": 11},
+            "end": {"line": 2, "character": 22}
+        },
+        "message": "undefined type 'UnknownType'",
+        "severity": "error"
+    }
+]
