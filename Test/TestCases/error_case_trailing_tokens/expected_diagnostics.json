@@ -1,0 +1,15 @@
+[
+	{
+		"uri": "error_case_trailing_tokens/template.tpp",
+		"diagnostics": [
+			{
+				"range": {
+					"start": {"line": 2, "character": 0},
+					"end": {"line": 2, "character": 14}
+				},
+				"message": "invalid case tag 'A extra'",
+				"severity": "error"
+			}
+		]
+	}
+]

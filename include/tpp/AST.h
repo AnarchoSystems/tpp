@@ -119,10 +119,12 @@ namespace tpp
     struct ForNode
     {
         std::string varName;
+        std::string iteratorVarName;
         Expression collectionExpr;
         std::vector<ASTNode> body;
         std::string sep;
         std::string followedBy;
+        std::string precededBy;
         bool isBlock = false;
         int insertCol = 0;
     };
@@ -130,6 +132,8 @@ namespace tpp
     struct IfNode
     {
         Expression condExpr;
+        bool negated = false;
+        std::string condText;
         std::vector<ASTNode> thenBody;
         std::vector<ASTNode> elseBody;
         bool isBlock = false;
@@ -163,6 +167,7 @@ namespace tpp
         std::string functionName;
         std::string sep;
         std::string followedBy;
+        std::string precededBy;
         bool isBlock = false;
         int insertCol = 0;
     };

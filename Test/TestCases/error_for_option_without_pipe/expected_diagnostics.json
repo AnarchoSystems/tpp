@@ -1,0 +1,23 @@
+[ 
+	{
+		"uri": "error_for_option_without_pipe/template.tpp",
+		"diagnostics": [
+			{
+				"range": {
+					"start": {"line": 1, "character": 0},
+					"end": {"line": 1, "character": 33}
+				},
+				"message": "for collection must be a variable or member path",
+				"severity": "error"
+			},
+			{
+				"range": {
+					"start": {"line": 1, "character": 33},
+					"end": {"line": 1, "character": 39}
+				},
+				"message": "unknown variable 'item'",
+				"severity": "error"
+			}
+		]
+	}
+]

@@ -4,6 +4,10 @@
 #include <sstream>
 #include <functional>
 #include <iostream>
+#include <algorithm>
+#include <cctype>
+#include <map>
+#include <set>
 
 namespace tpp
 {
@@ -446,17 +450,17 @@ namespace tpp
             size_t at = src.find('@', i);
             if (at == std::string::npos)
             {
-                segs.push_back({false, src.substr(i)});
+                segs.push_back({false, src.substr(i), (int)i, (int)src.size()});
                 break;
             }
             if (at > i)
             {
-                segs.push_back({false, src.substr(i, at - i)});
+                segs.push_back({false, src.substr(i, at - i), (int)i, (int)at});
             }
             size_t end = src.find('@', at + 1);
             if (end == std::string::npos)
             {
-                segs.push_back({false, src.substr(at)});
+                segs.push_back({false, src.substr(at), (int)at, (int)src.size()});
                 break;
             }
             if (end == at + 1)
@@ -465,7 +469,7 @@ namespace tpp
                 i = end;
                 continue;
             }
-            segs.push_back({true, src.substr(at + 1, end - at - 1)});
+            segs.push_back({true, src.substr(at + 1, end - at - 1), (int)(at + 1), (int)end});
             i = end + 1;
         }
         return segs;
@@ -554,6 +558,133 @@ namespace tpp
         return result;
     }
 
+    static bool isIdentStart(char c)
+    {
+        return std::isalpha(static_cast<unsigned char>(c)) || c == '_';
+    }
+
+    static bool isIdentChar(char c)
+    {
+        return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
+    }
+
+    static bool isIdentifier(const std::string &s)
+    {
+        if (s.empty() || !isIdentStart(s[0]))
+            return false;
+        for (size_t i = 1; i < s.size(); ++i)
+        {
+            if (!isIdentChar(s[i]))
+                return false;
+        }
+        return true;
+    }
+
+    static bool isPathExpressionText(const std::string &s)
+    {
+        std::string t = trim(s);
+        if (t.empty())
+            return false;
+        size_t start = 0;
+        while (start <= t.size())
+        {
+            size_t dot = t.find('.', start);
+            std::string part = (dot == std::string::npos) ? t.substr(start) : t.substr(start, dot - start);
+            if (!isIdentifier(part))
+                return false;
+            if (dot == std::string::npos)
+                break;
+            start = dot + 1;
+        }
+        return true;
+    }
+
+    static void setDirectiveError(DirectiveInfo &info, const std::string &message, int start = 0, int end = 0)
+    {
+        if (info.hasError)
+            return;
+        info.hasError = true;
+        info.errorMessage = message;
+        info.errorStart = start;
+        info.errorEnd = end;
+    }
+
+    static void parseDirectiveOptions(const std::string &optPart,
+                                      const std::set<std::string> &allowedStringKeys,
+                                      const std::set<std::string> &allowedIdentKeys,
+                                      std::map<std::string, std::string> &outValues,
+                                      DirectiveInfo &info)
+    {
+        size_t p = 0;
+        std::set<std::string> seen;
+        while (p < optPart.size())
+        {
+            while (p < optPart.size() && std::isspace(static_cast<unsigned char>(optPart[p])))
+                ++p;
+            if (p >= optPart.size())
+                break;
+
+            size_t keyStart = p;
+            while (p < optPart.size() && optPart[p] != '=' && !std::isspace(static_cast<unsigned char>(optPart[p])))
+                ++p;
+            std::string key = trim(optPart.substr(keyStart, p - keyStart));
+            if (!isIdentifier(key))
+            {
+                setDirectiveError(info, "invalid option key '" + key + "'", (int)keyStart, (int)p);
+                return;
+            }
+            while (p < optPart.size() && std::isspace(static_cast<unsigned char>(optPart[p])))
+                ++p;
+            if (p >= optPart.size() || optPart[p] != '=')
+            {
+                setDirectiveError(info, "expected '=' after option key '" + key + "'", (int)keyStart, (int)p);
+                return;
+            }
+            ++p;
+            while (p < optPart.size() && std::isspace(static_cast<unsigned char>(optPart[p])))
+                ++p;
+
+            if (seen.count(key))
+            {
+                setDirectiveError(info, "duplicate option '" + key + "'", (int)keyStart, (int)p);
+                return;
+            }
+            seen.insert(key);
+
+            if (allowedStringKeys.count(key) == 0 && allowedIdentKeys.count(key) == 0)
+            {
+                setDirectiveError(info, "unknown option '" + key + "'", (int)keyStart, (int)p);
+                return;
+            }
+
+            std::string value;
+            if (allowedStringKeys.count(key) != 0)
+            {
+                size_t before = p;
+                value = parseStringLiteral(optPart, p);
+                if (before == p)
+                {
+                    setDirectiveError(info, "option '" + key + "' expects a quoted string value", (int)before, (int)before + 1);
+                    return;
+                }
+            }
+            else
+            {
+                size_t valueStart = p;
+                while (p < optPart.size() && !std::isspace(static_cast<unsigned char>(optPart[p])))
+                    ++p;
+                value = trim(optPart.substr(valueStart, p - valueStart));
+                if (!isIdentifier(value))
+                {
+                    setDirectiveError(info, "option '" + key + "' expects an identifier value", (int)valueStart, (int)p);
+                    return;
+                }
+            }
+
+            outValues[key] = value;
+        }
+    }
+
     DirectiveInfo classifyDirective(const std::string &s)
     {
         std::string t = trim(s);
@@ -581,7 +712,15 @@ namespace tpp
         }
         if (startsWith(t, "end case"))
         {
-            info.kind = DirectiveKind::EndCase;
+            if (trim(t.substr(8)).empty())
+            {
+                info.kind = DirectiveKind::EndCase;
+            }
+            else
+            {
+                info.kind = DirectiveKind::EndCase;
+                setDirectiveError(info, "unexpected trailing tokens in end case directive");
+            }
             return info;
         }
 
@@ -595,37 +734,61 @@ namespace tpp
             {
                 mainPart = trim(t.substr(0, pipe));
                 optPart = trim(t.substr(pipe + 1));
+                if (optPart.empty())
+                {
+                    setDirectiveError(info, "for options list is empty after '|'");
+                    return info;
+                }
             }
             std::string rest = mainPart.substr(4);
             size_t inPos = rest.find(" in ");
             if (inPos != std::string::npos)
             {
                 info.forVar = trim(rest.substr(0, inPos));
-                info.forCollection = parseExpression(rest.substr(inPos + 4));
+                info.forCollectionText = trim(rest.substr(inPos + 4));
+                info.forCollection = parseExpression(info.forCollectionText);
+            }
+            else
+            {
+                setDirectiveError(info, "invalid for directive; expected 'for <item> in <collection>'");
+                return info;
+            }
+
+            if (!isIdentifier(info.forVar))
+            {
+                setDirectiveError(info, "invalid loop variable name '" + info.forVar + "'");
+                return info;
+            }
+            if (!isPathExpressionText(info.forCollectionText))
+            {
+                setDirectiveError(info, "for collection must be a variable or member path");
+                return info;
+            }
+            if (pipe == std::string::npos)
+            {
+                if (rest.find("sep=") != std::string::npos ||
+                    rest.find("followedBy=") != std::string::npos ||
+                    rest.find("precededBy=") != std::string::npos ||
+                    rest.find("iteratorVar=") != std::string::npos)
+                {
+                    setDirectiveError(info, "for options require '|' before option list");
+                    return info;
+                }
             }
             if (!optPart.empty())
             {
-                size_t p = 0;
-                while (p < optPart.size())
-                {
-                    while (p < optPart.size() && optPart[p] == ' ')
-                        ++p;
-                    if (p >= optPart.size())
-                        break;
-                    size_t keyStart = p;
-                    while (p < optPart.size() && optPart[p] != '=')
-                        ++p;
-                    std::string key = trim(optPart.substr(keyStart, p - keyStart));
-                    if (p < optPart.size())
-                        ++p;
-                    std::string val = parseStringLiteral(optPart, p);
-                    if (key == "sep")
-                        info.sep = val;
-                    else if (key == "followedBy")
-                        info.followedBy = val;
-                    while (p < optPart.size() && optPart[p] == ' ')
-                        ++p;
-                }
+                std::map<std::string, std::string> values;
+                parseDirectiveOptions(optPart,
+                                      {"sep", "followedBy", "precededBy"},
+                                      {"iteratorVar"},
+                                      values,
+                                      info);
+                if (info.hasError)
+                    return info;
+                info.sep = values["sep"];
+                info.followedBy = values["followedBy"];
+                info.precededBy = values["precededBy"];
+                info.iteratorVar = values["iteratorVar"];
             }
             return info;
         }
@@ -633,14 +796,42 @@ namespace tpp
         if (startsWith(t, "if "))
         {
             info.kind = DirectiveKind::If;
-            info.ifCond = parseExpression(t.substr(3));
+            std::string condText = trim(t.substr(3));
+            if (startsWith(condText, "not "))
+            {
+                info.ifNegated = true;
+                condText = trim(condText.substr(4));
+            }
+            info.ifExprText = condText;
+            if (!isPathExpressionText(condText))
+            {
+                setDirectiveError(info, "if condition must be a variable or member path");
+                return info;
+            }
+            info.ifCond = parseExpression(condText);
             return info;
         }
 
         if (startsWith(t, "switch "))
         {
             info.kind = DirectiveKind::Switch;
-            info.switchExpr = parseExpression(t.substr(7));
+            std::string exprText = trim(t.substr(7));
+            if (exprText.empty())
+            {
+                setDirectiveError(info, "switch directive requires an expression");
+                return info;
+            }
+            if (exprText.find('|') != std::string::npos)
+            {
+                setDirectiveError(info, "switch directive does not accept options");
+                return info;
+            }
+            if (!isPathExpressionText(exprText))
+            {
+                setDirectiveError(info, "switch expression must be a variable or member path");
+                return info;
+            }
+            info.switchExpr = parseExpression(exprText);
             return info;
         }
 
@@ -648,17 +839,43 @@ namespace tpp
         {
             info.kind = DirectiveKind::Case;
             std::string rest = trim(t.substr(5));
+            if (rest.find('|') != std::string::npos)
+            {
+                setDirectiveError(info, "case directive does not accept options");
+                return info;
+            }
             size_t paren = rest.find('(');
             if (paren != std::string::npos)
             {
-                info.caseTag = rest.substr(0, paren);
+                info.caseTag = trim(rest.substr(0, paren));
                 size_t cparen = rest.find(')', paren);
+                if (cparen == std::string::npos)
+                {
+                    setDirectiveError(info, "case binding is missing closing ')'");
+                    return info;
+                }
                 info.caseBinding = rest.substr(paren + 1, cparen - paren - 1);
+                if (!trim(rest.substr(cparen + 1)).empty())
+                {
+                    setDirectiveError(info, "unexpected trailing tokens in case directive");
+                    return info;
+                }
+                if (!trim(info.caseBinding).empty() && !isIdentifier(trim(info.caseBinding)))
+                {
+                    setDirectiveError(info, "invalid case binding variable name");
+                    return info;
+                }
             }
             else
             {
                 info.caseTag = rest;
             }
+            if (!isIdentifier(info.caseTag))
+            {
+                setDirectiveError(info, "invalid case tag '" + info.caseTag + "'");
+                return info;
+            }
+            info.caseBinding = trim(info.caseBinding);
             return info;
         }
 
@@ -673,6 +890,11 @@ namespace tpp
             {
                 mainPart = trim(rest.substr(0, pipe));
                 optPart = trim(rest.substr(pipe + 1));
+                if (optPart.empty())
+                {
+                    setDirectiveError(info, "render options list is empty after '|'");
+                    return info;
+                }
             }
             size_t viaPos = mainPart.find(" via ");
             if (viaPos != std::string::npos)
@@ -681,29 +903,44 @@ namespace tpp
                 info.renderExpr = parseExpression(info.renderExprText);
                 info.renderFunc = trim(mainPart.substr(viaPos + 5));
             }
+            else
+            {
+                setDirectiveError(info, "invalid render directive; expected 'render <collection> via <function>'");
+                return info;
+            }
+            if (!isPathExpressionText(info.renderExprText))
+            {
+                setDirectiveError(info, "render expression must be a variable or member path");
+                return info;
+            }
+            if (!isIdentifier(info.renderFunc))
+            {
+                setDirectiveError(info, "invalid render function name '" + info.renderFunc + "'");
+                return info;
+            }
+            if (pipe == std::string::npos)
+            {
+                if (rest.find("sep=") != std::string::npos ||
+                    rest.find("followedBy=") != std::string::npos ||
+                    rest.find("precededBy=") != std::string::npos)
+                {
+                    setDirectiveError(info, "render options require '|' before option list");
+                    return info;
+                }
+            }
             if (!optPart.empty())
             {
-                size_t p = 0;
-                while (p < optPart.size())
-                {
-                    while (p < optPart.size() && optPart[p] == ' ')
-                        ++p;
-                    if (p >= optPart.size())
-                        break;
-                    size_t keyStart = p;
-                    while (p < optPart.size() && optPart[p] != '=')
-                        ++p;
-                    std::string key = trim(optPart.substr(keyStart, p - keyStart));
-                    if (p < optPart.size())
-                        ++p;
-                    std::string val = parseStringLiteral(optPart, p);
-                    if (key == "sep")
-                        info.renderSep = val;
-                    else if (key == "followedBy")
-                        info.renderFollowedBy = val;
-                    while (p < optPart.size() && optPart[p] == ' ')
-                        ++p;
-                }
+                std::map<std::string, std::string> values;
+                parseDirectiveOptions(optPart,
+                                      {"sep", "followedBy", "precededBy"},
+                                      {},
+                                      values,
+                                      info);
+                if (info.hasError)
+                    return info;
+                info.renderSep = values["sep"];
+                info.renderFollowedBy = values["followedBy"];
+                info.renderPrecededBy = values["precededBy"];
             }
             return info;
         }
@@ -803,6 +1040,8 @@ namespace tpp
                 LineSeg ls;
                 ls.isDirective = seg.isDirective;
                 ls.text = seg.text;
+                ls.startCol = seg.startCol;
+                ls.endCol = seg.endCol;
                 if (seg.isDirective)
                 {
                     ls.info = classifyDirective(seg.text);
@@ -866,9 +1105,11 @@ namespace tpp
             {
                 auto forNode = std::make_shared<ForNode>();
                 forNode->varName = s.info.forVar;
+                forNode->iteratorVarName = s.info.iteratorVar;
                 forNode->collectionExpr = s.info.forCollection;
                 forNode->sep = s.info.sep;
                 forNode->followedBy = s.info.followedBy;
+                forNode->precededBy = s.info.precededBy;
                 forNode->isBlock = false;
                 ++pos;
                 forNode->body = parse();
@@ -883,6 +1124,8 @@ namespace tpp
             {
                 auto ifNode = std::make_shared<IfNode>();
                 ifNode->condExpr = s.info.ifCond;
+                ifNode->negated = s.info.ifNegated;
+                ifNode->condText = s.info.ifExprText;
                 ifNode->isBlock = false;
                 ++pos;
                 ifNode->thenBody = parse();
@@ -971,9 +1214,11 @@ namespace tpp
                     {
                         auto forNode = std::make_shared<ForNode>();
                         forNode->varName = seg.info.forVar;
+                        forNode->iteratorVarName = seg.info.iteratorVar;
                         forNode->collectionExpr = seg.info.forCollection;
                         forNode->sep = seg.info.sep;
                         forNode->followedBy = seg.info.followedBy;
+                        forNode->precededBy = seg.info.precededBy;
                         forNode->isBlock = true;
                         forNode->insertCol = tl.indent;
                         ++pos;
@@ -989,6 +1234,8 @@ namespace tpp
                     {
                         auto ifNode = std::make_shared<IfNode>();
                         ifNode->condExpr = seg.info.ifCond;
+                        ifNode->negated = seg.info.ifNegated;
+                        ifNode->condText = seg.info.ifExprText;
                         ifNode->isBlock = true;
                         ifNode->insertCol = tl.indent;
                         ++pos;
@@ -1091,6 +1338,7 @@ namespace tpp
                         renderNode->functionName = seg.info.renderFunc;
                         renderNode->sep = seg.info.renderSep;
                         renderNode->followedBy = seg.info.renderFollowedBy;
+                        renderNode->precededBy = seg.info.renderPrecededBy;
                         renderNode->isBlock = true;
                         renderNode->insertCol = tl.indent;
                         nodes.push_back(std::move(renderNode));
@@ -1146,6 +1394,446 @@ namespace tpp
             }
         }
         return nodes;
+    }
+
+    static bool isOptionalType(const TypeRef &t)
+    {
+        return std::holds_alternative<std::shared_ptr<OptionalType>>(t);
+    }
+
+    static TypeRef unwrapOptionalType(const TypeRef &t)
+    {
+        if (auto opt = std::get_if<std::shared_ptr<OptionalType>>(&t))
+            return (*opt)->innerType;
+        return t;
+    }
+
+    static std::string expressionToPath(const Expression &expr)
+    {
+        return std::visit([&](auto &&arg) -> std::string
+                          {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, Variable>) {
+                return arg.name;
+            } else if constexpr (std::is_same_v<T, std::shared_ptr<FieldAccess>>) {
+                std::string base = expressionToPath(arg->base);
+                if (base.empty())
+                    return arg->field;
+                return base + "." + arg->field;
+            }
+            return ""; },
+                          expr);
+    }
+
+    struct ValidationFrame
+    {
+        DirectiveKind kind;
+        std::map<std::string, TypeRef> vars;
+        std::set<std::string> narrowedOptionals;
+        std::string optionalGuardPath;
+        std::optional<TypeRef> switchExprType;
+    };
+
+    static const StructDef *resolveStructFromType(const TypeRef &type, const TypeRegistry &types)
+    {
+        if (auto named = std::get_if<NamedType>(&type))
+        {
+            auto it = types.nameIndex.find(named->name);
+            if (it != types.nameIndex.end() && it->second.kind == TypeKind::Struct)
+                return &types.structs[it->second.index];
+            return nullptr;
+        }
+        if (auto opt = std::get_if<std::shared_ptr<OptionalType>>(&type))
+            return resolveStructFromType((*opt)->innerType, types);
+        if (auto list = std::get_if<std::shared_ptr<ListType>>(&type))
+            return resolveStructFromType((*list)->elementType, types);
+        return nullptr;
+    }
+
+    static const EnumDef *resolveEnumFromType(const TypeRef &type, const TypeRegistry &types)
+    {
+        if (auto named = std::get_if<NamedType>(&type))
+        {
+            auto it = types.nameIndex.find(named->name);
+            if (it != types.nameIndex.end() && it->second.kind == TypeKind::Enum)
+                return &types.enums[it->second.index];
+            return nullptr;
+        }
+        if (auto opt = std::get_if<std::shared_ptr<OptionalType>>(&type))
+            return resolveEnumFromType((*opt)->innerType, types);
+        return nullptr;
+    }
+
+    static const VariantDef *findEnumVariant(const EnumDef *ed, const std::string &tag)
+    {
+        if (!ed)
+            return nullptr;
+        for (const auto &variant : ed->variants)
+        {
+            if (variant.tag == tag)
+                return &variant;
+        }
+        return nullptr;
+    }
+
+    static const EnumDef *findNearestSwitchEnum(const std::vector<ValidationFrame> &frames,
+                                                const TypeRegistry &types)
+    {
+        for (auto it = frames.rbegin(); it != frames.rend(); ++it)
+        {
+            if (it->kind != DirectiveKind::Switch || !it->switchExprType.has_value())
+                continue;
+            return resolveEnumFromType(it->switchExprType.value(), types);
+        }
+        return nullptr;
+    }
+
+    static bool lookupVariableType(const std::string &name,
+                                   const std::vector<ValidationFrame> &frames,
+                                   TypeRef &outType)
+    {
+        for (auto it = frames.rbegin(); it != frames.rend(); ++it)
+        {
+            auto vt = it->vars.find(name);
+            if (vt != it->vars.end())
+            {
+                outType = vt->second;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    static std::set<std::string> collectActiveOptionalNarrowing(const std::vector<ValidationFrame> &frames)
+    {
+        std::set<std::string> result;
+        for (const auto &frame : frames)
+        {
+            result.insert(frame.narrowedOptionals.begin(), frame.narrowedOptionals.end());
+        }
+        return result;
+    }
+
+    static bool validatePathExpressionType(const std::string &path,
+                                           const std::vector<ValidationFrame> &frames,
+                                           const TypeRegistry &types,
+                                           const std::set<std::string> &activeNarrowing,
+                                           bool allowOptionalTerminal,
+                                           TypeRef &outType,
+                                           std::string &error)
+    {
+        if (!isPathExpressionText(path))
+        {
+            error = "expression must be a variable or member path";
+            return false;
+        }
+
+        std::vector<std::string> parts;
+        size_t start = 0;
+        while (start <= path.size())
+        {
+            size_t dot = path.find('.', start);
+            if (dot == std::string::npos)
+            {
+                parts.push_back(path.substr(start));
+                break;
+            }
+            parts.push_back(path.substr(start, dot - start));
+            start = dot + 1;
+        }
+
+        TypeRef current;
+        if (!lookupVariableType(parts[0], frames, current))
+        {
+            error = "unknown variable '" + parts[0] + "'";
+            return false;
+        }
+
+        std::string currentPath = parts[0];
+        for (size_t i = 1; i < parts.size(); ++i)
+        {
+            if (isOptionalType(current))
+            {
+                if (activeNarrowing.count(currentPath) == 0)
+                {
+                    error = "optional value '" + currentPath + "' must be guarded by '@if " + currentPath + "@'";
+                    return false;
+                }
+                current = unwrapOptionalType(current);
+            }
+
+            const StructDef *sd = resolveStructFromType(current, types);
+            if (!sd)
+            {
+                error = "cannot access member '" + parts[i] + "' on non-struct value '" + currentPath + "'";
+                return false;
+            }
+
+            bool found = false;
+            for (const auto &fd : sd->fields)
+            {
+                if (fd.name == parts[i])
+                {
+                    current = fd.type;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found)
+            {
+                error = "Reference to undeclared member '" + parts[i] + "' of struct '" + sd->name + "'";
+                return false;
+            }
+
+            currentPath += "." + parts[i];
+        }
+
+        if (isOptionalType(current) && !allowOptionalTerminal)
+        {
+            if (activeNarrowing.count(currentPath) == 0)
+            {
+                error = "optional value '" + currentPath + "' must be guarded by '@if " + currentPath + "@'";
+                return false;
+            }
+            current = unwrapOptionalType(current);
+        }
+
+        outType = current;
+        return true;
+    }
+
+    static void addTemplateDiagnostic(std::vector<Diagnostic> &diags,
+                                      size_t bodyLine,
+                                      size_t lineIndex,
+                                      const LineSeg &seg,
+                                      const std::string &message,
+                                      int relStart = 0,
+                                      int relEnd = 0)
+    {
+        int start = seg.startCol - 1;
+        int end = seg.endCol + 1;
+        if (relEnd > relStart)
+        {
+            start = seg.startCol + relStart;
+            end = seg.startCol + relEnd;
+        }
+        if (end < start)
+            end = start;
+
+        Diagnostic d;
+        d.range = {{(int)(bodyLine + lineIndex), start}, {(int)(bodyLine + lineIndex), end}};
+        d.message = message;
+        d.severity = DiagnosticSeverity::Error;
+        diags.push_back(std::move(d));
+    }
+
+    static void validateTemplateSemantics(const TemplateFunction &f,
+                                          const std::vector<TemplateLine> &templateLines,
+                                          size_t bodyStartLine,
+                                          const TypeRegistry &types,
+                                          std::vector<Diagnostic> &diags)
+    {
+        std::vector<ValidationFrame> frames;
+        ValidationFrame root{DirectiveKind::Expr};
+        for (const auto &param : f.params)
+        {
+            root.vars[param.name] = param.type;
+        }
+        frames.push_back(std::move(root));
+
+        auto popTo = [&](DirectiveKind kind)
+        {
+            while (frames.size() > 1)
+            {
+                DirectiveKind top = frames.back().kind;
+                frames.pop_back();
+                if (top == kind)
+                    break;
+            }
+        };
+
+        for (size_t li = 0; li < templateLines.size(); ++li)
+        {
+            const auto &line = templateLines[li];
+            for (const auto &seg : line.segments)
+            {
+                if (!seg.isDirective)
+                    continue;
+
+                if (seg.info.hasError)
+                {
+                    addTemplateDiagnostic(diags, bodyStartLine, li, seg, seg.info.errorMessage, seg.info.errorStart, seg.info.errorEnd);
+                    continue;
+                }
+
+                auto activeNarrowing = collectActiveOptionalNarrowing(frames);
+                std::string err;
+                TypeRef exprType;
+
+                switch (seg.info.kind)
+                {
+                case DirectiveKind::Expr:
+                {
+                    std::string path = expressionToPath(seg.info.expr);
+                    if (!validatePathExpressionType(path, frames, types, activeNarrowing, false, exprType, err))
+                    {
+                        addTemplateDiagnostic(diags, bodyStartLine, li, seg, err);
+                    }
+                    break;
+                }
+                case DirectiveKind::FunctionCall:
+                {
+                    for (const auto &argExpr : seg.info.funcCallArgs)
+                    {
+                        std::string path = expressionToPath(argExpr);
+                        if (!validatePathExpressionType(path, frames, types, activeNarrowing, false, exprType, err))
+                        {
+                            addTemplateDiagnostic(diags, bodyStartLine, li, seg, err);
+                            break;
+                        }
+                    }
+                    break;
+                }
+                case DirectiveKind::For:
+                {
+                    if (!validatePathExpressionType(seg.info.forCollectionText, frames, types, activeNarrowing, false, exprType, err))
+                    {
+                        addTemplateDiagnostic(diags, bodyStartLine, li, seg, err);
+                        break;
+                    }
+                    if (!std::holds_alternative<std::shared_ptr<ListType>>(exprType))
+                    {
+                        addTemplateDiagnostic(diags, bodyStartLine, li, seg, "for collection must be a list");
+                        break;
+                    }
+
+                    auto listType = std::get<std::shared_ptr<ListType>>(exprType);
+                    ValidationFrame frame{DirectiveKind::For};
+                    frame.vars[seg.info.forVar] = listType->elementType;
+                    if (!seg.info.iteratorVar.empty())
+                    {
+                        frame.vars[seg.info.iteratorVar] = IntType{};
+                    }
+                    frames.push_back(std::move(frame));
+                    break;
+                }
+                case DirectiveKind::EndFor:
+                    popTo(DirectiveKind::For);
+                    break;
+                case DirectiveKind::If:
+                {
+                    if (!validatePathExpressionType(seg.info.ifExprText, frames, types, activeNarrowing, true, exprType, err))
+                    {
+                        addTemplateDiagnostic(diags, bodyStartLine, li, seg, err);
+                        break;
+                    }
+
+                    ValidationFrame frame{DirectiveKind::If};
+                    if (seg.info.ifNegated)
+                    {
+                        if (!std::holds_alternative<BoolType>(exprType))
+                        {
+                            addTemplateDiagnostic(diags, bodyStartLine, li, seg, "'not' is only allowed for bool expressions");
+                        }
+                    }
+                    else
+                    {
+                        if (isOptionalType(exprType))
+                        {
+                            frame.optionalGuardPath = seg.info.ifExprText;
+                            frame.narrowedOptionals.insert(seg.info.ifExprText);
+                        }
+                        else if (!std::holds_alternative<BoolType>(exprType))
+                        {
+                            addTemplateDiagnostic(diags, bodyStartLine, li, seg, "if condition must be bool or optional");
+                        }
+                    }
+                    frames.push_back(std::move(frame));
+                    break;
+                }
+                case DirectiveKind::Else:
+                {
+                    for (auto it = frames.rbegin(); it != frames.rend(); ++it)
+                    {
+                        if (it->kind == DirectiveKind::If)
+                        {
+                            it->narrowedOptionals.clear();
+                            break;
+                        }
+                    }
+                    break;
+                }
+                case DirectiveKind::Endif:
+                    popTo(DirectiveKind::If);
+                    break;
+                case DirectiveKind::Switch:
+                {
+                    std::string switchPath = expressionToPath(seg.info.switchExpr);
+                    if (!validatePathExpressionType(switchPath, frames, types, activeNarrowing, false, exprType, err))
+                    {
+                        addTemplateDiagnostic(diags, bodyStartLine, li, seg, err);
+                    }
+                    ValidationFrame frame{DirectiveKind::Switch};
+                    frame.switchExprType = exprType;
+                    frames.push_back(std::move(frame));
+                    break;
+                }
+                case DirectiveKind::EndSwitch:
+                    popTo(DirectiveKind::Switch);
+                    break;
+                case DirectiveKind::Case:
+                {
+                    ValidationFrame frame{DirectiveKind::Case};
+                    const EnumDef *switchEnum = findNearestSwitchEnum(frames, types);
+                    const VariantDef *variant = findEnumVariant(switchEnum, seg.info.caseTag);
+                    if (!switchEnum)
+                    {
+                        addTemplateDiagnostic(diags, bodyStartLine, li, seg, "case directive must be inside a switch over an enum");
+                    }
+                    else if (!variant)
+                    {
+                        addTemplateDiagnostic(diags, bodyStartLine, li, seg, "unknown case tag '" + seg.info.caseTag + "' for enum '" + switchEnum->name + "'");
+                    }
+                    else if (!seg.info.caseBinding.empty())
+                    {
+                        if (!variant->payload.has_value())
+                        {
+                            addTemplateDiagnostic(diags, bodyStartLine, li, seg, "case tag '" + seg.info.caseTag + "' has no payload to bind");
+                        }
+                        else
+                        {
+                            frame.vars[seg.info.caseBinding] = variant->payload.value();
+                        }
+                    }
+                    frames.push_back(std::move(frame));
+                    break;
+                }
+                case DirectiveKind::EndCase:
+                    popTo(DirectiveKind::Case);
+                    break;
+                case DirectiveKind::Render:
+                {
+                    const EnumDef *switchEnum = findNearestSwitchEnum(frames, types);
+                    const VariantDef *variant = findEnumVariant(switchEnum, seg.info.renderExprText);
+                    if (switchEnum && variant)
+                    {
+                        // Pointfree variant visitor inside switch: @render Tag via fn@
+                        break;
+                    }
+                    if (!validatePathExpressionType(seg.info.renderExprText, frames, types, activeNarrowing, false, exprType, err))
+                    {
+                        addTemplateDiagnostic(diags, bodyStartLine, li, seg, err);
+                        break;
+                    }
+                    if (!std::holds_alternative<std::shared_ptr<ListType>>(exprType))
+                    {
+                        addTemplateDiagnostic(diags, bodyStartLine, li, seg, "render expression must be a list");
+                    }
+                    break;
+                }
+                }
+            }
+        }
     }
 
     TypeRef parseParamType(const std::string &s)
@@ -1298,110 +1986,8 @@ namespace tpp
                         return false;
                     break;
                 }
-                // Validate field references in template against known types
-                auto validateTemplateFieldAccesses = [&](const TemplateFunction &f, const std::string &body, size_t bodyLine, const TypeRegistry &types, std::vector<Diagnostic> &diags)
-                {
-                    std::istringstream iss(body);
-                    std::string line;
-                    size_t li = 0;
-                    while (std::getline(iss, line))
-                    {
-                        size_t p = 0;
-                        while (p < line.size())
-                        {
-                            size_t at = line.find('@', p);
-                            if (at == std::string::npos)
-                                break;
-                            size_t end = line.find('@', at + 1);
-                            if (end == std::string::npos)
-                                break;
-                            std::string inner = line.substr(at + 1, end - at - 1);
-                            auto expr = parseExpression(inner);
-                            // extract chain of names
-                            std::vector<std::string> chain;
-                            std::function<void(const Expression &)> buildChain = [&](const Expression &e)
-                            {
-                                std::visit([&](auto &&arg)
-                                           {
-                                    using T = std::decay_t<decltype(arg)>;
-                                    if constexpr (std::is_same_v<T, Variable>) {
-                                        chain.push_back(arg.name);
-                                    } else if constexpr (std::is_same_v<T, std::shared_ptr<FieldAccess>>) {
-                                        // recursively build base then append field
-                                        buildChain(arg->base);
-                                        chain.push_back(arg->field);
-                                    } }, e);
-                            };
-                            buildChain(expr);
-
-                            if (!chain.empty())
-                            {
-                                // find param matching root name
-                                for (auto &pdef : f.params)
-                                {
-                                    if (pdef.name == chain[0])
-                                    {
-                                        // resolve type and walk fields
-                                        TypeRef curType = pdef.type;
-                                        std::function<const StructDef *(const TypeRef &)> resolveStruct = [&](const TypeRef &tr) -> const StructDef *
-                                        {
-                                            if (std::holds_alternative<NamedType>(tr))
-                                            {
-                                                auto &nt = std::get<NamedType>(tr);
-                                                auto it = types.nameIndex.find(nt.name);
-                                                if (it != types.nameIndex.end() && it->second.kind == TypeKind::Struct)
-                                                    return &types.structs[it->second.index];
-                                                return nullptr;
-                                            }
-                                            if (auto spOpt = std::get_if<std::shared_ptr<OptionalType>>(&tr))
-                                            {
-                                                return resolveStruct((*spOpt)->innerType);
-                                            }
-                                            if (auto spList = std::get_if<std::shared_ptr<ListType>>(&tr))
-                                            {
-                                                return resolveStruct((*spList)->elementType);
-                                            }
-                                            return nullptr;
-                                        };
-
-                                        for (size_t ci = 1; ci < chain.size(); ++ci)
-                                        {
-                                            const std::string &fieldName = chain[ci];
-                                            const StructDef *sd = resolveStruct(curType);
-                                            if (!sd)
-                                                break;
-                                            bool found = false;
-                                            for (auto &fd : sd->fields)
-                                            {
-                                                if (fd.name == fieldName)
-                                                {
-                                                    curType = fd.type;
-                                                    found = true;
-                                                    break;
-                                                }
-                                            }
-                                            if (!found)
-                                            {
-                                                Diagnostic d;
-                                                d.range = {{(int)(bodyLine + li), (int)at}, {(int)(bodyLine + li), (int)(end + 1)}};
-                                                d.message = "Reference to undeclared member '" + fieldName + "' of struct '" + (sd ? sd->name : "") + "'";
-                                                d.severity = DiagnosticSeverity::Error;
-                                                diags.push_back(std::move(d));
-                                                break;
-                                            }
-                                        }
-                                        break; // only check the matching param
-                                    }
-                                }
-                            }
-
-                            p = end + 1;
-                        }
-                        ++li;
-                    }
-                };
-
-                validateTemplateFieldAccesses(func, bodyText, bodyStartLine, types, diagnostics);
+                auto templateLines = parseTemplateLines(bodyText);
+                validateTemplateSemantics(func, templateLines, bodyStartLine, types, diagnostics);
 
                 output.functions.push_back(std::move(func));
                 foundAny = true;
@@ -1514,7 +2100,9 @@ namespace tpp
                     const auto &obj = program.boundArgs[p.name];
                     for (auto &fd : sd->fields)
                     {
-                        if (!obj.contains(fd.name))
+                        if (isOptionalType(fd.type))
+                            continue;
+                        if (!obj.contains(fd.name) || obj[fd.name].is_null())
                         {
                             error = "Missing field '" + fd.name + "' in input data for function '" + function.name + "'";
                             return false;
@@ -1537,7 +2125,9 @@ namespace tpp
                     const auto &obj = program.boundArgs[p.name];
                     for (auto &fd : sd->fields)
                     {
-                        if (!obj.contains(fd.name))
+                        if (isOptionalType(fd.type))
+                            continue;
+                        if (!obj.contains(fd.name) || obj[fd.name].is_null())
                         {
                             error = "Missing field '" + fd.name + "' in input data for function '" + function.name + "'";
                             return false;
@@ -1637,11 +2227,17 @@ namespace tpp
                 if (collection.is_array()) {
                     for (size_t i = 0; i < collection.size(); ++i) {
                         ctx.pushBinding(arg->varName, collection[i]);
+                        if (!arg->iteratorVarName.empty()) {
+                            ctx.pushBinding(arg->iteratorVarName, (int64_t)i);
+                        }
                         std::string iterResult;
                         if (arg->isBlock) {
                             iterResult = renderBlockBody(arg->body, ctx, arg->insertCol);
                         } else {
                             iterResult = renderNodes(arg->body, ctx);
+                        }
+                        if (!arg->iteratorVarName.empty()) {
+                            ctx.popBinding();
                         }
                         ctx.popBinding();
                         // For block for-loops with sep: if the body is a single
@@ -1658,6 +2254,7 @@ namespace tpp
                                 strippedNl = true;
                             }
                         }
+                        result += arg->precededBy;
                         result += iterResult;
                         if (i + 1 < collection.size()) {
                             result += arg->sep;
@@ -1674,7 +2271,14 @@ namespace tpp
                 }
             } else if constexpr (std::is_same_v<T, std::shared_ptr<IfNode>>) {
                 auto val = ctx.resolve(arg->condExpr);
-                bool cond = !val.is_null();
+                bool cond = false;
+                if (arg->negated) {
+                    cond = val.is_boolean() ? !val.template get<bool>() : false;
+                } else if (val.is_boolean()) {
+                    cond = val.template get<bool>();
+                } else {
+                    cond = !val.is_null();
+                }
                 if (cond) {
                     if (arg->isBlock) {
                         result += renderBlockBody(arg->thenBody, ctx, arg->insertCol);
@@ -1784,6 +2388,7 @@ namespace tpp
                             if (!iterResult.empty() && iterResult.back() == '\n')
                                 iterResult.pop_back();
                             ctx.popBinding();
+                            result += arg->precededBy;
                             result += iterResult;
                             if (i + 1 < collection.size()) {
                                 result += arg->sep;

@@ -57,9 +57,14 @@ namespace tpp
         DirectiveKind kind;
         std::string forVar;
         Expression forCollection = Variable{""};
+        std::string forCollectionText;
         std::string sep;
         std::string followedBy;
+        std::string precededBy;
+        std::string iteratorVar;
         Expression ifCond = Variable{""};
+        std::string ifExprText;
+        bool ifNegated = false;
         Expression switchExpr = Variable{""};
         std::string caseTag;
         std::string caseBinding;
@@ -73,6 +78,12 @@ namespace tpp
         std::string renderFunc;
         std::string renderSep;
         std::string renderFollowedBy;
+        std::string renderPrecededBy;
+
+        bool hasError = false;
+        std::string errorMessage;
+        int errorStart = 0;
+        int errorEnd = 0;
     };
 
     DirectiveInfo classifyDirective(const std::string &s);
@@ -84,6 +95,8 @@ namespace tpp
         bool isDirective;
         std::string text;
         DirectiveInfo info;
+        int startCol = 0;
+        int endCol = 0;
     };
 
     struct TemplateLine

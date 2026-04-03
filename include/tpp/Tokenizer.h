@@ -46,6 +46,8 @@ namespace tpp
     {
         bool isDirective;
         std::string text;
+        int startCol = 0;
+        int endCol = 0;
     };
 
     std::vector<Segment> tokenize_template(const std::string &src);

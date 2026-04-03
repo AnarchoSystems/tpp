@@ -1,0 +1,15 @@
+[
+	{
+		"uri": "error_if_not_non_bool/template.tpp",
+		"diagnostics": [
+			{
+				"range": {
+					"start": {"line": 1, "character": 0},
+					"end": {"line": 1, "character": 15}
+				},
+				"message": "'not' is only allowed for bool expressions",
+				"severity": "error"
+			}
+		]
+	}
+]

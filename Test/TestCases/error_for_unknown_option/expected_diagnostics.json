@@ -1,0 +1,23 @@
+[
+	{
+		"uri": "error_for_unknown_option/template.tpp",
+		"diagnostics": [
+			{
+				"range": {
+					"start": {"line": 1, "character": 1},
+					"end": {"line": 1, "character": 6}
+				},
+				"message": "unknown option 'nope'",
+				"severity": "error"
+			},
+			{
+				"range": {
+					"start": {"line": 1, "character": 35},
+					"end": {"line": 1, "character": 41}
+				},
+				"message": "unknown variable 'item'",
+				"severity": "error"
+			}
+		]
+	}
+]
