@@ -11,5 +11,8 @@ namespace tpp
         bool get_function(const std::string &functionName,
                           FunctionSymbol &functionSymbol,
                           std::vector<Diagnostic> &diagnostics) const noexcept;
+
+        std::vector<TemplateFunction> functions;
+        TypeRegistry types;
     };
 }

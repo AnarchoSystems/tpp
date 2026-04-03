@@ -15,5 +15,7 @@ namespace tpp
         bool compile(const std::string &templateString,
                      CompilerOutput &output,
                      std::vector<Diagnostic> &diagnostics) const noexcept;
+
+        TypeRegistry types;
     };
 }
