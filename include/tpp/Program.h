@@ -15,5 +15,6 @@ namespace tpp
         TemplateFunction function;
         nlohmann::json boundArgs;
         TypeRegistry types;
+        std::vector<TemplateFunction> allFunctions;
     };
 }

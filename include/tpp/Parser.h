@@ -47,7 +47,9 @@ namespace tpp
         Switch,
         Case,
         EndCase,
-        EndSwitch
+        EndSwitch,
+        FunctionCall,
+        Render
     };
 
     struct DirectiveInfo
@@ -62,6 +64,15 @@ namespace tpp
         std::string caseTag;
         std::string caseBinding;
         Expression expr = Variable{""};
+        // Function call
+        std::string funcCallName;
+        std::vector<Expression> funcCallArgs;
+        // Render via
+        std::string renderExprText;
+        Expression renderExpr = Variable{""};
+        std::string renderFunc;
+        std::string renderSep;
+        std::string renderFollowedBy;
     };
 
     DirectiveInfo classifyDirective(const std::string &s);

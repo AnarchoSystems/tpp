@@ -25,6 +25,7 @@ namespace tpp
         KwList,
         KwString,
         KwInt,
+        KwBool,
         Ident,
         Eof
     };

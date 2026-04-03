@@ -1,12 +1,14 @@
 template render_field(name: string, type: string)
-@name@: @type@
+@name@: @type@;
 END
 
-template main(meta: Meta)
-struct @meta.name@
+template main(meta: list<Meta>)
+@for m in meta | sep="\n"@
+struct @m.name@
 {
-    @for field in meta.fields@
+    @for field in m.fields | sep="\n"@
     @render_field(field.name, field.type)@
-    @endfor@
+    @end for@
 }
+@end for@
 END

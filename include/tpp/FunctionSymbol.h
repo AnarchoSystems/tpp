@@ -16,5 +16,6 @@ namespace tpp
 
         TemplateFunction function;
         TypeRegistry types;
+        std::vector<TemplateFunction> allFunctions;
     };
 }

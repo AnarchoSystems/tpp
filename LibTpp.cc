@@ -117,6 +117,8 @@ namespace tpp
                     k = TokKind::KwString;
                 else if (word == "int")
                     k = TokKind::KwInt;
+                else if (word == "bool")
+                    k = TokKind::KwBool;
                 tokens.push_back({k, word, sline, scol});
                 continue;
             }
@@ -162,6 +164,8 @@ namespace tpp
             return "'string'";
         case TokKind::KwInt:
             return "'int'";
+        case TokKind::KwBool:
+            return "'bool'";
         case TokKind::Ident:
             return "identifier";
         case TokKind::Eof:
@@ -202,6 +206,11 @@ namespace tpp
         {
             eat(TokKind::KwInt);
             return IntType{};
+        }
+        if (at(TokKind::KwBool))
+        {
+            eat(TokKind::KwBool);
+            return BoolType{};
         }
         if (at(TokKind::KwOptional))
         {
@@ -311,7 +320,7 @@ namespace tpp
                 skip(); // >
                 return r;
             }
-            else if (tokens[p].kind == TokKind::KwString || tokens[p].kind == TokKind::KwInt)
+            else if (tokens[p].kind == TokKind::KwString || tokens[p].kind == TokKind::KwInt || tokens[p].kind == TokKind::KwBool)
             {
                 skip();
                 return true;
@@ -653,6 +662,113 @@ namespace tpp
             return info;
         }
 
+        if (startsWith(t, "render "))
+        {
+            info.kind = DirectiveKind::Render;
+            std::string rest = t.substr(7);
+            std::string mainPart = rest;
+            std::string optPart;
+            size_t pipe = rest.find('|');
+            if (pipe != std::string::npos)
+            {
+                mainPart = trim(rest.substr(0, pipe));
+                optPart = trim(rest.substr(pipe + 1));
+            }
+            size_t viaPos = mainPart.find(" via ");
+            if (viaPos != std::string::npos)
+            {
+                info.renderExprText = trim(mainPart.substr(0, viaPos));
+                info.renderExpr = parseExpression(info.renderExprText);
+                info.renderFunc = trim(mainPart.substr(viaPos + 5));
+            }
+            if (!optPart.empty())
+            {
+                size_t p = 0;
+                while (p < optPart.size())
+                {
+                    while (p < optPart.size() && optPart[p] == ' ')
+                        ++p;
+                    if (p >= optPart.size())
+                        break;
+                    size_t keyStart = p;
+                    while (p < optPart.size() && optPart[p] != '=')
+                        ++p;
+                    std::string key = trim(optPart.substr(keyStart, p - keyStart));
+                    if (p < optPart.size())
+                        ++p;
+                    std::string val = parseStringLiteral(optPart, p);
+                    if (key == "sep")
+                        info.renderSep = val;
+                    else if (key == "followedBy")
+                        info.renderFollowedBy = val;
+                    while (p < optPart.size() && optPart[p] == ' ')
+                        ++p;
+                }
+            }
+            return info;
+        }
+
+        // Detect function call: name(arg1, arg2, ...)
+        {
+            size_t parenOpen = t.find('(');
+            if (parenOpen != std::string::npos && t.back() == ')')
+            {
+                std::string name = trim(t.substr(0, parenOpen));
+                // Ensure name is a valid identifier (no spaces, dots etc.)
+                bool validName = !name.empty();
+                for (char c : name)
+                {
+                    if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_')
+                    {
+                        validName = false;
+                        break;
+                    }
+                }
+                if (validName)
+                {
+                    info.kind = DirectiveKind::FunctionCall;
+                    info.funcCallName = name;
+                    std::string argsStr = t.substr(parenOpen + 1, t.size() - parenOpen - 2);
+                    if (!trim(argsStr).empty())
+                    {
+                        // Split by comma, respecting parentheses
+                        std::vector<std::string> argParts;
+                        int depth = 0;
+                        std::string current;
+                        for (char c : argsStr)
+                        {
+                            if (c == '(')
+                            {
+                                depth++;
+                                current += c;
+                            }
+                            else if (c == ')')
+                            {
+                                depth--;
+                                current += c;
+                            }
+                            else if (c == ',' && depth == 0)
+                            {
+                                argParts.push_back(current);
+                                current.clear();
+                            }
+                            else
+                            {
+                                current += c;
+                            }
+                        }
+                        if (!current.empty())
+                            argParts.push_back(current);
+                        for (auto &arg : argParts)
+                        {
+                            info.funcCallArgs.push_back(parseExpression(arg));
+                        }
+                    }
+                    return info;
+                }
+            }
+        }
+
         info.kind = DirectiveKind::Expr;
         info.expr = parseExpression(t);
         return info;
@@ -660,7 +776,7 @@ namespace tpp
 
     static bool isStructuralDirective(DirectiveKind k)
     {
-        return k != DirectiveKind::Expr;
+        return k != DirectiveKind::Expr && k != DirectiveKind::FunctionCall;
     }
 
     std::vector<TemplateLine> parseTemplateLines(const std::string &body)
@@ -690,7 +806,7 @@ namespace tpp
                 if (seg.isDirective)
                 {
                     ls.info = classifyDirective(seg.text);
-                    if (ls.info.kind == DirectiveKind::Expr)
+                    if (ls.info.kind == DirectiveKind::Expr || ls.info.kind == DirectiveKind::FunctionCall)
                     {
                         hasExprDirective = true;
                     }
@@ -736,6 +852,14 @@ namespace tpp
             else if (s.info.kind == DirectiveKind::Expr)
             {
                 nodes.push_back(InterpolationNode{s.info.expr});
+                ++pos;
+            }
+            else if (s.info.kind == DirectiveKind::FunctionCall)
+            {
+                auto callNode = std::make_shared<FunctionCallNode>();
+                callNode->functionName = s.info.funcCallName;
+                callNode->arguments = s.info.funcCallArgs;
+                nodes.push_back(std::move(callNode));
                 ++pos;
             }
             else if (s.info.kind == DirectiveKind::For)
@@ -922,6 +1046,19 @@ namespace tpp
                                         switchNode->cases.push_back(std::move(cn));
                                         break;
                                     }
+                                    if (s2.isDirective && s2.info.kind == DirectiveKind::Render)
+                                    {
+                                        CaseNode cn;
+                                        cn.tag = s2.info.renderExprText;
+                                        cn.bindingName = "__payload";
+                                        auto callNode = std::make_shared<FunctionCallNode>();
+                                        callNode->functionName = s2.info.renderFunc;
+                                        callNode->arguments.push_back(Variable{"__payload"});
+                                        cn.body.push_back(std::move(callNode));
+                                        switchNode->cases.push_back(std::move(cn));
+                                        ++pos;
+                                        break;
+                                    }
                                 }
                                 if (done)
                                     break;
@@ -946,6 +1083,18 @@ namespace tpp
                     {
                         ++pos;
                         return nodes;
+                    }
+                    else if (seg.info.kind == DirectiveKind::Render)
+                    {
+                        auto renderNode = std::make_shared<RenderViaNode>();
+                        renderNode->collectionExpr = seg.info.renderExpr;
+                        renderNode->functionName = seg.info.renderFunc;
+                        renderNode->sep = seg.info.renderSep;
+                        renderNode->followedBy = seg.info.renderFollowedBy;
+                        renderNode->isBlock = true;
+                        renderNode->insertCol = tl.indent;
+                        nodes.push_back(std::move(renderNode));
+                        ++pos;
                     }
                     break;
                 }
@@ -979,6 +1128,13 @@ namespace tpp
                             if (!seg.text.empty())
                                 nodes.push_back(TextNode{seg.text});
                         }
+                        else if (seg.info.kind == DirectiveKind::FunctionCall)
+                        {
+                            auto callNode = std::make_shared<FunctionCallNode>();
+                            callNode->functionName = seg.info.funcCallName;
+                            callNode->arguments = seg.info.funcCallArgs;
+                            nodes.push_back(std::move(callNode));
+                        }
                         else
                         {
                             nodes.push_back(InterpolationNode{seg.info.expr});
@@ -999,6 +1155,8 @@ namespace tpp
             return StringType{};
         if (t == "int" || t == "Int")
             return IntType{};
+        if (t == "bool" || t == "Bool")
+            return BoolType{};
         // Check for list<...> or optional<...>
         if (startsWith(t, "list<") && t.back() == '>')
         {
@@ -1276,6 +1434,7 @@ namespace tpp
                 {
                     functionSymbol.function = f;
                     functionSymbol.types = types;
+                    functionSymbol.allFunctions = functions;
                     return true;
                 }
             }
@@ -1300,6 +1459,7 @@ namespace tpp
         {
             program.function = function;
             program.types = types;
+            program.allFunctions = allFunctions;
 
             if (function.params.empty())
             {
@@ -1335,10 +1495,6 @@ namespace tpp
                 if (auto spOpt = std::get_if<std::shared_ptr<OptionalType>>(&tr))
                 {
                     return resolveStruct((*spOpt)->innerType);
-                }
-                if (auto spList = std::get_if<std::shared_ptr<ListType>>(&tr))
-                {
-                    return resolveStruct((*spList)->elementType);
                 }
                 return nullptr;
             };
@@ -1405,6 +1561,7 @@ namespace tpp
     struct RenderContext
     {
         const TypeRegistry &types;
+        const std::vector<TemplateFunction> &allFunctions;
         std::vector<std::pair<std::string, nlohmann::json>> bindings;
 
         void pushBinding(const std::string &name, const nlohmann::json &val)
@@ -1551,6 +1708,91 @@ namespace tpp
                         }
                     }
                 }
+            } else if constexpr (std::is_same_v<T, std::shared_ptr<FunctionCallNode>>) {
+                // Find the function by name
+                const TemplateFunction *targetFunc = nullptr;
+                for (auto &f : ctx.allFunctions) {
+                    if (f.name == arg->functionName) {
+                        targetFunc = &f;
+                        break;
+                    }
+                }
+                if (targetFunc) {
+                    // Evaluate arguments and push positional bindings
+                    for (size_t i = 0; i < arg->arguments.size() && i < targetFunc->params.size(); ++i) {
+                        auto val = ctx.resolve(arg->arguments[i]);
+                        ctx.pushBinding(targetFunc->params[i].name, val);
+                    }
+                    std::string callResult = renderNodes(targetFunc->body, ctx);
+                    // Strip trailing newline from function result
+                    if (!callResult.empty() && callResult.back() == '\n')
+                        callResult.pop_back();
+                    result += callResult;
+                    // Pop bindings in reverse
+                    for (size_t i = 0; i < arg->arguments.size() && i < targetFunc->params.size(); ++i) {
+                        ctx.popBinding();
+                    }
+                }
+            } else if constexpr (std::is_same_v<T, std::shared_ptr<RenderViaNode>>) {
+                auto collection = ctx.resolve(arg->collectionExpr);
+                if (collection.is_array()) {
+                    for (size_t i = 0; i < collection.size(); ++i) {
+                        // Find the right function overload
+                        const TemplateFunction *targetFunc = nullptr;
+                        std::vector<const TemplateFunction *> overloads;
+                        for (auto &f : ctx.allFunctions) {
+                            if (f.name == arg->functionName)
+                                overloads.push_back(&f);
+                        }
+                        if (overloads.size() == 1) {
+                            targetFunc = overloads[0];
+                        } else if (overloads.size() > 1 && collection[i].is_object()) {
+                            // Variant dispatch: find which overload matches the payload type
+                            for (auto it = collection[i].begin(); it != collection[i].end(); ++it) {
+                                const std::string &tag = it.key();
+                                const auto &payload = it.value();
+                                for (auto *ovl : overloads) {
+                                    if (ovl->params.size() == 1) {
+                                        const auto &ptype = ovl->params[0].type;
+                                        bool matches = false;
+                                        if (std::holds_alternative<StringType>(ptype) && payload.is_string())
+                                            matches = true;
+                                        else if (std::holds_alternative<IntType>(ptype) && payload.is_number())
+                                            matches = true;
+                                        else if (std::holds_alternative<BoolType>(ptype) && payload.is_boolean())
+                                            matches = true;
+                                        if (matches) {
+                                            targetFunc = ovl;
+                                            break;
+                                        }
+                                    }
+                                }
+                                if (targetFunc) break;
+                            }
+                        }
+                        if (targetFunc && !targetFunc->params.empty()) {
+                            nlohmann::json elemVal = collection[i];
+                            // For variant dispatch with overloads, extract the payload value
+                            if (overloads.size() > 1 && elemVal.is_object()) {
+                                for (auto it = elemVal.begin(); it != elemVal.end(); ++it) {
+                                    elemVal = it.value();
+                                    break;
+                                }
+                            }
+                            ctx.pushBinding(targetFunc->params[0].name, elemVal);
+                            std::string iterResult = renderNodes(targetFunc->body, ctx);
+                            if (!iterResult.empty() && iterResult.back() == '\n')
+                                iterResult.pop_back();
+                            ctx.popBinding();
+                            result += iterResult;
+                            if (i + 1 < collection.size()) {
+                                result += arg->sep;
+                            } else if (!arg->followedBy.empty()) {
+                                result += arg->followedBy;
+                            }
+                        }
+                    }
+                }
             } }, node);
         }
         return result;
@@ -1616,7 +1858,7 @@ namespace tpp
     {
         try
         {
-            RenderContext ctx{types};
+            RenderContext ctx{types, allFunctions};
 
             for (auto &p : function.params)
             {

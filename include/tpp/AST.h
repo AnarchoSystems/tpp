@@ -17,6 +17,9 @@ namespace tpp
     struct IntType
     {
     };
+    struct BoolType
+    {
+    };
     struct ListType;
     struct OptionalType;
     struct NamedType
@@ -24,7 +27,7 @@ namespace tpp
         std::string name;
     };
 
-    using TypeRef = std::variant<StringType, IntType,
+    using TypeRef = std::variant<StringType, IntType, BoolType,
                                  std::shared_ptr<ListType>,
                                  std::shared_ptr<OptionalType>,
                                  NamedType>;
@@ -102,12 +105,16 @@ namespace tpp
     struct ForNode;
     struct IfNode;
     struct SwitchNode;
+    struct FunctionCallNode;
+    struct RenderViaNode;
 
     using ASTNode = std::variant<TextNode,
                                  InterpolationNode,
                                  std::shared_ptr<ForNode>,
                                  std::shared_ptr<IfNode>,
-                                 std::shared_ptr<SwitchNode>>;
+                                 std::shared_ptr<SwitchNode>,
+                                 std::shared_ptr<FunctionCallNode>,
+                                 std::shared_ptr<RenderViaNode>>;
 
     struct ForNode
     {
@@ -140,6 +147,22 @@ namespace tpp
     {
         Expression expr;
         std::vector<CaseNode> cases;
+        bool isBlock = false;
+        int insertCol = 0;
+    };
+
+    struct FunctionCallNode
+    {
+        std::string functionName;
+        std::vector<Expression> arguments;
+    };
+
+    struct RenderViaNode
+    {
+        Expression collectionExpr;
+        std::string functionName;
+        std::string sep;
+        std::string followedBy;
         bool isBlock = false;
         int insertCol = 0;
     };
