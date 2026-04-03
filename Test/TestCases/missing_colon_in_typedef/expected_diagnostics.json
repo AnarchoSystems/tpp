@@ -1,0 +1,15 @@
+[
+    {
+        "uri": "missing_colon_in_typedef/typedefs.tpp",
+        "diagnostics": [
+            {
+                "range": {
+                    "start": {"line": 9, "character": 10},
+                    "end": {"line": 9, "character": 16}
+                },
+                "message": "expected ':', got 'string'",
+                "severity": "error"
+            }
+        ]
+    }
+]

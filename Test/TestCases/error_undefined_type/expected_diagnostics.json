@@ -1,10 +1,15 @@
 [
     {
-        "range": {
-            "start": {"line": 2, "character": 11},
-            "end": {"line": 2, "character": 22}
-        },
-        "message": "undefined type 'UnknownType'",
-        "severity": "error"
+        "uri": "error_undefined_type/typedefs.tpp",
+        "diagnostics": [
+            {
+                "range": {
+                    "start": {"line": 2, "character": 11},
+                    "end": {"line": 2, "character": 22}
+                },
+                "message": "undefined type 'UnknownType'",
+                "severity": "error"
+            }
+        ]
     }
 ]

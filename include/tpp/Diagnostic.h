@@ -44,15 +44,25 @@ namespace tpp
         }
     };
 
-    struct DiagnosticRelatedInformation
+    struct Location
     {
         std::string uri;
         Range range;
+        NLOHMANN_DEFINE_TYPE_INTRUSIVE(Location, uri, range)
+        bool operator==(const Location &other) const
+        {
+            return uri == other.uri && range == other.range;
+        }
+    };
+
+    struct DiagnosticRelatedInformation
+    {
+        Location location;
         std::string message;
-        NLOHMANN_DEFINE_TYPE_INTRUSIVE(DiagnosticRelatedInformation, uri, range, message)
+        NLOHMANN_DEFINE_TYPE_INTRUSIVE(DiagnosticRelatedInformation, location, message)
         bool operator==(const DiagnosticRelatedInformation &other) const
         {
-            return uri == other.uri && range == other.range && message == other.message;
+            return location == other.location && message == other.message;
         }
     };
 
@@ -116,6 +126,20 @@ namespace tpp
                    relatedInformation == other.relatedInformation &&
                    codeDescription == other.codeDescription &&
                    tags == other.tags;
+        }
+    };
+
+    struct DiagnosticLSPMessage
+    {
+        std::string uri;
+        std::vector<Diagnostic> diagnostics;
+        DiagnosticLSPMessage() = default;
+        DiagnosticLSPMessage(const std::string &uri, const std::vector<Diagnostic> &diagnostics = {})
+            : uri(uri), diagnostics(diagnostics) {}
+        NLOHMANN_DEFINE_TYPE_INTRUSIVE(DiagnosticLSPMessage, uri, diagnostics)
+        bool operator==(const DiagnosticLSPMessage &other) const
+        {
+            return uri == other.uri && diagnostics == other.diagnostics;
         }
     };
 

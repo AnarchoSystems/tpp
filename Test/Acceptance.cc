@@ -16,12 +16,16 @@ namespace tpp
 struct tTestCase
 {
     std::string name;
+    std::string typedefURL;
     std::string typedefs;
+    std::string templateURL;
     std::string templateString;
     nlohmann::json input;
     bool expectSuccess = true;
     std::string expectedOutput;
-    std::vector<tpp::Diagnostic> expectedDiagnostics;
+    std::vector<tpp::DiagnosticLSPMessage> expectedDiagnostics;
+    std::string getFunctionError;
+    std::string bindFunctionError;
 };
 
 void PrintTo(const tTestCase &testCase, std::ostream *os)
@@ -39,6 +43,13 @@ void PrintTo(const tTestCase &testCase, std::ostream *os)
     }
 }
 
+struct tErrors
+{
+    std::string getFunctionError;
+    std::string bindFunctionError;
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE(tErrors, getFunctionError, bindFunctionError)
+};
+
 std::vector<tTestCase> GetTestCases()
 {
     std::vector<tTestCase> testCases;
@@ -47,6 +58,8 @@ std::vector<tTestCase> GetTestCases()
 
     for (const auto &entry : std::filesystem::directory_iterator("TestCases"))
     {
+        auto &testCase = testCases.emplace_back();
+        testCase.name = entry.path().filename().string();
         if (!entry.is_directory())
         {
             continue;
@@ -60,22 +73,34 @@ std::vector<tTestCase> GetTestCases()
         std::ifstream expectedOutputFile(entry.path() / "expected_output.txt");
         if (!expectedOutputFile.is_open())
         {
+            isSuccess = false;
             expectedOutputFile.close();
             expectedOutputFile.open(entry.path() / "expected_diagnostics.json");
-            isSuccess = false;
+            if (expectedOutputFile.is_open())
+            {
+                auto diagnosticsJson = nlohmann::json::parse(std::string((std::istreambuf_iterator<char>(expectedOutputFile)), std::istreambuf_iterator<char>()));
+                testCase.expectedDiagnostics = diagnosticsJson.get<std::vector<tpp::DiagnosticLSPMessage>>();
+                expectedOutputFile.close();
+            }
+            std::ifstream expectedErrorsFile(entry.path() / "expected_errors.json");
+            if (expectedErrorsFile.is_open())
+            {
+                auto expectedErrorsJson = nlohmann::json::parse(std::string((std::istreambuf_iterator<char>(expectedErrorsFile)), std::istreambuf_iterator<char>()));
+                tErrors expectedErrors = expectedErrorsJson.get<tErrors>();
+                expectedErrorsFile.close();
+                testCase.getFunctionError = expectedErrors.getFunctionError;
+                testCase.bindFunctionError = expectedErrors.bindFunctionError;
+            }
         }
 
-        if (!typedefsFile.is_open() || !templateFile.is_open() || !inputFile.is_open() || !expectedOutputFile.is_open())
+        if (!typedefsFile.is_open() || !templateFile.is_open() || !inputFile.is_open())
         {
             std::cerr << "Failed to open test case files in " << entry.path() << std::endl;
-            std::cerr << "Expected files: typedefs.tpp, template.tpp, input.json, and either expected_output.txt or expected_diagnostics.json" << std::endl;
+            std::cerr << "Expected files: typedefs.tpp, template.tpp, input.json, and either expected_output.txt or expected_diagnostics.json/expected_errors.json" << std::endl;
             failed = true;
             continue;
         }
 
-        auto &testCase = testCases.emplace_back();
-
-        testCase.name = entry.path().filename().string();
         testCase.expectSuccess = isSuccess;
         auto input = std::string((std::istreambuf_iterator<char>(inputFile)), std::istreambuf_iterator<char>());
         testCase.input = nlohmann::json::parse(input);
@@ -85,11 +110,8 @@ std::vector<tTestCase> GetTestCases()
         {
             testCase.expectedOutput = std::string((std::istreambuf_iterator<char>(expectedOutputFile)), std::istreambuf_iterator<char>());
         }
-        else
-        {
-            auto diagnosticsJson = nlohmann::json::parse(std::string((std::istreambuf_iterator<char>(expectedOutputFile)), std::istreambuf_iterator<char>()));
-            testCase.expectedDiagnostics = diagnosticsJson.get<std::vector<tpp::Diagnostic>>();
-        }
+        testCase.typedefURL = testCase.name + "/typedefs.tpp";
+        testCase.templateURL = testCase.name + "/template.tpp";
     }
 
     if (failed)
@@ -110,13 +132,16 @@ TEST_P(AcceptanceTest, RunTestCase)
 
     tpp::Compiler compiler;
 
-    std::vector<tpp::Diagnostic> diagnostics;
+    tpp::DiagnosticLSPMessage TypesDiagnostics(testCase.typedefURL);
+    tpp::DiagnosticLSPMessage CompilerDiagnostics(testCase.templateURL);
+    std::string getFunctionError;
+    std::string bindFunctionError;
 
     tpp::CompilerOutput output;
     tpp::FunctionSymbol functionSymbol;
     tpp::Program program;
 
-    const bool isSuccess = compiler.add_types(testCase.typedefs, diagnostics) && compiler.compile(testCase.templateString, output, diagnostics) && output.get_function("main", functionSymbol, diagnostics) && functionSymbol.bind(testCase.input, program, diagnostics);
+    const bool isSuccess = compiler.add_types(testCase.typedefs, TypesDiagnostics.diagnostics) && compiler.compile(testCase.templateString, output, CompilerDiagnostics.diagnostics) && output.get_function("main", functionSymbol, getFunctionError) && functionSymbol.bind(testCase.input, program, bindFunctionError);
 
     EXPECT_EQ(isSuccess, testCase.expectSuccess) << "Test case: " << testCase.name;
     if (isSuccess)
@@ -126,7 +151,18 @@ TEST_P(AcceptanceTest, RunTestCase)
     }
     else
     {
-        EXPECT_EQ(diagnostics, testCase.expectedDiagnostics) << "Test case: " << testCase.name;
+        std::vector<tpp::DiagnosticLSPMessage> actualDiagnostics;
+        if (!TypesDiagnostics.diagnostics.empty())
+        {
+            actualDiagnostics.push_back(TypesDiagnostics);
+        }
+        if (!CompilerDiagnostics.diagnostics.empty())
+        {
+            actualDiagnostics.push_back(CompilerDiagnostics);
+        }
+        EXPECT_EQ(actualDiagnostics, testCase.expectedDiagnostics) << "Test case: " << testCase.name << "\nActual diagnostics: " << nlohmann::json(actualDiagnostics).dump(2);
+        EXPECT_EQ(getFunctionError, testCase.getFunctionError) << "Test case: " << testCase.name;
+        EXPECT_EQ(bindFunctionError, testCase.bindFunctionError) << "Test case: " << testCase.name;
     }
 }
 

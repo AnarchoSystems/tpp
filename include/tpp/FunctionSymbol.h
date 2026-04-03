@@ -12,7 +12,7 @@ namespace tpp
         [[nodiscard]]
         bool bind(const nlohmann::json &input,
                   Program &program,
-                  std::vector<Diagnostic> &diagnostics) const noexcept;
+                  std::string &error) const noexcept;
 
         TemplateFunction function;
         TypeRegistry types;
