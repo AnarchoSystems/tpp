@@ -1,0 +1,15 @@
+[
+	{
+		"uri": "switch_missing_case_check_exhaustive/template.tpp",
+		"diagnostics": [
+			{
+				"range": {
+					"start": {"line": 5, "character": 0},
+					"end": {"line": 5, "character": 12}
+				},
+				"message": "switch is missing cases for enum 'Item': B",
+				"severity": "error"
+			}
+		]
+	}
+]

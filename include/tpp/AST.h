@@ -150,6 +150,7 @@ namespace tpp
     struct SwitchNode
     {
         Expression expr;
+        bool checkExhaustive = false;
         std::vector<CaseNode> cases;
         bool isBlock = false;
         int insertCol = 0;

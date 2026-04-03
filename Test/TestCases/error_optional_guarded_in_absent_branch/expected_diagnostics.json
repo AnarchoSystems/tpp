@@ -1,0 +1,15 @@
+[
+	{
+		"uri": "error_optional_guarded_in_absent_branch/template.tpp",
+		"diagnostics": [
+			{
+				"range": {
+					"start": {"line": 1, "character": 19},
+					"end": {"line": 1, "character": 30}
+				},
+				"message": "cannot guard optional value 'p.nick' because it does not exist in this branch",
+				"severity": "error"
+			}
+		]
+	}
+]

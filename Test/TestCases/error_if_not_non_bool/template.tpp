@@ -1,3 +1,3 @@
 template main(p: Profile)
-@if not p.nick@x@endif@
+@if not p.name@x@endif@
 END

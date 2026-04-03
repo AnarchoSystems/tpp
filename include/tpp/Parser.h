@@ -66,6 +66,7 @@ namespace tpp
         std::string ifExprText;
         bool ifNegated = false;
         Expression switchExpr = Variable{""};
+        bool switchCheckExhaustive = false;
         std::string caseTag;
         std::string caseBinding;
         Expression expr = Variable{""};

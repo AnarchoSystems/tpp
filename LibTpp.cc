@@ -685,6 +685,43 @@ namespace tpp
         }
     }
 
+    static void parseDirectiveFlags(const std::string &optPart,
+                                    const std::set<std::string> &allowedFlags,
+                                    std::set<std::string> &outFlags,
+                                    DirectiveInfo &info)
+    {
+        size_t p = 0;
+        while (p < optPart.size())
+        {
+            while (p < optPart.size() && std::isspace(static_cast<unsigned char>(optPart[p])))
+                ++p;
+            if (p >= optPart.size())
+                break;
+
+            size_t start = p;
+            while (p < optPart.size() && !std::isspace(static_cast<unsigned char>(optPart[p])))
+                ++p;
+
+            std::string flag = trim(optPart.substr(start, p - start));
+            if (!isIdentifier(flag))
+            {
+                setDirectiveError(info, "invalid option '" + flag + "'", (int)start, (int)p);
+                return;
+            }
+            if (allowedFlags.count(flag) == 0)
+            {
+                setDirectiveError(info, "unknown option '" + flag + "'", (int)start, (int)p);
+                return;
+            }
+            if (outFlags.count(flag) != 0)
+            {
+                setDirectiveError(info, "duplicate option '" + flag + "'", (int)start, (int)p);
+                return;
+            }
+            outFlags.insert(flag);
+        }
+    }
+
     DirectiveInfo classifyDirective(const std::string &s)
     {
         std::string t = trim(s);
@@ -815,15 +852,23 @@ namespace tpp
         if (startsWith(t, "switch "))
         {
             info.kind = DirectiveKind::Switch;
-            std::string exprText = trim(t.substr(7));
+            std::string rest = trim(t.substr(7));
+            std::string exprText = rest;
+            std::string optPart;
+            size_t pipe = rest.find('|');
+            if (pipe != std::string::npos)
+            {
+                exprText = trim(rest.substr(0, pipe));
+                optPart = trim(rest.substr(pipe + 1));
+                if (optPart.empty())
+                {
+                    setDirectiveError(info, "switch options list is empty after '|'");
+                    return info;
+                }
+            }
             if (exprText.empty())
             {
                 setDirectiveError(info, "switch directive requires an expression");
-                return info;
-            }
-            if (exprText.find('|') != std::string::npos)
-            {
-                setDirectiveError(info, "switch directive does not accept options");
                 return info;
             }
             if (!isPathExpressionText(exprText))
@@ -832,6 +877,14 @@ namespace tpp
                 return info;
             }
             info.switchExpr = parseExpression(exprText);
+            if (!optPart.empty())
+            {
+                std::set<std::string> flags;
+                parseDirectiveFlags(optPart, {"checkExhaustive"}, flags, info);
+                if (info.hasError)
+                    return info;
+                info.switchCheckExhaustive = flags.count("checkExhaustive") != 0;
+            }
             return info;
         }
 
@@ -1149,6 +1202,7 @@ namespace tpp
             {
                 auto switchNode = std::make_shared<SwitchNode>();
                 switchNode->expr = s.info.switchExpr;
+                switchNode->checkExhaustive = s.info.switchCheckExhaustive;
                 switchNode->isBlock = false;
                 ++pos;
                 while (pos < segs.size())
@@ -1267,6 +1321,7 @@ namespace tpp
                     {
                         auto switchNode = std::make_shared<SwitchNode>();
                         switchNode->expr = seg.info.switchExpr;
+                        switchNode->checkExhaustive = seg.info.switchCheckExhaustive;
                         switchNode->isBlock = true;
                         switchNode->insertCol = tl.indent;
                         ++pos;
@@ -1430,8 +1485,12 @@ namespace tpp
         DirectiveKind kind;
         std::map<std::string, TypeRef> vars;
         std::set<std::string> narrowedOptionals;
+        std::set<std::string> absentOptionals;
         std::string optionalGuardPath;
+        bool optionalGuardNegated = false;
         std::optional<TypeRef> switchExprType;
+        bool switchCheckExhaustive = false;
+        std::set<std::string> switchCaseTags;
     };
 
     static const StructDef *resolveStructFromType(const TypeRef &type, const TypeRegistry &types)
@@ -1514,10 +1573,21 @@ namespace tpp
         return result;
     }
 
+    static std::set<std::string> collectActiveAbsentOptionals(const std::vector<ValidationFrame> &frames)
+    {
+        std::set<std::string> result;
+        for (const auto &frame : frames)
+        {
+            result.insert(frame.absentOptionals.begin(), frame.absentOptionals.end());
+        }
+        return result;
+    }
+
     static bool validatePathExpressionType(const std::string &path,
                                            const std::vector<ValidationFrame> &frames,
                                            const TypeRegistry &types,
                                            const std::set<std::string> &activeNarrowing,
+                                           const std::set<std::string> &activeAbsent,
                                            bool allowOptionalTerminal,
                                            TypeRef &outType,
                                            std::string &error)
@@ -1554,6 +1624,11 @@ namespace tpp
         {
             if (isOptionalType(current))
             {
+                if (activeAbsent.count(currentPath) != 0)
+                {
+                    error = "optional value '" + currentPath + "' does not exist in this branch";
+                    return false;
+                }
                 if (activeNarrowing.count(currentPath) == 0)
                 {
                     error = "optional value '" + currentPath + "' must be guarded by '@if " + currentPath + "@'";
@@ -1590,6 +1665,11 @@ namespace tpp
 
         if (isOptionalType(current) && !allowOptionalTerminal)
         {
+            if (activeAbsent.count(currentPath) != 0)
+            {
+                error = "optional value '" + currentPath + "' does not exist in this branch";
+                return false;
+            }
             if (activeNarrowing.count(currentPath) == 0)
             {
                 error = "optional value '" + currentPath + "' must be guarded by '@if " + currentPath + "@'";
@@ -1667,6 +1747,7 @@ namespace tpp
                 }
 
                 auto activeNarrowing = collectActiveOptionalNarrowing(frames);
+                auto activeAbsent = collectActiveAbsentOptionals(frames);
                 std::string err;
                 TypeRef exprType;
 
@@ -1675,7 +1756,7 @@ namespace tpp
                 case DirectiveKind::Expr:
                 {
                     std::string path = expressionToPath(seg.info.expr);
-                    if (!validatePathExpressionType(path, frames, types, activeNarrowing, false, exprType, err))
+                    if (!validatePathExpressionType(path, frames, types, activeNarrowing, activeAbsent, false, exprType, err))
                     {
                         addTemplateDiagnostic(diags, bodyStartLine, li, seg, err);
                     }
@@ -1686,7 +1767,7 @@ namespace tpp
                     for (const auto &argExpr : seg.info.funcCallArgs)
                     {
                         std::string path = expressionToPath(argExpr);
-                        if (!validatePathExpressionType(path, frames, types, activeNarrowing, false, exprType, err))
+                        if (!validatePathExpressionType(path, frames, types, activeNarrowing, activeAbsent, false, exprType, err))
                         {
                             addTemplateDiagnostic(diags, bodyStartLine, li, seg, err);
                             break;
@@ -1696,7 +1777,7 @@ namespace tpp
                 }
                 case DirectiveKind::For:
                 {
-                    if (!validatePathExpressionType(seg.info.forCollectionText, frames, types, activeNarrowing, false, exprType, err))
+                    if (!validatePathExpressionType(seg.info.forCollectionText, frames, types, activeNarrowing, activeAbsent, false, exprType, err))
                     {
                         addTemplateDiagnostic(diags, bodyStartLine, li, seg, err);
                         break;
@@ -1722,7 +1803,7 @@ namespace tpp
                     break;
                 case DirectiveKind::If:
                 {
-                    if (!validatePathExpressionType(seg.info.ifExprText, frames, types, activeNarrowing, true, exprType, err))
+                    if (!validatePathExpressionType(seg.info.ifExprText, frames, types, activeNarrowing, activeAbsent, true, exprType, err))
                     {
                         addTemplateDiagnostic(diags, bodyStartLine, li, seg, err);
                         break;
@@ -1731,9 +1812,15 @@ namespace tpp
                     ValidationFrame frame{DirectiveKind::If};
                     if (seg.info.ifNegated)
                     {
-                        if (!std::holds_alternative<BoolType>(exprType))
+                        if (isOptionalType(exprType))
                         {
-                            addTemplateDiagnostic(diags, bodyStartLine, li, seg, "'not' is only allowed for bool expressions");
+                            frame.optionalGuardPath = seg.info.ifExprText;
+                            frame.optionalGuardNegated = true;
+                            frame.absentOptionals.insert(seg.info.ifExprText);
+                        }
+                        else if (!std::holds_alternative<BoolType>(exprType))
+                        {
+                            addTemplateDiagnostic(diags, bodyStartLine, li, seg, "'not' is only allowed for bool or optional expressions");
                         }
                     }
                     else
@@ -1741,6 +1828,12 @@ namespace tpp
                         if (isOptionalType(exprType))
                         {
                             frame.optionalGuardPath = seg.info.ifExprText;
+                            frame.optionalGuardNegated = false;
+                            if (activeAbsent.count(seg.info.ifExprText) != 0)
+                            {
+                                addTemplateDiagnostic(diags, bodyStartLine, li, seg,
+                                                      "cannot guard optional value '" + seg.info.ifExprText + "' because it does not exist in this branch");
+                            }
                             frame.narrowedOptionals.insert(seg.info.ifExprText);
                         }
                         else if (!std::holds_alternative<BoolType>(exprType))
@@ -1758,6 +1851,18 @@ namespace tpp
                         if (it->kind == DirectiveKind::If)
                         {
                             it->narrowedOptionals.clear();
+                            it->absentOptionals.clear();
+                            if (!it->optionalGuardPath.empty())
+                            {
+                                if (it->optionalGuardNegated)
+                                {
+                                    it->narrowedOptionals.insert(it->optionalGuardPath);
+                                }
+                                else
+                                {
+                                    it->absentOptionals.insert(it->optionalGuardPath);
+                                }
+                            }
                             break;
                         }
                     }
@@ -1769,23 +1874,74 @@ namespace tpp
                 case DirectiveKind::Switch:
                 {
                     std::string switchPath = expressionToPath(seg.info.switchExpr);
-                    if (!validatePathExpressionType(switchPath, frames, types, activeNarrowing, false, exprType, err))
+                    if (!validatePathExpressionType(switchPath, frames, types, activeNarrowing, activeAbsent, false, exprType, err))
                     {
                         addTemplateDiagnostic(diags, bodyStartLine, li, seg, err);
                     }
                     ValidationFrame frame{DirectiveKind::Switch};
                     frame.switchExprType = exprType;
+                    frame.switchCheckExhaustive = seg.info.switchCheckExhaustive;
                     frames.push_back(std::move(frame));
                     break;
                 }
                 case DirectiveKind::EndSwitch:
+                {
+                    for (auto it = frames.rbegin(); it != frames.rend(); ++it)
+                    {
+                        if (it->kind != DirectiveKind::Switch)
+                            continue;
+                        if (it->switchCheckExhaustive)
+                        {
+                            const EnumDef *switchEnum = nullptr;
+                            if (it->switchExprType.has_value())
+                            {
+                                switchEnum = resolveEnumFromType(it->switchExprType.value(), types);
+                            }
+                            if (switchEnum)
+                            {
+                                std::vector<std::string> missing;
+                                for (const auto &variant : switchEnum->variants)
+                                {
+                                    if (it->switchCaseTags.count(variant.tag) == 0)
+                                    {
+                                        missing.push_back(variant.tag);
+                                    }
+                                }
+                                if (!missing.empty())
+                                {
+                                    std::string missingText;
+                                    for (size_t i = 0; i < missing.size(); ++i)
+                                    {
+                                        if (i > 0)
+                                            missingText += ", ";
+                                        missingText += missing[i];
+                                    }
+                                    addTemplateDiagnostic(diags,
+                                                          bodyStartLine,
+                                                          li,
+                                                          seg,
+                                                          "switch is missing cases for enum '" + switchEnum->name + "': " + missingText);
+                                }
+                            }
+                        }
+                        break;
+                    }
                     popTo(DirectiveKind::Switch);
                     break;
+                }
                 case DirectiveKind::Case:
                 {
                     ValidationFrame frame{DirectiveKind::Case};
                     const EnumDef *switchEnum = findNearestSwitchEnum(frames, types);
                     const VariantDef *variant = findEnumVariant(switchEnum, seg.info.caseTag);
+                    for (auto it = frames.rbegin(); it != frames.rend(); ++it)
+                    {
+                        if (it->kind == DirectiveKind::Switch)
+                        {
+                            it->switchCaseTags.insert(seg.info.caseTag);
+                            break;
+                        }
+                    }
                     if (!switchEnum)
                     {
                         addTemplateDiagnostic(diags, bodyStartLine, li, seg, "case directive must be inside a switch over an enum");
@@ -1820,7 +1976,7 @@ namespace tpp
                         // Pointfree variant visitor inside switch: @render Tag via fn@
                         break;
                     }
-                    if (!validatePathExpressionType(seg.info.renderExprText, frames, types, activeNarrowing, false, exprType, err))
+                    if (!validatePathExpressionType(seg.info.renderExprText, frames, types, activeNarrowing, activeAbsent, false, exprType, err))
                     {
                         addTemplateDiagnostic(diags, bodyStartLine, li, seg, err);
                         break;
@@ -2273,7 +2429,7 @@ namespace tpp
                 auto val = ctx.resolve(arg->condExpr);
                 bool cond = false;
                 if (arg->negated) {
-                    cond = val.is_boolean() ? !val.template get<bool>() : false;
+                    cond = val.is_boolean() ? !val.template get<bool>() : val.is_null();
                 } else if (val.is_boolean()) {
                     cond = val.template get<bool>();
                 } else {
