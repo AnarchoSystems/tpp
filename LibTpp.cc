@@ -3,6 +3,7 @@
 #include <tpp/Parser.h>
 #include <sstream>
 #include <functional>
+#include <iostream>
 
 namespace tpp
 {

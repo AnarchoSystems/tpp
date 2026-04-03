@@ -1,0 +1,28 @@
+[
+    {
+        "name": "Meta_Field",
+        "fields": [
+            {
+                "name": "name",
+                "type": "string"
+            },
+            {
+                "name": "type",
+                "type": "string"
+            }
+        ]
+    },
+    {
+        "name": "Meta",
+        "fields": [
+            {
+                "name": "name",
+                "type": "string"
+            },
+            {
+                "name": "fields",
+                "type": "list<Meta_Field>"
+            }
+        ]
+    }
+]
