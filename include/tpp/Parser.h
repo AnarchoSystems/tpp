@@ -105,5 +105,7 @@ namespace tpp
     // ── High-level template parsing ──
 
     bool parseOneTemplate(const std::string &text, size_t &pos,
-                          TemplateFunction &func);
+                          TemplateFunction &func,
+                          size_t *outBodyStartLine = nullptr,
+                          std::string *outBodyText = nullptr);
 }

@@ -103,7 +103,8 @@ namespace tpp
     struct IfNode;
     struct SwitchNode;
 
-    using ASTNode = std::variant<TextNode, InterpolationNode,
+    using ASTNode = std::variant<TextNode,
+                                 InterpolationNode,
                                  std::shared_ptr<ForNode>,
                                  std::shared_ptr<IfNode>,
                                  std::shared_ptr<SwitchNode>>;

@@ -2,9 +2,6 @@
 #include <tpp/Tokenizer.h>
 #include <tpp/Parser.h>
 #include <sstream>
-#include <algorithm>
-#include <cassert>
-#include <cmath>
 #include <functional>
 
 namespace tpp
@@ -1016,7 +1013,9 @@ namespace tpp
     }
 
     bool parseOneTemplate(const std::string &text, size_t &pos,
-                          TemplateFunction &func)
+                          TemplateFunction &func,
+                          size_t *outBodyStartLine,
+                          std::string *outBodyText)
     {
         // Find "template " line
         size_t lineStart = pos;
@@ -1093,6 +1092,21 @@ namespace tpp
         ASTBuilder builder{templateLines};
         func.body = builder.parseBlock(0);
 
+        if (outBodyText)
+            *outBodyText = body;
+        if (outBodyStartLine)
+        {
+            // count newlines up to the start of the body to produce a 0-based line number
+            size_t lineCount = 0;
+            for (size_t i = 0; i < lineStart; ++i)
+                if (text[i] == '\n')
+                    ++lineCount;
+            // body starts on the line after the template header
+            if (nl < text.size() && text[nl] == '\n')
+                ++lineCount;
+            *outBodyStartLine = lineCount;
+        }
+
         pos = endPos + 4; // skip past \nEND
         return true;
     }
@@ -1117,16 +1131,126 @@ namespace tpp
                     break;
 
                 TemplateFunction func;
-                if (!parseOneTemplate(templateString, pos, func))
+                size_t bodyStartLine = 0;
+                std::string bodyText;
+                if (!parseOneTemplate(templateString, pos, func, &bodyStartLine, &bodyText))
                 {
                     if (!foundAny)
                         return false;
                     break;
                 }
+                // Validate field references in template against known types
+                auto validateTemplateFieldAccesses = [&](const TemplateFunction &f, const std::string &body, size_t bodyLine, const TypeRegistry &types, std::vector<Diagnostic> &diags)
+                {
+                    std::istringstream iss(body);
+                    std::string line;
+                    size_t li = 0;
+                    while (std::getline(iss, line))
+                    {
+                        size_t p = 0;
+                        while (p < line.size())
+                        {
+                            size_t at = line.find('@', p);
+                            if (at == std::string::npos)
+                                break;
+                            size_t end = line.find('@', at + 1);
+                            if (end == std::string::npos)
+                                break;
+                            std::string inner = line.substr(at + 1, end - at - 1);
+                            auto expr = parseExpression(inner);
+                            // extract chain of names
+                            std::vector<std::string> chain;
+                            std::function<void(const Expression &)> buildChain = [&](const Expression &e)
+                            {
+                                std::visit([&](auto &&arg)
+                                           {
+                                    using T = std::decay_t<decltype(arg)>;
+                                    if constexpr (std::is_same_v<T, Variable>) {
+                                        chain.push_back(arg.name);
+                                    } else if constexpr (std::is_same_v<T, std::shared_ptr<FieldAccess>>) {
+                                        // recursively build base then append field
+                                        buildChain(arg->base);
+                                        chain.push_back(arg->field);
+                                    } }, e);
+                            };
+                            buildChain(expr);
+
+                            if (!chain.empty())
+                            {
+                                // find param matching root name
+                                for (auto &pdef : f.params)
+                                {
+                                    if (pdef.name == chain[0])
+                                    {
+                                        // resolve type and walk fields
+                                        TypeRef curType = pdef.type;
+                                        std::function<const StructDef *(const TypeRef &)> resolveStruct = [&](const TypeRef &tr) -> const StructDef *
+                                        {
+                                            if (std::holds_alternative<NamedType>(tr))
+                                            {
+                                                auto &nt = std::get<NamedType>(tr);
+                                                auto it = types.nameIndex.find(nt.name);
+                                                if (it != types.nameIndex.end() && it->second.kind == TypeKind::Struct)
+                                                    return &types.structs[it->second.index];
+                                                return nullptr;
+                                            }
+                                            if (auto spOpt = std::get_if<std::shared_ptr<OptionalType>>(&tr))
+                                            {
+                                                return resolveStruct((*spOpt)->innerType);
+                                            }
+                                            if (auto spList = std::get_if<std::shared_ptr<ListType>>(&tr))
+                                            {
+                                                return resolveStruct((*spList)->elementType);
+                                            }
+                                            return nullptr;
+                                        };
+
+                                        for (size_t ci = 1; ci < chain.size(); ++ci)
+                                        {
+                                            const std::string &fieldName = chain[ci];
+                                            const StructDef *sd = resolveStruct(curType);
+                                            if (!sd)
+                                                break;
+                                            bool found = false;
+                                            for (auto &fd : sd->fields)
+                                            {
+                                                if (fd.name == fieldName)
+                                                {
+                                                    curType = fd.type;
+                                                    found = true;
+                                                    break;
+                                                }
+                                            }
+                                            if (!found)
+                                            {
+                                                Diagnostic d;
+                                                d.range = {{(int)(bodyLine + li), (int)at}, {(int)(bodyLine + li), (int)(end + 1)}};
+                                                d.message = "Reference to undeclared member '" + fieldName + "' of struct '" + (sd ? sd->name : "") + "'";
+                                                d.severity = DiagnosticSeverity::Error;
+                                                diags.push_back(std::move(d));
+                                                break;
+                                            }
+                                        }
+                                        break; // only check the matching param
+                                    }
+                                }
+                            }
+
+                            p = end + 1;
+                        }
+                        ++li;
+                    }
+                };
+
+                validateTemplateFieldAccesses(func, bodyText, bodyStartLine, types, diagnostics);
+
                 output.functions.push_back(std::move(func));
                 foundAny = true;
             }
             output.types = types;
+            // if diagnostics were added, compilation considered failed
+            if (!diagnostics.empty())
+                return false;
             return foundAny;
         }
         catch (...)
@@ -1196,6 +1320,75 @@ namespace tpp
                     }
                 }
             }
+            // Validate that required struct fields are present in input JSON
+            std::function<const StructDef *(const TypeRef &)> resolveStruct = [&](const TypeRef &tr) -> const StructDef *
+            {
+                if (std::holds_alternative<NamedType>(tr))
+                {
+                    auto &nt = std::get<NamedType>(tr);
+                    auto it = types.nameIndex.find(nt.name);
+                    if (it != types.nameIndex.end() && it->second.kind == TypeKind::Struct)
+                        return &types.structs[it->second.index];
+                    return nullptr;
+                }
+                if (auto spOpt = std::get_if<std::shared_ptr<OptionalType>>(&tr))
+                {
+                    return resolveStruct((*spOpt)->innerType);
+                }
+                if (auto spList = std::get_if<std::shared_ptr<ListType>>(&tr))
+                {
+                    return resolveStruct((*spList)->elementType);
+                }
+                return nullptr;
+            };
+
+            if (function.params.size() == 1)
+            {
+                const auto &p = function.params[0];
+                const StructDef *sd = resolveStruct(p.type);
+                if (sd)
+                {
+                    // boundArgs should contain the param name mapping to the object
+                    if (!program.boundArgs.contains(p.name) || !program.boundArgs[p.name].is_object())
+                    {
+                        error = "Missing field '" + sd->fields[0].name + "' in input data for function '" + function.name + "'";
+                        return false;
+                    }
+                    const auto &obj = program.boundArgs[p.name];
+                    for (auto &fd : sd->fields)
+                    {
+                        if (!obj.contains(fd.name))
+                        {
+                            error = "Missing field '" + fd.name + "' in input data for function '" + function.name + "'";
+                            return false;
+                        }
+                    }
+                }
+            }
+            else if (function.params.size() > 1)
+            {
+                for (auto &p : function.params)
+                {
+                    const StructDef *sd = resolveStruct(p.type);
+                    if (!sd)
+                        continue;
+                    if (!program.boundArgs.contains(p.name) || !program.boundArgs[p.name].is_object())
+                    {
+                        error = "Missing field '" + sd->fields[0].name + "' in input data for function '" + function.name + "'";
+                        return false;
+                    }
+                    const auto &obj = program.boundArgs[p.name];
+                    for (auto &fd : sd->fields)
+                    {
+                        if (!obj.contains(fd.name))
+                        {
+                            error = "Missing field '" + fd.name + "' in input data for function '" + function.name + "'";
+                            return false;
+                        }
+                    }
+                }
+            }
+
             return true;
         }
         catch (...)
