@@ -396,7 +396,6 @@ namespace tpp
                         } else if (overloads.size() > 1 && collection[i].is_object()) {
                             // Variant dispatch: find which overload matches the payload type
                             for (auto it = collection[i].begin(); it != collection[i].end(); ++it) {
-                                const std::string &tag = it.key();
                                 const auto &payload = it.value();
                                 for (auto *ovl : overloads) {
                                     if (ovl->params.size() == 1) {

@@ -35,8 +35,6 @@ int main(int argc, char *argv[])
 tppApp::tppApp(int argc, char *argv[])
 {
     std::string logFilePath;
-    bool bHasSeenT = false;
-    bool bHasSeenTp = false;
     for (int i = 1; i < argc; ++i)
     {
         std::string arg = argv[i];

@@ -6,6 +6,18 @@ project(Tpp)
 set(CMAKE_CXX_STANDARD 17)
 
 enable_testing()
+message(STATUS "Building arm 64Bit")
+
+set(CMAKE_CXX_FLAGS "-funsigned-char -pipe  -Wall -pedantic -Wno-unknown-pragmas -DLinux -DDEBUG -DNDEBUG")
+set(CMAKE_CXX_FLAGS_DEBUG "-g -Werror")
+set(CMAKE_CXX_FLAGS_RELEASE "-g -O")
+
+set(CMAKE_C_FLAGS "-funsigned-char -pipe  -Wall -pedantic -Wno-unknown-pragmas -DLinux -DDEBUG -DNDEBUG")
+set(CMAKE_C_FLAGS_DEBUG "-g -Werror")
+set(CMAKE_C_FLAGS_RELEASE "-g -O")
+
+set(JIT_BUILD_ARCH x86_64-Linux)
+
 
 include(FetchContent)
 

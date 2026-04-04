@@ -173,7 +173,9 @@ TEST_P(AcceptanceTest, RunTestCase)
     std::vector<tpp::DiagnosticLSPMessage> fileDiags;
     fileDiags.reserve(testCase.sources.size());
     for (const auto &src : testCase.sources)
+    {
         fileDiags.push_back(tpp::DiagnosticLSPMessage(src.url));
+    }
 
     // Feed each source to the compiler
     for (size_t i = 0; i < testCase.sources.size(); ++i)
@@ -216,6 +218,135 @@ TEST_P(AcceptanceTest, RunTestCase)
     }
 }
 
+struct tCLIOutput
+{
+    bool success = false;
+    std::string output;
+    std::vector<std::string> diagnostics;
+};
+
+tCLIOutput runCompilerViaCLI(const tTestCase &testCase)
+{
+    // execute command with popen and capture output
+    // usage: TPP_EXE <directory_path>
+    // result goes to stdout, is a json compatible with CompilerOutput
+    // diagnostics go to stderr, line by line, in gcc format with severity: file:line:col: severity: message
+    auto command = TPP_EXE " " + std::filesystem::absolute("TestCases/" + testCase.name).string() + " 2>&1";
+    std::array<char, 128> buffer;
+    std::string result;
+    std::string diagnostics;
+    FILE *pipe = popen(command.c_str(), "r");
+    if (!pipe)
+    {
+        throw std::runtime_error("popen() failed!");
+    }
+    while (fgets(buffer.data(), buffer.size(), pipe) != nullptr)
+    {
+        result += buffer.data();
+    }
+    int status = pclose(pipe);
+    // diagnostics exist only if compilation failed, so exit code tells us whether to parse result as output or diagnostics
+    // clang-format off
+#if defined(_WIN32) || defined(_WIN64)
+#define get_exit_status(status) status
+#else
+#define get_exit_status(status) ((WIFEXITED(status)) ? WEXITSTATUS(status) : -1)
+#endif
+    // clang-format on
+    tCLIOutput output;
+    if (get_exit_status(status) == 0)
+    {
+        output.success = true;
+        output.output = result;
+    }
+    else
+    {
+        output.success = false;
+        // split diagnostics by line
+        std::istringstream iss(result);
+        std::string line;
+        while (std::getline(iss, line))
+        {
+            output.diagnostics.push_back(line);
+        }
+    }
+    return output;
+}
+
+TEST_P(AcceptanceTest, CompareCompileByCLI)
+{
+    auto testCase = GetParam();
+
+    auto cliOutput = runCompilerViaCLI(testCase);
+
+    tpp::Compiler compiler;
+    std::vector<tpp::DiagnosticLSPMessage> fileDiags;
+    fileDiags.reserve(testCase.sources.size());
+    for (const auto &src : testCase.sources)
+    {
+        if (src.isTypes)
+        {
+            compiler.add_types(src.content, fileDiags.emplace_back(src.url).diagnostics);
+        }
+        else
+        {
+            compiler.add_templates(src.content, fileDiags.emplace_back(src.url).diagnostics);
+        }
+    }
+    tpp::CompilerOutput expectedOutput;
+    bool expectedSuccess = compiler.compile(expectedOutput);
+
+    EXPECT_EQ(cliOutput.success, expectedSuccess) << "Test case: " << testCase.name;
+
+    if (cliOutput.success != expectedSuccess)
+    {
+        return;
+    }
+
+    if (expectedSuccess)
+    {
+        tpp::CompilerOutput actualOutput = nlohmann::json::parse(cliOutput.output);
+        EXPECT_EQ(actualOutput, expectedOutput) << "Test case: " << testCase.name
+                                                << "\nExpected output: " << nlohmann::json(expectedOutput).dump(2)
+                                                << "\nActual output: " << nlohmann::json(actualOutput).dump(2);
+    }
+    else
+    {
+        // convert expected diagnostics to gcc-style strings and compare with CLI output
+        std::vector<std::string> expectedDiagStrings;
+        for (const auto &fileDiags : testCase.expectedDiagnostics)
+        {
+            for (const auto &d : fileDiags.diagnostics)
+            {
+                std::string severityStr = "error";
+                switch (*d.severity)
+                {
+                case tpp::DiagnosticSeverity::Error:
+                    severityStr = "error";
+                    break;
+                case tpp::DiagnosticSeverity::Warning:
+                    severityStr = "warning";
+                    break;
+                case tpp::DiagnosticSeverity::Information:
+                    severityStr = "info";
+                    break;
+                case tpp::DiagnosticSeverity::Hint:
+                    severityStr = "hint";
+                    break;
+                }
+                // convert uri to absolute path
+                std::filesystem::path filePath = std::filesystem::absolute("TestCases/" + fileDiags.uri);
+                expectedDiagStrings.push_back(filePath.string() + ":" +
+                                              std::to_string(d.range.start.line + 1) + ":" +
+                                              std::to_string(d.range.start.character + 1) + ": " +
+                                              severityStr + ": " + d.message);
+            }
+        }
+        EXPECT_EQ(cliOutput.diagnostics, expectedDiagStrings)
+            << "Test case: " << testCase.name
+            << "\nActual diagnostics: " << nlohmann::json(cliOutput.diagnostics).dump(2);
+    }
+}
+
 INSTANTIATE_TEST_SUITE_P(AcceptanceTests, AcceptanceTest, ::testing::ValuesIn(GetTestCases()), [](const testing::TestParamInfo<AcceptanceTest::ParamType> &info)
                          { return info.param.name; });
-
