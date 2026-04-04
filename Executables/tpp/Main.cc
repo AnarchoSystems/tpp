@@ -111,21 +111,37 @@ void tppApp::log(const std::string &message)
 
 void tppApp::run()
 {
-    std::vector<DiagnosticLSPMessage> diags;
-    Compiler compiler;
-
+    // Collect file paths first so we can reserve diags to the exact size needed.
+    // This is important: add_types / add_templates store raw pointers into
+    // diags[i].diagnostics; if diags later reallocates those pointers dangle.
+    struct FileEntry
+    {
+        std::string path;
+        bool isTypes;
+    };
+    std::vector<FileEntry> fileEntries;
     for (const auto &entry : std::filesystem::recursive_directory_iterator(inputDirectory))
     {
         if (!entry.is_regular_file())
-        {
             continue;
-        }
         auto pathString = entry.path().string();
         if (pathString.size() > 10 && pathString.substr(pathString.size() - 10) == ".tpp.types")
+            fileEntries.push_back({pathString, true});
+        else if (pathString.size() > 4 && pathString.substr(pathString.size() - 4) == ".tpp")
+            fileEntries.push_back({pathString, false});
+    }
+
+    std::vector<DiagnosticLSPMessage> diags;
+    diags.reserve(fileEntries.size()); // no reallocation after this point
+    Compiler compiler;
+
+    for (const auto &fe : fileEntries)
+    {
+        if (fe.isTypes)
         {
-            log("Found typedefs file: " + pathString);
-            diags.push_back(DiagnosticLSPMessage(pathString));
-            std::ifstream file(entry.path());
+            log("Found typedefs file: " + fe.path);
+            diags.push_back(DiagnosticLSPMessage(fe.path));
+            std::ifstream file(fe.path);
             if (!file.is_open())
             {
                 diags.back().diagnostics.push_back({{}, "Failed to open file", DiagnosticSeverity::Error});
@@ -133,13 +149,12 @@ void tppApp::run()
             }
             std::string typedefs((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
             compiler.add_types(typedefs, diags.back().diagnostics);
-            file.close();
         }
-        else if (pathString.size() > 4 && pathString.substr(pathString.size() - 4) == ".tpp")
+        else
         {
-            log("Found template file: " + pathString);
-            diags.push_back(DiagnosticLSPMessage(pathString));
-            std::ifstream file(entry.path());
+            log("Found template file: " + fe.path);
+            diags.push_back(DiagnosticLSPMessage(fe.path));
+            std::ifstream file(fe.path);
             if (!file.is_open())
             {
                 diags.back().diagnostics.push_back({{}, "Failed to open file", DiagnosticSeverity::Error});
@@ -147,7 +162,6 @@ void tppApp::run()
             }
             std::string templates((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
             compiler.add_templates(templates, diags.back().diagnostics);
-            file.close();
         }
     }
     log("Finished loading files. Compiling...");
@@ -192,7 +206,10 @@ void tppApp::run()
                                      std::to_string(d.range.start.character + 1) + ": " +
                                      severityStr + ": " + d.message;
             log(diagnostic);
-            std::cerr << diagnostic << std::endl;
+            if (!verbose)
+            {
+                std::cerr << diagnostic << std::endl;
+            }
         }
     }
     exit(success ? EXIT_SUCCESS : EXIT_FAILURE);
