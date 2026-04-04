@@ -43,13 +43,13 @@ Example — wrong argument count:
 
 ## expected_diagnostics.json (compile / parse error)
 
-Used when `compiler.add_types(...)` or `compiler.compile(...)` emits diagnostics.
+Used when `compiler.add_types(...)` or `compiler.add_templates(...)` emits diagnostics.
 
 Schema — array of LSP `PublishDiagnosticsParams`-style objects:
 ```json
 [
     {
-        "uri": "<test-name>/typedefs.tpp",
+        "uri": "<test-name>/typedefs.tpp.types",
         "diagnostics": [
             {
                 "range": {
@@ -66,15 +66,15 @@ Schema — array of LSP `PublishDiagnosticsParams`-style objects:
 
 Notes:
 - Only include the file(s) that actually have diagnostics (omit files with empty diagnostic arrays)
-- `uri` is exactly `<test-name>/<file>`, e.g. `error_undefined_type/typedefs.tpp` — this is the relative path as reported by the acceptance test harness
+- `uri` is exactly `<test-name>/<file>`, e.g. `error_undefined_type/typedefs.tpp.types` — this is the relative path as reported by the acceptance test harness
 - Line/character are **0-based**
 - `severity` is always the lowercase string `"error"`
 
-Example — undefined type in `typedefs.tpp` line 2, characters 11–22:
+Example — undefined type in `typedefs.tpp.types` line 2, characters 11–22:
 ```json
 [
     {
-        "uri": "error_undefined_type/typedefs.tpp",
+        "uri": "error_undefined_type/typedefs.tpp.types",
         "diagnostics": [
             {
                 "range": {

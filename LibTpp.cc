@@ -4,7 +4,6 @@
 //   CompilerOutput.cc
 //   Rendering.cc
 
-
 namespace tpp
 {
 
@@ -595,7 +594,11 @@ namespace tpp
         return true;
     }
 
-    struct ParseError { std::string message; int start = 0, end = 0; };
+    struct ParseError
+    {
+        std::string message;
+        int start = 0, end = 0;
+    };
 
     // Parses key=value option pairs. Returns an error with position info, or nullopt on success.
     static std::optional<ParseError> parseDirectiveOptions(
@@ -692,10 +695,14 @@ namespace tpp
     {
         std::string t = trim(s);
 
-        if (t == "else")       return ElseDirective{};
-        if (t == "endif")      return EndIfDirective{};
-        if (t == "end for")    return EndForDirective{};
-        if (t == "end switch") return EndSwitchDirective{};
+        if (t == "else")
+            return ElseDirective{};
+        if (t == "endif")
+            return EndIfDirective{};
+        if (t == "end for")
+            return EndForDirective{};
+        if (t == "end switch")
+            return EndSwitchDirective{};
 
         if (startsWith(t, "end case"))
         {
@@ -712,7 +719,7 @@ namespace tpp
             if (pipe != std::string::npos)
             {
                 mainPart = trim(t.substr(0, pipe));
-                optPart  = trim(t.substr(pipe + 1));
+                optPart = trim(t.substr(pipe + 1));
                 if (optPart.empty())
                     return ErrorDirective{"for options list is empty after '|'"};
             }
@@ -722,9 +729,9 @@ namespace tpp
                 return ErrorDirective{"invalid for directive; expected 'for <item> in <collection>'"};
 
             ForDirective d;
-            d.var            = trim(rest.substr(0, inPos));
+            d.var = trim(rest.substr(0, inPos));
             d.collectionText = trim(rest.substr(inPos + 4));
-            d.collection     = parseExpression(d.collectionText);
+            d.collection = parseExpression(d.collectionText);
 
             if (!isIdentifier(d.var))
                 return ErrorDirective{"invalid loop variable name '" + d.var + "'"};
@@ -743,9 +750,9 @@ namespace tpp
                 std::map<std::string, std::string> values;
                 if (auto err = parseDirectiveOptions(optPart, {"sep", "followedBy", "precededBy"}, {"iteratorVar"}, values))
                     return ErrorDirective{err->message, err->start, err->end};
-                d.sep         = values["sep"];
-                d.followedBy  = values["followedBy"];
-                d.precededBy  = values["precededBy"];
+                d.sep = values["sep"];
+                d.followedBy = values["followedBy"];
+                d.precededBy = values["precededBy"];
                 d.iteratorVar = values["iteratorVar"];
             }
             return d;
@@ -758,7 +765,7 @@ namespace tpp
             if (startsWith(condText, "not "))
             {
                 d.negated = true;
-                condText  = trim(condText.substr(4));
+                condText = trim(condText.substr(4));
             }
             d.condText = condText;
             if (!isPathExpressionText(condText))
@@ -769,14 +776,14 @@ namespace tpp
 
         if (startsWith(t, "switch "))
         {
-            std::string rest     = trim(t.substr(7));
+            std::string rest = trim(t.substr(7));
             std::string exprText = rest;
             std::string optPart;
             size_t pipe = rest.find('|');
             if (pipe != std::string::npos)
             {
                 exprText = trim(rest.substr(0, pipe));
-                optPart  = trim(rest.substr(pipe + 1));
+                optPart = trim(rest.substr(pipe + 1));
                 if (optPart.empty())
                     return ErrorDirective{"switch options list is empty after '|'"};
             }
@@ -827,14 +834,14 @@ namespace tpp
 
         if (startsWith(t, "render "))
         {
-            std::string rest     = t.substr(7);
+            std::string rest = t.substr(7);
             std::string mainPart = rest;
             std::string optPart;
             size_t pipe = rest.find('|');
             if (pipe != std::string::npos)
             {
                 mainPart = trim(rest.substr(0, pipe));
-                optPart  = trim(rest.substr(pipe + 1));
+                optPart = trim(rest.substr(pipe + 1));
                 if (optPart.empty())
                     return ErrorDirective{"render options list is empty after '|'"};
             }
@@ -843,8 +850,8 @@ namespace tpp
                 return ErrorDirective{"invalid render directive; expected 'render <collection> via <function>'"};
             RenderDirective d;
             d.exprText = trim(mainPart.substr(0, viaPos));
-            d.expr     = parseExpression(d.exprText);
-            d.func     = trim(mainPart.substr(viaPos + 5));
+            d.expr = parseExpression(d.exprText);
+            d.func = trim(mainPart.substr(viaPos + 5));
             if (!isPathExpressionText(d.exprText))
                 return ErrorDirective{"render expression must be a variable or member path"};
             if (!isIdentifier(d.func))
@@ -861,7 +868,7 @@ namespace tpp
                 std::map<std::string, std::string> values;
                 if (auto err = parseDirectiveOptions(optPart, {"sep", "followedBy", "precededBy"}, {}, values))
                     return ErrorDirective{err->message, err->start, err->end};
-                d.sep        = values["sep"];
+                d.sep = values["sep"];
                 d.followedBy = values["followedBy"];
                 d.precededBy = values["precededBy"];
             }
@@ -877,7 +884,10 @@ namespace tpp
                 bool validName = !name.empty();
                 for (char c : name)
                     if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_')
-                        { validName = false; break; }
+                    {
+                        validName = false;
+                        break;
+                    }
                 if (validName)
                 {
                     FunctionCallDirective d;
@@ -890,10 +900,25 @@ namespace tpp
                         std::string current;
                         for (char c : argsStr)
                         {
-                            if      (c == '(')           { depth++; current += c; }
-                            else if (c == ')')           { depth--; current += c; }
-                            else if (c == ',' && depth == 0) { argParts.push_back(current); current.clear(); }
-                            else                         { current += c; }
+                            if (c == '(')
+                            {
+                                depth++;
+                                current += c;
+                            }
+                            else if (c == ')')
+                            {
+                                depth--;
+                                current += c;
+                            }
+                            else if (c == ',' && depth == 0)
+                            {
+                                argParts.push_back(current);
+                                current.clear();
+                            }
+                            else
+                            {
+                                current += c;
+                            }
                         }
                         if (!current.empty())
                             argParts.push_back(current);
@@ -998,20 +1023,20 @@ namespace tpp
                 {
                     auto callNode = std::make_shared<FunctionCallNode>();
                     callNode->functionName = d->name;
-                    callNode->arguments    = d->args;
+                    callNode->arguments = d->args;
                     sub.push_back(std::move(callNode));
                     ++pos;
                 }
                 else if (auto *d = std::get_if<ForDirective>(&s.info))
                 {
                     auto forNode = std::make_shared<ForNode>();
-                    forNode->varName         = d->var;
+                    forNode->varName = d->var;
                     forNode->iteratorVarName = d->iteratorVar;
-                    forNode->collectionExpr  = d->collection;
-                    forNode->sep             = d->sep;
-                    forNode->followedBy      = d->followedBy;
-                    forNode->precededBy      = d->precededBy;
-                    forNode->isBlock         = false;
+                    forNode->collectionExpr = d->collection;
+                    forNode->sep = d->sep;
+                    forNode->followedBy = d->followedBy;
+                    forNode->precededBy = d->precededBy;
+                    forNode->isBlock = false;
                     ++pos;
                     forNode->body = recurse();
                     sub.push_back(std::move(forNode));
@@ -1025,9 +1050,9 @@ namespace tpp
                 {
                     auto ifNode = std::make_shared<IfNode>();
                     ifNode->condExpr = d->cond;
-                    ifNode->negated  = d->negated;
+                    ifNode->negated = d->negated;
                     ifNode->condText = d->condText;
-                    ifNode->isBlock  = false;
+                    ifNode->isBlock = false;
                     ++pos;
                     ifNode->thenBody = recurse();
                     if (pos < segs.size() && segs[pos].isDirective &&
@@ -1050,19 +1075,27 @@ namespace tpp
                 else if (auto *d = std::get_if<SwitchDirective>(&s.info))
                 {
                     auto switchNode = std::make_shared<SwitchNode>();
-                    switchNode->expr            = d->expr;
+                    switchNode->expr = d->expr;
                     switchNode->checkExhaustive = d->checkExhaustive;
-                    switchNode->isBlock         = false;
+                    switchNode->isBlock = false;
                     ++pos;
                     while (pos < segs.size())
                     {
                         auto &cs = segs[pos];
-                        if (!cs.isDirective) { ++pos; continue; }
-                        if (std::holds_alternative<EndSwitchDirective>(cs.info)) { ++pos; break; }
+                        if (!cs.isDirective)
+                        {
+                            ++pos;
+                            continue;
+                        }
+                        if (std::holds_alternative<EndSwitchDirective>(cs.info))
+                        {
+                            ++pos;
+                            break;
+                        }
                         if (auto *cd = std::get_if<CaseDirective>(&cs.info))
                         {
                             CaseNode cn;
-                            cn.tag         = cd->tag;
+                            cn.tag = cd->tag;
                             cn.bindingName = cd->binding;
                             ++pos;
                             cn.body = recurse();
@@ -1112,14 +1145,14 @@ namespace tpp
                     if (auto *d = std::get_if<ForDirective>(&seg.info))
                     {
                         auto forNode = std::make_shared<ForNode>();
-                        forNode->varName         = d->var;
+                        forNode->varName = d->var;
                         forNode->iteratorVarName = d->iteratorVar;
-                        forNode->collectionExpr  = d->collection;
-                        forNode->sep             = d->sep;
-                        forNode->followedBy      = d->followedBy;
-                        forNode->precededBy      = d->precededBy;
-                        forNode->isBlock         = true;
-                        forNode->insertCol       = tl.indent;
+                        forNode->collectionExpr = d->collection;
+                        forNode->sep = d->sep;
+                        forNode->followedBy = d->followedBy;
+                        forNode->precededBy = d->precededBy;
+                        forNode->isBlock = true;
+                        forNode->insertCol = tl.indent;
                         ++pos;
                         forNode->body = parseBlock(tl.indent);
                         nodes.push_back(std::move(forNode));
@@ -1132,10 +1165,10 @@ namespace tpp
                     else if (auto *d = std::get_if<IfDirective>(&seg.info))
                     {
                         auto ifNode = std::make_shared<IfNode>();
-                        ifNode->condExpr  = d->cond;
-                        ifNode->negated   = d->negated;
-                        ifNode->condText  = d->condText;
-                        ifNode->isBlock   = true;
+                        ifNode->condExpr = d->cond;
+                        ifNode->negated = d->negated;
+                        ifNode->condText = d->condText;
+                        ifNode->isBlock = true;
                         ifNode->insertCol = tl.indent;
                         ++pos;
                         ifNode->thenBody = parseBlock(tl.indent);
@@ -1165,10 +1198,10 @@ namespace tpp
                     else if (auto *d = std::get_if<SwitchDirective>(&seg.info))
                     {
                         auto switchNode = std::make_shared<SwitchNode>();
-                        switchNode->expr            = d->expr;
+                        switchNode->expr = d->expr;
                         switchNode->checkExhaustive = d->checkExhaustive;
-                        switchNode->isBlock         = true;
-                        switchNode->insertCol       = tl.indent;
+                        switchNode->isBlock = true;
+                        switchNode->insertCol = tl.indent;
                         ++pos;
                         while (pos < lines.size())
                         {
@@ -1188,7 +1221,7 @@ namespace tpp
                                     if (auto *cd = std::get_if<CaseDirective>(&s2.info))
                                     {
                                         CaseNode cn;
-                                        cn.tag         = cd->tag;
+                                        cn.tag = cd->tag;
                                         cn.bindingName = cd->binding;
                                         ++pos;
                                         cn.body = parseBlock(tl.indent);
@@ -1198,9 +1231,9 @@ namespace tpp
                                     if (auto *rd = std::get_if<RenderDirective>(&s2.info))
                                     {
                                         CaseNode cn;
-                                        cn.tag         = rd->exprText;
+                                        cn.tag = rd->exprText;
                                         cn.bindingName = "__payload";
-                                        auto callNode  = std::make_shared<FunctionCallNode>();
+                                        auto callNode = std::make_shared<FunctionCallNode>();
                                         callNode->functionName = rd->func;
                                         callNode->arguments.push_back(Variable{"__payload"});
                                         cn.body.push_back(std::move(callNode));
@@ -1240,12 +1273,12 @@ namespace tpp
                     {
                         auto renderNode = std::make_shared<RenderViaNode>();
                         renderNode->collectionExpr = d->expr;
-                        renderNode->functionName   = d->func;
-                        renderNode->sep            = d->sep;
-                        renderNode->followedBy     = d->followedBy;
-                        renderNode->precededBy     = d->precededBy;
-                        renderNode->isBlock        = true;
-                        renderNode->insertCol      = tl.indent;
+                        renderNode->functionName = d->func;
+                        renderNode->sep = d->sep;
+                        renderNode->followedBy = d->followedBy;
+                        renderNode->precededBy = d->precededBy;
+                        renderNode->isBlock = true;
+                        renderNode->insertCol = tl.indent;
                         nodes.push_back(std::move(renderNode));
                         ++pos;
                     }
@@ -1289,7 +1322,7 @@ namespace tpp
                         {
                             auto callNode = std::make_shared<FunctionCallNode>();
                             callNode->functionName = d->name;
-                            callNode->arguments    = d->args;
+                            callNode->arguments = d->args;
                             nodes.push_back(std::move(callNode));
                         }
                         else if (auto *d = std::get_if<ExprDirective>(&seg.info))
@@ -1334,7 +1367,14 @@ namespace tpp
                           expr);
     }
 
-    enum class ScopeKind { Root, For, If, Switch, Case };
+    enum class ScopeKind
+    {
+        Root,
+        For,
+        If,
+        Switch,
+        Case
+    };
 
     struct ValidationFrame
     {
@@ -1829,11 +1869,20 @@ namespace tpp
             std::string msg;
             switch (frame.kind)
             {
-            case ScopeKind::For:    msg = "missing @end for@";    break;
-            case ScopeKind::Switch: msg = "missing @end switch@"; break;
-            case ScopeKind::Case:   msg = "missing @end case@";   break;
-            case ScopeKind::If:     msg = "missing @endif@";      break;
-            default: break;
+            case ScopeKind::For:
+                msg = "missing @end for@";
+                break;
+            case ScopeKind::Switch:
+                msg = "missing @end switch@";
+                break;
+            case ScopeKind::Case:
+                msg = "missing @end case@";
+                break;
+            case ScopeKind::If:
+                msg = "missing @endif@";
+                break;
+            default:
+                break;
             }
             if (!msg.empty())
                 addTemplateDiagnostic(diags, bodyStartLine, frame.openLineIndex, frame.openSeg, msg);
@@ -1894,7 +1943,8 @@ namespace tpp
             {
                 size_t lineNum = 0;
                 for (size_t i = 0; i < lineStart; ++i)
-                    if (text[i] == '\n') ++lineNum;
+                    if (text[i] == '\n')
+                        ++lineNum;
                 Diagnostic d;
                 d.range = {{(int)lineNum, 0}, {(int)lineNum, (int)firstLine.size()}};
                 d.message = "missing END for template '" + func.name + "'";
@@ -1979,51 +2029,6 @@ namespace tpp
 
         pos = endPos + 4; // skip past \nEND
         return true;
-    }
-
-    bool Compiler::compile(const std::string &templateString,
-                           CompilerOutput &output,
-                           std::vector<Diagnostic> &diagnostics) const noexcept
-    {
-        try
-        {
-            size_t pos = 0;
-            bool foundAny = false;
-            while (pos < templateString.size())
-            {
-                // Skip whitespace between template blocks
-                while (pos < templateString.size() &&
-                       std::isspace(static_cast<unsigned char>(templateString[pos])))
-                {
-                    ++pos;
-                }
-                if (pos >= templateString.size())
-                    break;
-
-                TemplateFunction func;
-                size_t bodyStartLine = 0;
-                std::vector<TemplateLine> templateLines;
-                if (!parseOneTemplate(templateString, pos, func, &bodyStartLine, nullptr, &templateLines, &diagnostics))
-                {
-                    if (!foundAny && diagnostics.empty())
-                        return false;
-                    break;
-                }
-                validateTemplateSemantics(func, templateLines, bodyStartLine, types, diagnostics);
-
-                output.functions.push_back(std::move(func));
-                foundAny = true;
-            }
-            output.types = types;
-            // if diagnostics were added, compilation considered failed
-            if (!diagnostics.empty())
-                return false;
-            return foundAny;
-        }
-        catch (...)
-        {
-            return false;
-        }
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -2126,8 +2131,8 @@ namespace tpp
     // ═══════════════════════════════════════════════════════════════════
 
     bool FunctionSymbol::render(const nlohmann::json &input,
-                               std::string &output,
-                               std::string &error) const noexcept
+                                std::string &output,
+                                std::string &error) const noexcept
     {
         try
         {

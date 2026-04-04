@@ -6,7 +6,7 @@ argument-hint: 'Describe the feature or error case to test'
 
 # Add Acceptance Test
 
-Each test case is a self-contained directory under `Test/TestCases/<name>/` with four files.
+Each test case is a self-contained directory under `Test/TestCases/<name>/` with at least three files.
 The test runner (`Acceptance.cc`) discovers all subdirectories automatically — no registration needed.
 
 ## Naming Convention
@@ -17,21 +17,25 @@ The test runner (`Acceptance.cc`) discovers all subdirectories automatically —
 | Expected compiler or parse error | `error_<description>` | `error_missing_end_for` |
 | Expected runtime error | `error_<description>` | `error_wrong_arg_count_over` |
 
-## Required Files (all four must exist)
+## Required Files
 
 | File | Purpose |
 |---|---|
-| `typedefs.tpp` | Type definitions (structs, variants). May be empty. |
-| `template.tpp` | Template source. Must start with `template main(...)` and end with `END`. |
+| `typedefs.tpp.types` | Type definitions (structs, variants). May be empty. |
+| `template.tpp` | Template source. Must contain a `template main(...)` function ending with `END`. |
 | `input.json` | JSON object with runtime input data. Use `{}` when `main` takes no parameters. |
 | `expected_output.txt` **or** `expected_errors.json` **or** `expected_diagnostics.json` | The expected result — see [formats reference](./references/expected-formats.md). |
+
+**Multiple source files are allowed.** Any file ending in `.tpp.types` is treated as type definitions;
+any file ending in `.tpp` is treated as a template source. All type files are processed before template
+files (sorted alphabetically within each group). This lets you split types or templates across several files.
 
 ## Procedure
 
 ### Step 1 — Choose the test name
 Follow the naming convention above. The directory name becomes the test name in CTest output.
 
-### Step 2 — Write `typedefs.tpp`
+### Step 2 — Write `typedefs.tpp.types`
 Define any structs or variants needed. Leave the file empty if none are needed.
 
 ```
@@ -77,6 +81,6 @@ If the test fails, compare actual vs expected and fix the expected output file o
 
 ## Key Rules
 - `expected_output.txt` must **not** end with a newline — the compiler strips the trailing `\n`
-- For diagnostics, `uri` is exactly `<test-name>/typedefs.tpp` or `<test-name>/template.tpp` — a relative path where `<test-name>` is the directory name (e.g. `error_undefined_type/typedefs.tpp`)
+- For diagnostics, `uri` is exactly `<test-name>/<filename>` — the relative path of the file that emitted the error (e.g. `error_undefined_type/typedefs.tpp.types` or `my_test/template.tpp`)
 - `severity` in diagnostics must be the string `"error"` (lowercase)
 - Line and character numbers in diagnostic ranges are **0-based**

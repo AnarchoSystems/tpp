@@ -1,6 +1,7 @@
 #include <tpp/Compiler.h>
 #include <tpp/CompilerOutput.h>
 #include <tpp/TemplateParser.h>
+#include <tpp/TypedefParser.h>
 #include <tpp/Diagnostic.h>
 #include <sstream>
 #include <functional>
@@ -174,7 +175,11 @@ namespace tpp
         return true;
     }
 
-    struct ParseError { std::string message; int start = 0, end = 0; };
+    struct ParseError
+    {
+        std::string message;
+        int start = 0, end = 0;
+    };
 
     // Parses key=value option pairs. Returns an error with position info, or nullopt on success.
     static std::optional<ParseError> parseDirectiveOptions(
@@ -271,10 +276,14 @@ namespace tpp
     {
         std::string t = trim(s);
 
-        if (t == "else")       return ElseDirective{};
-        if (t == "endif")      return EndIfDirective{};
-        if (t == "end for")    return EndForDirective{};
-        if (t == "end switch") return EndSwitchDirective{};
+        if (t == "else")
+            return ElseDirective{};
+        if (t == "endif")
+            return EndIfDirective{};
+        if (t == "end for")
+            return EndForDirective{};
+        if (t == "end switch")
+            return EndSwitchDirective{};
 
         if (startsWith(t, "end case"))
         {
@@ -291,7 +300,7 @@ namespace tpp
             if (pipe != std::string::npos)
             {
                 mainPart = trim(t.substr(0, pipe));
-                optPart  = trim(t.substr(pipe + 1));
+                optPart = trim(t.substr(pipe + 1));
                 if (optPart.empty())
                     return ErrorDirective{"for options list is empty after '|'"};
             }
@@ -301,9 +310,9 @@ namespace tpp
                 return ErrorDirective{"invalid for directive; expected 'for <item> in <collection>'"};
 
             ForDirective d;
-            d.var            = trim(rest.substr(0, inPos));
+            d.var = trim(rest.substr(0, inPos));
             d.collectionText = trim(rest.substr(inPos + 4));
-            d.collection     = parseExpression(d.collectionText);
+            d.collection = parseExpression(d.collectionText);
 
             if (!isIdentifier(d.var))
                 return ErrorDirective{"invalid loop variable name '" + d.var + "'"};
@@ -322,9 +331,9 @@ namespace tpp
                 std::map<std::string, std::string> values;
                 if (auto err = parseDirectiveOptions(optPart, {"sep", "followedBy", "precededBy"}, {"iteratorVar"}, values))
                     return ErrorDirective{err->message, err->start, err->end};
-                d.sep         = values["sep"];
-                d.followedBy  = values["followedBy"];
-                d.precededBy  = values["precededBy"];
+                d.sep = values["sep"];
+                d.followedBy = values["followedBy"];
+                d.precededBy = values["precededBy"];
                 d.iteratorVar = values["iteratorVar"];
             }
             return d;
@@ -337,7 +346,7 @@ namespace tpp
             if (startsWith(condText, "not "))
             {
                 d.negated = true;
-                condText  = trim(condText.substr(4));
+                condText = trim(condText.substr(4));
             }
             d.condText = condText;
             if (!isPathExpressionText(condText))
@@ -348,14 +357,14 @@ namespace tpp
 
         if (startsWith(t, "switch "))
         {
-            std::string rest     = trim(t.substr(7));
+            std::string rest = trim(t.substr(7));
             std::string exprText = rest;
             std::string optPart;
             size_t pipe = rest.find('|');
             if (pipe != std::string::npos)
             {
                 exprText = trim(rest.substr(0, pipe));
-                optPart  = trim(rest.substr(pipe + 1));
+                optPart = trim(rest.substr(pipe + 1));
                 if (optPart.empty())
                     return ErrorDirective{"switch options list is empty after '|'"};
             }
@@ -406,14 +415,14 @@ namespace tpp
 
         if (startsWith(t, "render "))
         {
-            std::string rest     = t.substr(7);
+            std::string rest = t.substr(7);
             std::string mainPart = rest;
             std::string optPart;
             size_t pipe = rest.find('|');
             if (pipe != std::string::npos)
             {
                 mainPart = trim(rest.substr(0, pipe));
-                optPart  = trim(rest.substr(pipe + 1));
+                optPart = trim(rest.substr(pipe + 1));
                 if (optPart.empty())
                     return ErrorDirective{"render options list is empty after '|'"};
             }
@@ -422,8 +431,8 @@ namespace tpp
                 return ErrorDirective{"invalid render directive; expected 'render <collection> via <function>'"};
             RenderDirective d;
             d.exprText = trim(mainPart.substr(0, viaPos));
-            d.expr     = parseExpression(d.exprText);
-            d.func     = trim(mainPart.substr(viaPos + 5));
+            d.expr = parseExpression(d.exprText);
+            d.func = trim(mainPart.substr(viaPos + 5));
             if (!isPathExpressionText(d.exprText))
                 return ErrorDirective{"render expression must be a variable or member path"};
             if (!isIdentifier(d.func))
@@ -440,7 +449,7 @@ namespace tpp
                 std::map<std::string, std::string> values;
                 if (auto err = parseDirectiveOptions(optPart, {"sep", "followedBy", "precededBy"}, {}, values))
                     return ErrorDirective{err->message, err->start, err->end};
-                d.sep        = values["sep"];
+                d.sep = values["sep"];
                 d.followedBy = values["followedBy"];
                 d.precededBy = values["precededBy"];
             }
@@ -456,7 +465,10 @@ namespace tpp
                 bool validName = !name.empty();
                 for (char c : name)
                     if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_')
-                        { validName = false; break; }
+                    {
+                        validName = false;
+                        break;
+                    }
                 if (validName)
                 {
                     FunctionCallDirective d;
@@ -469,10 +481,25 @@ namespace tpp
                         std::string current;
                         for (char c : argsStr)
                         {
-                            if      (c == '(')           { depth++; current += c; }
-                            else if (c == ')')           { depth--; current += c; }
-                            else if (c == ',' && depth == 0) { argParts.push_back(current); current.clear(); }
-                            else                         { current += c; }
+                            if (c == '(')
+                            {
+                                depth++;
+                                current += c;
+                            }
+                            else if (c == ')')
+                            {
+                                depth--;
+                                current += c;
+                            }
+                            else if (c == ',' && depth == 0)
+                            {
+                                argParts.push_back(current);
+                                current.clear();
+                            }
+                            else
+                            {
+                                current += c;
+                            }
                         }
                         if (!current.empty())
                             argParts.push_back(current);
@@ -577,20 +604,20 @@ namespace tpp
                 {
                     auto callNode = std::make_shared<FunctionCallNode>();
                     callNode->functionName = d->name;
-                    callNode->arguments    = d->args;
+                    callNode->arguments = d->args;
                     sub.push_back(std::move(callNode));
                     ++pos;
                 }
                 else if (auto *d = std::get_if<ForDirective>(&s.info))
                 {
                     auto forNode = std::make_shared<ForNode>();
-                    forNode->varName         = d->var;
+                    forNode->varName = d->var;
                     forNode->iteratorVarName = d->iteratorVar;
-                    forNode->collectionExpr  = d->collection;
-                    forNode->sep             = d->sep;
-                    forNode->followedBy      = d->followedBy;
-                    forNode->precededBy      = d->precededBy;
-                    forNode->isBlock         = false;
+                    forNode->collectionExpr = d->collection;
+                    forNode->sep = d->sep;
+                    forNode->followedBy = d->followedBy;
+                    forNode->precededBy = d->precededBy;
+                    forNode->isBlock = false;
                     ++pos;
                     forNode->body = recurse();
                     sub.push_back(std::move(forNode));
@@ -604,9 +631,9 @@ namespace tpp
                 {
                     auto ifNode = std::make_shared<IfNode>();
                     ifNode->condExpr = d->cond;
-                    ifNode->negated  = d->negated;
+                    ifNode->negated = d->negated;
                     ifNode->condText = d->condText;
-                    ifNode->isBlock  = false;
+                    ifNode->isBlock = false;
                     ++pos;
                     ifNode->thenBody = recurse();
                     if (pos < segs.size() && segs[pos].isDirective &&
@@ -629,19 +656,27 @@ namespace tpp
                 else if (auto *d = std::get_if<SwitchDirective>(&s.info))
                 {
                     auto switchNode = std::make_shared<SwitchNode>();
-                    switchNode->expr            = d->expr;
+                    switchNode->expr = d->expr;
                     switchNode->checkExhaustive = d->checkExhaustive;
-                    switchNode->isBlock         = false;
+                    switchNode->isBlock = false;
                     ++pos;
                     while (pos < segs.size())
                     {
                         auto &cs = segs[pos];
-                        if (!cs.isDirective) { ++pos; continue; }
-                        if (std::holds_alternative<EndSwitchDirective>(cs.info)) { ++pos; break; }
+                        if (!cs.isDirective)
+                        {
+                            ++pos;
+                            continue;
+                        }
+                        if (std::holds_alternative<EndSwitchDirective>(cs.info))
+                        {
+                            ++pos;
+                            break;
+                        }
                         if (auto *cd = std::get_if<CaseDirective>(&cs.info))
                         {
                             CaseNode cn;
-                            cn.tag         = cd->tag;
+                            cn.tag = cd->tag;
                             cn.bindingName = cd->binding;
                             ++pos;
                             cn.body = recurse();
@@ -691,14 +726,14 @@ namespace tpp
                     if (auto *d = std::get_if<ForDirective>(&seg.info))
                     {
                         auto forNode = std::make_shared<ForNode>();
-                        forNode->varName         = d->var;
+                        forNode->varName = d->var;
                         forNode->iteratorVarName = d->iteratorVar;
-                        forNode->collectionExpr  = d->collection;
-                        forNode->sep             = d->sep;
-                        forNode->followedBy      = d->followedBy;
-                        forNode->precededBy      = d->precededBy;
-                        forNode->isBlock         = true;
-                        forNode->insertCol       = tl.indent;
+                        forNode->collectionExpr = d->collection;
+                        forNode->sep = d->sep;
+                        forNode->followedBy = d->followedBy;
+                        forNode->precededBy = d->precededBy;
+                        forNode->isBlock = true;
+                        forNode->insertCol = tl.indent;
                         ++pos;
                         forNode->body = parseBlock(tl.indent);
                         nodes.push_back(std::move(forNode));
@@ -711,10 +746,10 @@ namespace tpp
                     else if (auto *d = std::get_if<IfDirective>(&seg.info))
                     {
                         auto ifNode = std::make_shared<IfNode>();
-                        ifNode->condExpr  = d->cond;
-                        ifNode->negated   = d->negated;
-                        ifNode->condText  = d->condText;
-                        ifNode->isBlock   = true;
+                        ifNode->condExpr = d->cond;
+                        ifNode->negated = d->negated;
+                        ifNode->condText = d->condText;
+                        ifNode->isBlock = true;
                         ifNode->insertCol = tl.indent;
                         ++pos;
                         ifNode->thenBody = parseBlock(tl.indent);
@@ -744,10 +779,10 @@ namespace tpp
                     else if (auto *d = std::get_if<SwitchDirective>(&seg.info))
                     {
                         auto switchNode = std::make_shared<SwitchNode>();
-                        switchNode->expr            = d->expr;
+                        switchNode->expr = d->expr;
                         switchNode->checkExhaustive = d->checkExhaustive;
-                        switchNode->isBlock         = true;
-                        switchNode->insertCol       = tl.indent;
+                        switchNode->isBlock = true;
+                        switchNode->insertCol = tl.indent;
                         ++pos;
                         while (pos < lines.size())
                         {
@@ -767,7 +802,7 @@ namespace tpp
                                     if (auto *cd = std::get_if<CaseDirective>(&s2.info))
                                     {
                                         CaseNode cn;
-                                        cn.tag         = cd->tag;
+                                        cn.tag = cd->tag;
                                         cn.bindingName = cd->binding;
                                         ++pos;
                                         cn.body = parseBlock(tl.indent);
@@ -777,9 +812,9 @@ namespace tpp
                                     if (auto *rd = std::get_if<RenderDirective>(&s2.info))
                                     {
                                         CaseNode cn;
-                                        cn.tag         = rd->exprText;
+                                        cn.tag = rd->exprText;
                                         cn.bindingName = "__payload";
-                                        auto callNode  = std::make_shared<FunctionCallNode>();
+                                        auto callNode = std::make_shared<FunctionCallNode>();
                                         callNode->functionName = rd->func;
                                         callNode->arguments.push_back(Variable{"__payload"});
                                         cn.body.push_back(std::move(callNode));
@@ -819,12 +854,12 @@ namespace tpp
                     {
                         auto renderNode = std::make_shared<RenderViaNode>();
                         renderNode->collectionExpr = d->expr;
-                        renderNode->functionName   = d->func;
-                        renderNode->sep            = d->sep;
-                        renderNode->followedBy     = d->followedBy;
-                        renderNode->precededBy     = d->precededBy;
-                        renderNode->isBlock        = true;
-                        renderNode->insertCol      = tl.indent;
+                        renderNode->functionName = d->func;
+                        renderNode->sep = d->sep;
+                        renderNode->followedBy = d->followedBy;
+                        renderNode->precededBy = d->precededBy;
+                        renderNode->isBlock = true;
+                        renderNode->insertCol = tl.indent;
                         nodes.push_back(std::move(renderNode));
                         ++pos;
                     }
@@ -868,7 +903,7 @@ namespace tpp
                         {
                             auto callNode = std::make_shared<FunctionCallNode>();
                             callNode->functionName = d->name;
-                            callNode->arguments    = d->args;
+                            callNode->arguments = d->args;
                             nodes.push_back(std::move(callNode));
                         }
                         else if (auto *d = std::get_if<ExprDirective>(&seg.info))
@@ -913,7 +948,14 @@ namespace tpp
                           expr);
     }
 
-    enum class ScopeKind { Root, For, If, Switch, Case };
+    enum class ScopeKind
+    {
+        Root,
+        For,
+        If,
+        Switch,
+        Case
+    };
 
     struct ValidationFrame
     {
@@ -1408,11 +1450,20 @@ namespace tpp
             std::string msg;
             switch (frame.kind)
             {
-            case ScopeKind::For:    msg = "missing @end for@";    break;
-            case ScopeKind::Switch: msg = "missing @end switch@"; break;
-            case ScopeKind::Case:   msg = "missing @end case@";   break;
-            case ScopeKind::If:     msg = "missing @endif@";      break;
-            default: break;
+            case ScopeKind::For:
+                msg = "missing @end for@";
+                break;
+            case ScopeKind::Switch:
+                msg = "missing @end switch@";
+                break;
+            case ScopeKind::Case:
+                msg = "missing @end case@";
+                break;
+            case ScopeKind::If:
+                msg = "missing @endif@";
+                break;
+            default:
+                break;
             }
             if (!msg.empty())
                 addTemplateDiagnostic(diags, bodyStartLine, frame.openLineIndex, frame.openSeg, msg);
@@ -1447,7 +1498,8 @@ namespace tpp
                           size_t *outBodyStartLine,
                           std::string *outBodyText,
                           std::vector<TemplateLine> *outTemplateLines,
-                          std::vector<Diagnostic> *diags)
+                          std::vector<Diagnostic> *diags,
+                          Range *outHeaderRange = nullptr)
     {
         // Find "template " line
         size_t lineStart = pos;
@@ -1473,7 +1525,8 @@ namespace tpp
             {
                 size_t lineNum = 0;
                 for (size_t i = 0; i < lineStart; ++i)
-                    if (text[i] == '\n') ++lineNum;
+                    if (text[i] == '\n')
+                        ++lineNum;
                 Diagnostic d;
                 d.range = {{(int)lineNum, 0}, {(int)lineNum, (int)firstLine.size()}};
                 d.message = "missing END for template '" + func.name + "'";
@@ -1556,48 +1609,157 @@ namespace tpp
             *outBodyStartLine = lineCount;
         }
 
+        if (outHeaderRange)
+        {
+            // Compute 0-based line number of the function header for error reporting
+            size_t lineNum = 0;
+            for (size_t i = 0; i < lineStart; ++i)
+                if (text[i] == '\n')
+                    ++lineNum;
+            // column: "template " is 9 chars, then any leading-whitespace-trimmed name starts
+            std::string afterTemplate = trim(text.substr(lineStart, nl - lineStart)).substr(9);
+            size_t nameStart = afterTemplate.find_first_not_of(' ');
+            int col = 9 + (int)(nameStart == std::string::npos ? 0 : nameStart);
+            *outHeaderRange = {{(int)lineNum, col},
+                               {(int)lineNum, col + (int)func.name.size()}};
+        }
+
         pos = endPos + 4; // skip past \nEND
         return true;
     }
 
-    bool Compiler::compile(const std::string &templateString,
-                           CompilerOutput &output,
-                           std::vector<Diagnostic> &diagnostics) const noexcept
+    void Compiler::clear_templates() noexcept
+    {
+        pendingSources_.erase(
+            std::remove_if(pendingSources_.begin(), pendingSources_.end(),
+                           [](const PendingSource &s)
+                           { return !s.isTypes; }),
+            pendingSources_.end());
+    }
+
+    void Compiler::add_templates(const std::string &templateString,
+                                 std::vector<Diagnostic> &diagnostics) noexcept
+    {
+        pendingSources_.push_back({templateString, &diagnostics, false});
+    }
+
+    bool Compiler::compile(CompilerOutput &output) noexcept
     {
         try
         {
-            size_t pos = 0;
-            bool foundAny = false;
-            while (pos < templateString.size())
+            // Rebuild type registry from scratch on each compile
+            types = TypeRegistry{};
+
+            std::vector<TemplateFunction> pendingFunctions;
+
+            // Helper: two functions are duplicate overloads if name + param types match
+            auto isSameSignature = [](const TemplateFunction &a, const TemplateFunction &b) -> bool
             {
-                // Skip whitespace between template blocks
-                while (pos < templateString.size() &&
-                       std::isspace(static_cast<unsigned char>(templateString[pos])))
-                {
-                    ++pos;
-                }
-                if (pos >= templateString.size())
-                    break;
-
-                TemplateFunction func;
-                size_t bodyStartLine = 0;
-                std::vector<TemplateLine> templateLines;
-                if (!parseOneTemplate(templateString, pos, func, &bodyStartLine, nullptr, &templateLines, &diagnostics))
-                {
-                    if (!foundAny && diagnostics.empty())
+                if (a.params.size() != b.params.size())
+                    return false;
+                for (size_t i = 0; i < a.params.size(); ++i)
+                    if (!(a.params[i].type == b.params[i].type))
                         return false;
+                return true;
+            };
+
+            bool typesHadErrors = false;
+
+            for (auto &src : pendingSources_)
+            {
+                if (!src.isTypes)
+                {
+                    continue;
+                }
+                // ── Process type definitions ──────────────────────────
+                if (src.content.empty())
+                    continue;
+                auto tokens = tokenize_typedefs(src.content);
+                TypedefParser parser{tokens, 0, types, *src.diagnostics};
+                parser.parse();
+                if (!parser.ok)
+                {
+                    typesHadErrors = true;
+                    continue; // diagnostics already added
+                }
+                parser.validateTypes();
+                if (!src.diagnostics->empty())
+                    typesHadErrors = true;
+            }
+
+            if (!typesHadErrors)
+            {
+                for (auto &src : pendingSources_)
+                {
+                    if (src.isTypes)
+                    {
+                        continue;
+                    }
+
+                    // ── Process template source ───────────────────────────
+                    size_t pos = 0;
+                    while (pos < src.content.size())
+                    {
+                        while (pos < src.content.size() &&
+                               std::isspace(static_cast<unsigned char>(src.content[pos])))
+                        {
+                            ++pos;
+                        }
+                        if (pos >= src.content.size())
+                            break;
+
+                        TemplateFunction func;
+                        size_t bodyStartLine = 0;
+                        std::vector<TemplateLine> templateLines;
+                        Range headerRange;
+                        if (!parseOneTemplate(src.content, pos, func, &bodyStartLine, nullptr,
+                                              &templateLines, src.diagnostics, &headerRange))
+                        {
+                            break; // error diagnostic already added (or end of input)
+                        }
+
+                        // Check for duplicate: same name AND same parameter types
+                        bool isDuplicate = false;
+                        for (const auto &existing : pendingFunctions)
+                        {
+                            if (existing.name == func.name && isSameSignature(existing, func))
+                            {
+                                isDuplicate = true;
+                                break;
+                            }
+                        }
+                        if (isDuplicate)
+                        {
+                            Diagnostic d;
+                            d.range = headerRange;
+                            d.message = "function '" + func.name + "' is already defined";
+                            d.severity = DiagnosticSeverity::Error;
+                            src.diagnostics->push_back(std::move(d));
+                            continue;
+                        }
+
+                        validateTemplateSemantics(func, templateLines, bodyStartLine, types, *src.diagnostics);
+                        pendingFunctions.push_back(std::move(func));
+                    }
+                }
+            }
+
+            // Compilation fails if any source produced diagnostics
+            bool hasErrors = false;
+            for (auto &src : pendingSources_)
+            {
+                if (!src.diagnostics->empty())
+                {
+                    hasErrors = true;
                     break;
                 }
-                validateTemplateSemantics(func, templateLines, bodyStartLine, types, diagnostics);
-
-                output.functions.push_back(std::move(func));
-                foundAny = true;
             }
-            output.types = types;
-            // if diagnostics were added, compilation considered failed
-            if (!diagnostics.empty())
+            if (hasErrors || pendingFunctions.empty())
                 return false;
-            return foundAny;
+
+            output.functions = std::move(pendingFunctions);
+            output.types = types;
+            return true;
         }
         catch (...)
         {

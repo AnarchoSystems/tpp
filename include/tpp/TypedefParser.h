@@ -8,6 +8,9 @@
 
 namespace tpp
 {
+    // Tokenises a typedef source string into tokens.
+    std::vector<Token> tokenize_typedefs(const std::string &src);
+
     // ── Typedef parser ──
     // Parses a typedef source string (structs and enums) into a TypeRegistry.
 

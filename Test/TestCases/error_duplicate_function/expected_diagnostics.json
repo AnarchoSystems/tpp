@@ -1,0 +1,15 @@
+[
+    {
+        "uri": "error_duplicate_function/template.tpp",
+        "diagnostics": [
+            {
+                "range": {
+                    "start": {"line": 4, "character": 9},
+                    "end":   {"line": 4, "character": 13}
+                },
+                "message": "function 'main' is already defined",
+                "severity": "error"
+            }
+        ]
+    }
+]

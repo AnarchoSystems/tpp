@@ -8,14 +8,24 @@ namespace tpp
     {
     public:
         void clear_types() noexcept;
-        [[nodiscard]]
-        bool add_types(const std::string &typedefs,
+        void add_types(const std::string &typedefs,
                        std::vector<Diagnostic> &diagnostics) noexcept;
+
+        void clear_templates() noexcept;
+        void add_templates(const std::string &templateString,
+                           std::vector<Diagnostic> &diagnostics) noexcept;
         [[nodiscard]]
-        bool compile(const std::string &templateString,
-                     CompilerOutput &output,
-                     std::vector<Diagnostic> &diagnostics) const noexcept;
+        bool compile(CompilerOutput &output) noexcept;
 
         TypeRegistry types;
+
+    private:
+        struct PendingSource
+        {
+            std::string content;
+            std::vector<Diagnostic> *diagnostics; // points to caller-owned vector
+            bool isTypes;
+        };
+        std::vector<PendingSource> pendingSources_;
     };
 }

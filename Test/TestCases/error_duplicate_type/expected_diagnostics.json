@@ -1,0 +1,15 @@
+[
+    {
+        "uri": "error_duplicate_type/second.tpp.types",
+        "diagnostics": [
+            {
+                "range": {
+                    "start": {"line": 0, "character": 7},
+                    "end":   {"line": 0, "character": 10}
+                },
+                "message": "type 'Foo' is already defined",
+                "severity": "error"
+            }
+        ]
+    }
+]

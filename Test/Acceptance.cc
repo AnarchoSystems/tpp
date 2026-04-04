@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include <filesystem>
 #include <fstream>
+#include <algorithm>
 #include <nlohmann/json.hpp>
 #include <tpp/Compiler.h>
 
@@ -13,13 +14,17 @@ namespace tpp
     }
 }
 
+struct SourceFile
+{
+    std::string url;
+    std::string content;
+    bool isTypes = false;
+};
+
 struct tTestCase
 {
     std::string name;
-    std::string typedefURL;
-    std::string typedefs;
-    std::string templateURL;
-    std::string templateString;
+    std::vector<SourceFile> sources;
     nlohmann::json input;
     bool expectSuccess = true;
     std::string expectedOutput;
@@ -50,6 +55,12 @@ struct tErrors
     NLOHMANN_DEFINE_TYPE_INTRUSIVE(tErrors, getFunctionError, renderError)
 };
 
+static std::string readFile(const std::filesystem::path &path)
+{
+    std::ifstream f(path);
+    return std::string((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+}
+
 std::vector<tTestCase> GetTestCases()
 {
     std::vector<tTestCase> testCases;
@@ -58,60 +69,86 @@ std::vector<tTestCase> GetTestCases()
 
     for (const auto &entry : std::filesystem::directory_iterator("TestCases"))
     {
+        if (!entry.is_directory())
+            continue;
+
         auto &testCase = testCases.emplace_back();
         testCase.name = entry.path().filename().string();
-        if (!entry.is_directory())
+
+        // Collect source files (.tpp.types and .tpp), skip everything else
+        for (const auto &file : std::filesystem::directory_iterator(entry.path()))
         {
+            if (!file.is_regular_file())
+                continue;
+            std::string filename = file.path().filename().string();
+            std::string url = testCase.name + "/" + filename;
+
+            if (filename.size() > 10 && filename.substr(filename.size() - 10) == ".tpp.types")
+            {
+                testCase.sources.push_back({url, readFile(file.path()), true});
+            }
+            else if (filename.size() > 4 && filename.substr(filename.size() - 4) == ".tpp")
+            {
+                testCase.sources.push_back({url, readFile(file.path()), false});
+            }
+        }
+
+        // Sort: types files first, then template files; alphabetically within each group
+        std::sort(testCase.sources.begin(), testCase.sources.end(),
+                  [](const SourceFile &a, const SourceFile &b)
+                  {
+                      if (a.isTypes != b.isTypes)
+                          return a.isTypes > b.isTypes; // types first
+                      return a.url < b.url;
+                  });
+
+        // Read input.json
+        std::ifstream inputFile(entry.path() / "input.json");
+        if (!inputFile.is_open())
+        {
+            std::cerr << "Failed to open input.json in " << entry.path() << std::endl;
+            failed = true;
             continue;
         }
-        std::ifstream typedefsFile(entry.path() / "typedefs.tpp");
-        std::ifstream templateFile(entry.path() / "template.tpp");
-        std::ifstream inputFile(entry.path() / "input.json");
+        testCase.input = nlohmann::json::parse(
+            std::string((std::istreambuf_iterator<char>(inputFile)), std::istreambuf_iterator<char>()));
 
-        bool isSuccess = true;
-        // if output file exists, success; otherwise, diagnostic file must exist and test must fail
+        // Determine success/failure expectation
         std::ifstream expectedOutputFile(entry.path() / "expected_output.txt");
-        if (!expectedOutputFile.is_open())
+        if (expectedOutputFile.is_open())
         {
-            isSuccess = false;
-            expectedOutputFile.close();
-            expectedOutputFile.open(entry.path() / "expected_diagnostics.json");
-            if (expectedOutputFile.is_open())
+            testCase.expectSuccess = true;
+            testCase.expectedOutput = std::string(
+                (std::istreambuf_iterator<char>(expectedOutputFile)), std::istreambuf_iterator<char>());
+        }
+        else
+        {
+            testCase.expectSuccess = false;
+            std::ifstream expectedDiagnosticsFile(entry.path() / "expected_diagnostics.json");
+            if (expectedDiagnosticsFile.is_open())
             {
-                auto diagnosticsJson = nlohmann::json::parse(std::string((std::istreambuf_iterator<char>(expectedOutputFile)), std::istreambuf_iterator<char>()));
-                testCase.expectedDiagnostics = diagnosticsJson.get<std::vector<tpp::DiagnosticLSPMessage>>();
-                expectedOutputFile.close();
+                auto j = nlohmann::json::parse(std::string(
+                    (std::istreambuf_iterator<char>(expectedDiagnosticsFile)),
+                    std::istreambuf_iterator<char>()));
+                testCase.expectedDiagnostics = j.get<std::vector<tpp::DiagnosticLSPMessage>>();
             }
             std::ifstream expectedErrorsFile(entry.path() / "expected_errors.json");
             if (expectedErrorsFile.is_open())
             {
-                auto expectedErrorsJson = nlohmann::json::parse(std::string((std::istreambuf_iterator<char>(expectedErrorsFile)), std::istreambuf_iterator<char>()));
-                tErrors expectedErrors = expectedErrorsJson.get<tErrors>();
-                expectedErrorsFile.close();
-                testCase.getFunctionError = expectedErrors.getFunctionError;
-                testCase.renderError = expectedErrors.renderError;
+                auto j = nlohmann::json::parse(std::string(
+                    (std::istreambuf_iterator<char>(expectedErrorsFile)),
+                    std::istreambuf_iterator<char>()));
+                tErrors errs = j.get<tErrors>();
+                testCase.getFunctionError = errs.getFunctionError;
+                testCase.renderError = errs.renderError;
             }
         }
 
-        if (!typedefsFile.is_open() || !templateFile.is_open() || !inputFile.is_open())
+        if (testCase.sources.empty())
         {
-            std::cerr << "Failed to open test case files in " << entry.path() << std::endl;
-            std::cerr << "Expected files: typedefs.tpp, template.tpp, input.json, and either expected_output.txt or expected_diagnostics.json/expected_errors.json" << std::endl;
+            std::cerr << "No .tpp or .tpp.types source files found in " << entry.path() << std::endl;
             failed = true;
-            continue;
         }
-
-        testCase.expectSuccess = isSuccess;
-        auto input = std::string((std::istreambuf_iterator<char>(inputFile)), std::istreambuf_iterator<char>());
-        testCase.input = nlohmann::json::parse(input);
-        testCase.typedefs = std::string((std::istreambuf_iterator<char>(typedefsFile)), std::istreambuf_iterator<char>());
-        testCase.templateString = std::string((std::istreambuf_iterator<char>(templateFile)), std::istreambuf_iterator<char>());
-        if (isSuccess)
-        {
-            testCase.expectedOutput = std::string((std::istreambuf_iterator<char>(expectedOutputFile)), std::istreambuf_iterator<char>());
-        }
-        testCase.typedefURL = testCase.name + "/typedefs.tpp";
-        testCase.templateURL = testCase.name + "/template.tpp";
     }
 
     if (failed)
@@ -128,20 +165,35 @@ class AcceptanceTest : public ::testing::TestWithParam<tTestCase>
 
 TEST_P(AcceptanceTest, RunTestCase)
 {
-    tTestCase testCase = GetParam();
+    const tTestCase &testCase = GetParam();
 
     tpp::Compiler compiler;
 
-    tpp::DiagnosticLSPMessage TypesDiagnostics(testCase.typedefURL);
-    tpp::DiagnosticLSPMessage CompilerDiagnostics(testCase.templateURL);
+    // Per-source-file diagnostics, indexed in the same order as testCase.sources
+    std::vector<tpp::DiagnosticLSPMessage> fileDiags;
+    fileDiags.reserve(testCase.sources.size());
+    for (const auto &src : testCase.sources)
+        fileDiags.push_back(tpp::DiagnosticLSPMessage(src.url));
+
+    // Feed each source to the compiler
+    for (size_t i = 0; i < testCase.sources.size(); ++i)
+    {
+        const auto &src = testCase.sources[i];
+        if (src.isTypes)
+            compiler.add_types(src.content, fileDiags[i].diagnostics);
+        else
+            compiler.add_templates(src.content, fileDiags[i].diagnostics);
+    }
+
+    tpp::CompilerOutput output;
     std::string getFunctionError;
     std::string renderError;
     std::string renderedOutput;
-
-    tpp::CompilerOutput output;
     tpp::FunctionSymbol functionSymbol;
 
-    const bool isSuccess = compiler.add_types(testCase.typedefs, TypesDiagnostics.diagnostics) && compiler.compile(testCase.templateString, output, CompilerDiagnostics.diagnostics) && output.get_function("main", functionSymbol, getFunctionError) && functionSymbol.render(testCase.input, renderedOutput, renderError);
+    const bool isSuccess = compiler.compile(output) &&
+                           output.get_function("main", functionSymbol, getFunctionError) &&
+                           functionSymbol.render(testCase.input, renderedOutput, renderError);
 
     EXPECT_EQ(isSuccess, testCase.expectSuccess) << "Test case: " << testCase.name;
     if (isSuccess)
@@ -151,15 +203,14 @@ TEST_P(AcceptanceTest, RunTestCase)
     else
     {
         std::vector<tpp::DiagnosticLSPMessage> actualDiagnostics;
-        if (!TypesDiagnostics.diagnostics.empty())
+        for (const auto &d : fileDiags)
         {
-            actualDiagnostics.push_back(TypesDiagnostics);
+            if (!d.diagnostics.empty())
+                actualDiagnostics.push_back(d);
         }
-        if (!CompilerDiagnostics.diagnostics.empty())
-        {
-            actualDiagnostics.push_back(CompilerDiagnostics);
-        }
-        EXPECT_EQ(actualDiagnostics, testCase.expectedDiagnostics) << "Test case: " << testCase.name << "\nActual diagnostics: " << nlohmann::json(actualDiagnostics).dump(2);
+        EXPECT_EQ(actualDiagnostics, testCase.expectedDiagnostics)
+            << "Test case: " << testCase.name
+            << "\nActual diagnostics: " << nlohmann::json(actualDiagnostics).dump(2);
         EXPECT_EQ(getFunctionError, testCase.getFunctionError) << "Test case: " << testCase.name;
         EXPECT_EQ(renderError, testCase.renderError) << "Test case: " << testCase.name;
     }
@@ -167,3 +218,4 @@ TEST_P(AcceptanceTest, RunTestCase)
 
 INSTANTIATE_TEST_SUITE_P(AcceptanceTests, AcceptanceTest, ::testing::ValuesIn(GetTestCases()), [](const testing::TestParamInfo<AcceptanceTest::ParamType> &info)
                          { return info.param.name; });
+

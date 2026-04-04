@@ -2,6 +2,7 @@
 #include <tpp/Tokenizer.h>
 #include <tpp/TypedefParser.h>
 #include <tpp/Diagnostic.h>
+#include <algorithm>
 
 namespace tpp
 {
@@ -260,6 +261,17 @@ namespace tpp
 
         size_t idx = reg.structs.size();
         reg.structs.push_back(std::move(sd));
+        if (reg.nameIndex.count(reg.structs[idx].name))
+        {
+            Diagnostic d;
+            d.range = {{nameTok.line, nameTok.col},
+                       {nameTok.line, nameTok.col + (int)nameTok.text.size()}};
+            d.message = "type '" + reg.structs[idx].name + "' is already defined";
+            d.severity = DiagnosticSeverity::Error;
+            diags.push_back(std::move(d));
+            ok = false;
+            return;
+        }
         reg.nameIndex[reg.structs[idx].name] = {TypeKind::Struct, idx};
     }
 
@@ -297,6 +309,17 @@ namespace tpp
 
         size_t idx = reg.enums.size();
         reg.enums.push_back(std::move(ed));
+        if (reg.nameIndex.count(reg.enums[idx].name))
+        {
+            Diagnostic d;
+            d.range = {{nameTok.line, nameTok.col},
+                       {nameTok.line, nameTok.col + (int)nameTok.text.size()}};
+            d.message = "type '" + reg.enums[idx].name + "' is already defined";
+            d.severity = DiagnosticSeverity::Error;
+            diags.push_back(std::move(d));
+            ok = false;
+            return;
+        }
         reg.nameIndex[reg.enums[idx].name] = {TypeKind::Enum, idx};
     }
 
@@ -410,25 +433,15 @@ namespace tpp
     void Compiler::clear_types() noexcept
     {
         types = TypeRegistry{};
+        pendingSources_.erase(
+            std::remove_if(pendingSources_.begin(), pendingSources_.end(),
+                           [](const PendingSource &s) { return s.isTypes; }),
+            pendingSources_.end());
     }
 
-    bool Compiler::add_types(const std::string &typedefs, std::vector<Diagnostic> &diagnostics) noexcept
+    void Compiler::add_types(const std::string &typedefs, std::vector<Diagnostic> &diagnostics) noexcept
     {
-        try
-        {
-            if (typedefs.empty())
-                return true;
-            auto tokens = tokenize_typedefs(typedefs);
-            TypedefParser parser{tokens, 0, types, diagnostics};
-            parser.parse();
-            if (!parser.ok)
-                return false;
-            return parser.validateTypes();
-        }
-        catch (...)
-        {
-            return false;
-        }
+        pendingSources_.push_back({typedefs, &diagnostics, true});
     }
 
 } // namespace tpp
