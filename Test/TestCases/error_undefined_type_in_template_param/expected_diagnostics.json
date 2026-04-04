@@ -1,0 +1,15 @@
+[
+    {
+        "uri": "error_undefined_type_in_template_param/template.tpp",
+        "diagnostics": [
+            {
+                "range": {
+                    "start": {"line": 0, "character": 21},
+                    "end":   {"line": 0, "character": 28}
+                },
+                "message": "undefined type 'Unknown'",
+                "severity": "error"
+            }
+        ]
+    }
+]

@@ -1002,6 +1002,19 @@ namespace tpp
         return nullptr;
     }
 
+    // Returns the first undefined named type found in a TypeRef, or nullopt if all are known.
+    static std::optional<std::string> findUndefinedNamedType(const TypeRef &tr, const TypeRegistry &types)
+    {
+        if (auto named = std::get_if<NamedType>(&tr))
+            return types.nameIndex.find(named->name) == types.nameIndex.end()
+                       ? std::make_optional(named->name) : std::nullopt;
+        if (auto opt = std::get_if<std::shared_ptr<OptionalType>>(&tr))
+            return findUndefinedNamedType((*opt)->innerType, types);
+        if (auto list = std::get_if<std::shared_ptr<ListType>>(&tr))
+            return findUndefinedNamedType((*list)->elementType, types);
+        return std::nullopt;
+    }
+
     static const VariantDef *findEnumVariant(const EnumDef *ed, const std::string &tag)
     {
         if (!ed)
@@ -1119,6 +1132,12 @@ namespace tpp
             const StructDef *sd = resolveStructFromType(current, types);
             if (!sd)
             {
+                if (auto named = std::get_if<NamedType>(&current))
+                    if (types.nameIndex.find(named->name) == types.nameIndex.end())
+                    {
+                        error = "undefined type '" + named->name + "'";
+                        return false;
+                    }
                 error = "cannot access member '" + parts[i] + "' on non-struct value '" + currentPath + "'";
                 return false;
             }
@@ -1190,8 +1209,33 @@ namespace tpp
                                           const std::vector<TemplateLine> &templateLines,
                                           size_t bodyStartLine,
                                           const TypeRegistry &types,
-                                          std::vector<Diagnostic> &diags)
+                                          std::vector<Diagnostic> &diags,
+                                          int headerLine = 0,
+                                          const std::string &headerText = "")
     {
+        // Validate parameter types; track params whose type is undefined so body
+        // expressions rooted in them can be suppressed (avoiding duplicate / misleading errors).
+        std::set<std::string> undefinedTypeVars;
+        for (const auto &param : f.params)
+        {
+            if (auto undef = findUndefinedNamedType(param.type, types))
+            {
+                int col = 0;
+                if (!headerText.empty())
+                {
+                    size_t p = headerText.find(*undef);
+                    if (p != std::string::npos)
+                        col = (int)p;
+                }
+                Diagnostic d;
+                d.range = {{headerLine, col}, {headerLine, col + (int)undef->size()}};
+                d.message = "undefined type '" + *undef + "'";
+                d.severity = DiagnosticSeverity::Error;
+                diags.push_back(std::move(d));
+                undefinedTypeVars.insert(param.name);
+            }
+        }
+
         std::vector<ValidationFrame> frames;
         ValidationFrame root{ScopeKind::Root};
         for (const auto &param : f.params)
@@ -1233,14 +1277,18 @@ namespace tpp
                 if (auto *d = std::get_if<ExprDirective>(&seg.info))
                 {
                     std::string path = expressionToPath(d->expr);
-                    if (!validatePathExpressionType(path, frames, types, activeNarrowing, activeAbsent, false, exprType, err))
-                        addTemplateDiagnostic(diags, bodyStartLine, li, seg, err);
+                    // Skip expressions rooted in a param with an undefined type (already reported).
+                    if (undefinedTypeVars.count(path.substr(0, path.find('.'))) == 0)
+                        if (!validatePathExpressionType(path, frames, types, activeNarrowing, activeAbsent, false, exprType, err))
+                            addTemplateDiagnostic(diags, bodyStartLine, li, seg, err);
                 }
                 else if (auto *d = std::get_if<FunctionCallDirective>(&seg.info))
                 {
                     for (const auto &argExpr : d->args)
                     {
                         std::string path = expressionToPath(argExpr);
+                        if (undefinedTypeVars.count(path.substr(0, path.find('.'))) != 0)
+                            continue;
                         if (!validatePathExpressionType(path, frames, types, activeNarrowing, activeAbsent, false, exprType, err))
                         {
                             addTemplateDiagnostic(diags, bodyStartLine, li, seg, err);
@@ -1499,7 +1547,8 @@ namespace tpp
                           std::string *outBodyText,
                           std::vector<TemplateLine> *outTemplateLines,
                           std::vector<Diagnostic> *diags,
-                          Range *outHeaderRange = nullptr)
+                          Range *outHeaderRange = nullptr,
+                          std::string *outHeaderText = nullptr)
     {
         // Find "template " line
         size_t lineStart = pos;
@@ -1624,6 +1673,9 @@ namespace tpp
                                {(int)lineNum, col + (int)func.name.size()}};
         }
 
+        if (outHeaderText)
+            *outHeaderText = firstLine;
+
         pos = endPos + 4; // skip past \nEND
         return true;
     }
@@ -1712,8 +1764,9 @@ namespace tpp
                         size_t bodyStartLine = 0;
                         std::vector<TemplateLine> templateLines;
                         Range headerRange;
+                        std::string headerText;
                         if (!parseOneTemplate(src.content, pos, func, &bodyStartLine, nullptr,
-                                              &templateLines, src.diagnostics, &headerRange))
+                                              &templateLines, src.diagnostics, &headerRange, &headerText))
                         {
                             break; // error diagnostic already added (or end of input)
                         }
@@ -1738,7 +1791,8 @@ namespace tpp
                             continue;
                         }
 
-                        validateTemplateSemantics(func, templateLines, bodyStartLine, types, *src.diagnostics);
+                        validateTemplateSemantics(func, templateLines, bodyStartLine, types, *src.diagnostics,
+                                                   (int)bodyStartLine - 1, headerText);
                         pendingFunctions.push_back(std::move(func));
                     }
                 }

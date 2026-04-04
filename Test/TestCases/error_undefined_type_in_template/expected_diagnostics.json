@@ -1,0 +1,15 @@
+[
+    {
+        "uri": "error_undefined_type_in_template/template.tpp",
+        "diagnostics": [
+            {
+                "range": {
+                    "start": {"line": 0, "character": 19},
+                    "end":   {"line": 0, "character": 24}
+                },
+                "message": "undefined type 'Ghost'",
+                "severity": "error"
+            }
+        ]
+    }
+]
