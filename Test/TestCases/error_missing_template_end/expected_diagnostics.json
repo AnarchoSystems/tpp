@@ -1,0 +1,15 @@
+[
+	{
+		"uri": "error_missing_template_end/template.tpp",
+		"diagnostics": [
+			{
+				"range": {
+					"start": {"line": 0, "character": 0},
+					"end":   {"line": 0, "character": 34}
+				},
+				"message": "missing END for template 'main'",
+				"severity": "error"
+			}
+		]
+	}
+]

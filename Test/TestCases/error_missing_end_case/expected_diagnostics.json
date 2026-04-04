@@ -1,0 +1,23 @@
+[
+	{
+		"uri": "error_missing_end_case/template.tpp",
+		"diagnostics": [
+			{
+				"range": {
+					"start": {"line": 1, "character": 0},
+					"end":   {"line": 1, "character": 10}
+				},
+				"message": "missing @end switch@",
+				"severity": "error"
+			},
+			{
+				"range": {
+					"start": {"line": 5, "character": 0},
+					"end":   {"line": 5, "character": 8}
+				},
+				"message": "missing @end case@",
+				"severity": "error"
+			}
+		]
+	}
+]

@@ -1,0 +1,5 @@
+enum Item
+{
+    A,
+    B
+}

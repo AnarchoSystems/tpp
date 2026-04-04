@@ -1,0 +1,15 @@
+[
+	{
+		"uri": "error_missing_end_switch/template.tpp",
+		"diagnostics": [
+			{
+				"range": {
+					"start": {"line": 1, "character": 0},
+					"end":   {"line": 1, "character": 10}
+				},
+				"message": "missing @end switch@",
+				"severity": "error"
+			}
+		]
+	}
+]

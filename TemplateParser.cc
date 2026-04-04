@@ -926,6 +926,8 @@ namespace tpp
         std::optional<TypeRef> switchExprType;
         bool switchCheckExhaustive = false;
         std::set<std::string> switchCaseTags;
+        int openLineIndex = -1;
+        LineSeg openSeg;
     };
 
     static const StructDef *resolveStructFromType(const TypeRef &type, const TypeRegistry &types)
@@ -1221,6 +1223,8 @@ namespace tpp
                     frame.vars[d->var] = listType->elementType;
                     if (!d->iteratorVar.empty())
                         frame.vars[d->iteratorVar] = IntType{};
+                    frame.openLineIndex = (int)li;
+                    frame.openSeg = seg;
                     frames.push_back(std::move(frame));
                 }
                 else if (std::holds_alternative<EndForDirective>(seg.info))
@@ -1266,6 +1270,8 @@ namespace tpp
                             addTemplateDiagnostic(diags, bodyStartLine, li, seg, "if condition must be bool or optional");
                         }
                     }
+                    frame.openLineIndex = (int)li;
+                    frame.openSeg = seg;
                     frames.push_back(std::move(frame));
                 }
                 else if (std::holds_alternative<ElseDirective>(seg.info))
@@ -1299,6 +1305,8 @@ namespace tpp
                     ValidationFrame frame{ScopeKind::Switch};
                     frame.switchExprType = exprType;
                     frame.switchCheckExhaustive = d->checkExhaustive;
+                    frame.openLineIndex = (int)li;
+                    frame.openSeg = seg;
                     frames.push_back(std::move(frame));
                 }
                 else if (std::holds_alternative<EndSwitchDirective>(seg.info))
@@ -1366,6 +1374,8 @@ namespace tpp
                         else
                             frame.vars[d->binding] = variant->payload.value();
                     }
+                    frame.openLineIndex = (int)li;
+                    frame.openSeg = seg;
                     frames.push_back(std::move(frame));
                 }
                 else if (std::holds_alternative<EndCaseDirective>(seg.info))
@@ -1388,6 +1398,24 @@ namespace tpp
                         addTemplateDiagnostic(diags, bodyStartLine, li, seg, "render expression must be a list");
                 }
             }
+        }
+        // Report any unclosed scoped blocks
+        for (size_t i = 1; i < frames.size(); ++i)
+        {
+            const auto &frame = frames[i];
+            if (frame.openLineIndex < 0)
+                continue;
+            std::string msg;
+            switch (frame.kind)
+            {
+            case ScopeKind::For:    msg = "missing @end for@";    break;
+            case ScopeKind::Switch: msg = "missing @end switch@"; break;
+            case ScopeKind::Case:   msg = "missing @end case@";   break;
+            case ScopeKind::If:     msg = "missing @endif@";      break;
+            default: break;
+            }
+            if (!msg.empty())
+                addTemplateDiagnostic(diags, bodyStartLine, frame.openLineIndex, frame.openSeg, msg);
         }
     }
 
@@ -1418,7 +1446,8 @@ namespace tpp
                           TemplateFunction &func,
                           size_t *outBodyStartLine,
                           std::string *outBodyText,
-                          std::vector<TemplateLine> *outTemplateLines)
+                          std::vector<TemplateLine> *outTemplateLines,
+                          std::vector<Diagnostic> *diags)
     {
         // Find "template " line
         size_t lineStart = pos;
@@ -1429,18 +1458,33 @@ namespace tpp
         if (!startsWith(firstLine, "template "))
             return false;
 
-        // Find END
-        size_t endPos = text.find("\nEND", nl);
-        if (endPos == std::string::npos)
-            return false;
-
-        std::string body = text.substr(nl + 1, endPos - nl - 1);
-
+        // Parse function name early (needed for error message when END is missing)
         std::string afterTemplate = firstLine.substr(9);
         size_t parenOpen = afterTemplate.find('(');
         if (parenOpen == std::string::npos)
             return false;
         func.name = trim(afterTemplate.substr(0, parenOpen));
+
+        // Find END
+        size_t endPos = text.find("\nEND", nl);
+        if (endPos == std::string::npos)
+        {
+            if (diags)
+            {
+                size_t lineNum = 0;
+                for (size_t i = 0; i < lineStart; ++i)
+                    if (text[i] == '\n') ++lineNum;
+                Diagnostic d;
+                d.range = {{(int)lineNum, 0}, {(int)lineNum, (int)firstLine.size()}};
+                d.message = "missing END for template '" + func.name + "'";
+                d.severity = DiagnosticSeverity::Error;
+                diags->push_back(std::move(d));
+                pos = text.size();
+            }
+            return false;
+        }
+
+        std::string body = text.substr(nl + 1, endPos - nl - 1);
 
         size_t parenClose = afterTemplate.find(')', parenOpen);
         if (parenClose == std::string::npos)
@@ -1538,9 +1582,9 @@ namespace tpp
                 TemplateFunction func;
                 size_t bodyStartLine = 0;
                 std::vector<TemplateLine> templateLines;
-                if (!parseOneTemplate(templateString, pos, func, &bodyStartLine, nullptr, &templateLines))
+                if (!parseOneTemplate(templateString, pos, func, &bodyStartLine, nullptr, &templateLines, &diagnostics))
                 {
-                    if (!foundAny)
+                    if (!foundAny && diagnostics.empty())
                         return false;
                     break;
                 }

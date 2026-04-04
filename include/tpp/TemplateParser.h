@@ -125,5 +125,6 @@ namespace tpp
                           TemplateFunction &func,
                           size_t *outBodyStartLine = nullptr,
                           std::string *outBodyText = nullptr,
-                          std::vector<TemplateLine> *outTemplateLines = nullptr);
+                          std::vector<TemplateLine> *outTemplateLines = nullptr,
+                          std::vector<Diagnostic> *diags = nullptr);
 }
