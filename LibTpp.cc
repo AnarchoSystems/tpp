@@ -1,4 +1,5 @@
 #include <tpp/Compiler.h>
+#include <tpp/Program.h>
 #include <tpp/Tokenizer.h>
 #include <tpp/Parser.h>
 #include <sstream>
@@ -2193,12 +2194,13 @@ namespace tpp
     // JSON Binding  (bind)
     // ═══════════════════════════════════════════════════════════════════
 
-    bool FunctionSymbol::bind(const nlohmann::json &input,
-                              Program &program,
-                              std::string &error) const noexcept
+    bool FunctionSymbol::render(const nlohmann::json &input,
+                               std::string &output,
+                               std::string &error) const noexcept
     {
         try
         {
+            Program program;
             program.function = function;
             program.types = types;
             program.allFunctions = allFunctions;
@@ -2209,19 +2211,57 @@ namespace tpp
             }
             else if (function.params.size() == 1)
             {
+                const auto &p = function.params[0];
+                bool isList = std::holds_alternative<std::shared_ptr<ListType>>(p.type);
+                nlohmann::json value;
+                if (isList)
+                {
+                    // list param: if input is a length-1 array whose single element is
+                    // also an array, treat that inner array as the list (unary wrap).
+                    // Otherwise treat input itself as the list.
+                    if (input.is_array() && input.size() == 1 && input[0].is_array())
+                        value = input[0];
+                    else
+                        value = input;
+                }
+                else
+                {
+                    // non-list param: plain value, or unwrap a length-1 array
+                    if (input.is_array())
+                    {
+                        if (input.size() == 1)
+                            value = input[0];
+                        else
+                        {
+                            error = "Expected 1 argument for function '" + function.name +
+                                    "', got " + std::to_string(input.size());
+                            return false;
+                        }
+                    }
+                    else
+                    {
+                        value = input;
+                    }
+                }
                 program.boundArgs = nlohmann::json::object();
-                program.boundArgs[function.params[0].name] = input;
+                program.boundArgs[p.name] = value;
             }
             else
             {
-                program.boundArgs = nlohmann::json::object();
-                for (auto &p : function.params)
+                // multi-param: input must be a positional array of exactly params.size() elements
+                if (!input.is_array() || input.size() != function.params.size())
                 {
-                    if (input.contains(p.name))
-                    {
-                        program.boundArgs[p.name] = input[p.name];
-                    }
+                    const std::size_t got = input.is_array() ? input.size() : 0;
+                    const std::size_t expected = function.params.size();
+                    error = "Expected " + std::to_string(expected) +
+                            " argument" + (expected == 1 ? "" : "s") +
+                            " for function '" + function.name +
+                            "', got " + std::to_string(got);
+                    return false;
                 }
+                program.boundArgs = nlohmann::json::object();
+                for (std::size_t i = 0; i < function.params.size(); ++i)
+                    program.boundArgs[function.params[i].name] = input[i];
             }
             // Validate that required struct fields are present in input JSON
             std::function<const StructDef *(const TypeRef &)> resolveStruct = [&](const TypeRef &tr) -> const StructDef *
@@ -2292,6 +2332,7 @@ namespace tpp
                 }
             }
 
+            output = program.run();
             return true;
         }
         catch (...)

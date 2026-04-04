@@ -25,7 +25,7 @@ struct tTestCase
     std::string expectedOutput;
     std::vector<tpp::DiagnosticLSPMessage> expectedDiagnostics;
     std::string getFunctionError;
-    std::string bindFunctionError;
+    std::string renderError;
 };
 
 void PrintTo(const tTestCase &testCase, std::ostream *os)
@@ -46,8 +46,8 @@ void PrintTo(const tTestCase &testCase, std::ostream *os)
 struct tErrors
 {
     std::string getFunctionError;
-    std::string bindFunctionError;
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE(tErrors, getFunctionError, bindFunctionError)
+    std::string renderError;
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE(tErrors, getFunctionError, renderError)
 };
 
 std::vector<tTestCase> GetTestCases()
@@ -89,7 +89,7 @@ std::vector<tTestCase> GetTestCases()
                 tErrors expectedErrors = expectedErrorsJson.get<tErrors>();
                 expectedErrorsFile.close();
                 testCase.getFunctionError = expectedErrors.getFunctionError;
-                testCase.bindFunctionError = expectedErrors.bindFunctionError;
+                testCase.renderError = expectedErrors.renderError;
             }
         }
 
@@ -135,19 +135,18 @@ TEST_P(AcceptanceTest, RunTestCase)
     tpp::DiagnosticLSPMessage TypesDiagnostics(testCase.typedefURL);
     tpp::DiagnosticLSPMessage CompilerDiagnostics(testCase.templateURL);
     std::string getFunctionError;
-    std::string bindFunctionError;
+    std::string renderError;
+    std::string renderedOutput;
 
     tpp::CompilerOutput output;
     tpp::FunctionSymbol functionSymbol;
-    tpp::Program program;
 
-    const bool isSuccess = compiler.add_types(testCase.typedefs, TypesDiagnostics.diagnostics) && compiler.compile(testCase.templateString, output, CompilerDiagnostics.diagnostics) && output.get_function("main", functionSymbol, getFunctionError) && functionSymbol.bind(testCase.input, program, bindFunctionError);
+    const bool isSuccess = compiler.add_types(testCase.typedefs, TypesDiagnostics.diagnostics) && compiler.compile(testCase.templateString, output, CompilerDiagnostics.diagnostics) && output.get_function("main", functionSymbol, getFunctionError) && functionSymbol.render(testCase.input, renderedOutput, renderError);
 
     EXPECT_EQ(isSuccess, testCase.expectSuccess) << "Test case: " << testCase.name;
     if (isSuccess)
     {
-        std::string generatedCode = program.run();
-        EXPECT_EQ(generatedCode, testCase.expectedOutput) << "Test case: " << testCase.name;
+        EXPECT_EQ(renderedOutput, testCase.expectedOutput) << "Test case: " << testCase.name;
     }
     else
     {
@@ -162,7 +161,7 @@ TEST_P(AcceptanceTest, RunTestCase)
         }
         EXPECT_EQ(actualDiagnostics, testCase.expectedDiagnostics) << "Test case: " << testCase.name << "\nActual diagnostics: " << nlohmann::json(actualDiagnostics).dump(2);
         EXPECT_EQ(getFunctionError, testCase.getFunctionError) << "Test case: " << testCase.name;
-        EXPECT_EQ(bindFunctionError, testCase.bindFunctionError) << "Test case: " << testCase.name;
+        EXPECT_EQ(renderError, testCase.renderError) << "Test case: " << testCase.name;
     }
 }
 

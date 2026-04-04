@@ -1,7 +1,7 @@
 #pragma once
 
 #include <nlohmann/json.hpp>
-#include <tpp/Program.h>
+#include <tpp/AST.h>
 #include <tpp/Diagnostic.h>
 
 namespace tpp
@@ -10,9 +10,9 @@ namespace tpp
     {
     public:
         [[nodiscard]]
-        bool bind(const nlohmann::json &input,
-                  Program &program,
-                  std::string &error) const noexcept;
+        bool render(const nlohmann::json &input,
+                    std::string &output,
+                    std::string &error) const noexcept;
 
         TemplateFunction function;
         TypeRegistry types;
