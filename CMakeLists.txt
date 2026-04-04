@@ -17,7 +17,12 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(nlohmann_json)
 
-add_library(lib_tpp LibTpp.cc)
+add_library(lib_tpp
+    TypedefParser.cc
+    TemplateParser.cc
+    CompilerOutput.cc
+    Rendering.cc
+)
 
 target_link_libraries(lib_tpp PUBLIC nlohmann_json)
 

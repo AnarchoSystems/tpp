@@ -1,0 +1,35 @@
+#pragma once
+
+#include <tpp/Types.h>
+#include <tpp/Tokenizer.h>
+#include <tpp/Diagnostic.h>
+#include <string>
+#include <vector>
+
+namespace tpp
+{
+    // ── Typedef parser ──
+    // Parses a typedef source string (structs and enums) into a TypeRegistry.
+
+    struct TypedefParser
+    {
+        const std::vector<Token> &tokens;
+        size_t pos = 0;
+        TypeRegistry &reg;
+        std::vector<Diagnostic> &diags;
+        bool ok = true;
+
+        const Token &cur() const;
+        const Token &eat(TokKind k);
+        bool at(TokKind k) const;
+
+        TypeRef parseTypeRef();
+        void parseStruct();
+        void parseEnum();
+        bool validateTypes();
+        void parse();
+    };
+
+    // Parses a type string like "string", "list<Item>", "optional<bool>" into a TypeRef.
+    TypeRef parseParamType(const std::string &s);
+}

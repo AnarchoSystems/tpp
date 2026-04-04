@@ -1,107 +1,24 @@
 #pragma once
 
+#include <tpp/Types.h>
 #include <string>
 #include <vector>
 #include <variant>
 #include <memory>
-#include <map>
-#include <optional>
 
 namespace tpp
 {
-    // ── Type system ──
+    // ── Expressions ──
 
-    struct StringType
-    {
-    };
-    struct IntType
-    {
-    };
-    struct BoolType
-    {
-    };
-    struct ListType;
-    struct OptionalType;
-    struct NamedType
-    {
-        std::string name;
-    };
-
-    using TypeRef = std::variant<StringType, IntType, BoolType,
-                                 std::shared_ptr<ListType>,
-                                 std::shared_ptr<OptionalType>,
-                                 NamedType>;
-
-    struct ListType
-    {
-        TypeRef elementType;
-    };
-    struct OptionalType
-    {
-        TypeRef innerType;
-    };
-
-    struct FieldDef
-    {
-        std::string name;
-        TypeRef type;
-    };
-    struct StructDef
-    {
-        std::string name;
-        std::vector<FieldDef> fields;
-    };
-    struct VariantDef
-    {
-        std::string tag;
-        std::optional<TypeRef> payload;
-    };
-    struct EnumDef
-    {
-        std::string name;
-        std::vector<VariantDef> variants;
-    };
-
-    enum class TypeKind
-    {
-        Struct,
-        Enum
-    };
-    struct TypeEntry
-    {
-        TypeKind kind;
-        std::size_t index;
-    };
-
-    struct TypeRegistry
-    {
-        std::vector<StructDef> structs;
-        std::vector<EnumDef> enums;
-        std::map<std::string, TypeEntry> nameIndex;
-    };
-
-    // ── AST ──
-
-    struct Variable
-    {
-        std::string name;
-    };
+    struct Variable    { std::string name; };
     struct FieldAccess;
     using Expression = std::variant<Variable, std::shared_ptr<FieldAccess>>;
-    struct FieldAccess
-    {
-        Expression base;
-        std::string field;
-    };
+    struct FieldAccess { Expression base; std::string field; };
 
-    struct TextNode
-    {
-        std::string text;
-    };
-    struct InterpolationNode
-    {
-        Expression expr;
-    };
+    // ── AST nodes ──
+
+    struct TextNode          { std::string text; };
+    struct InterpolationNode { Expression expr; };
     struct ForNode;
     struct IfNode;
     struct SwitchNode;
@@ -172,6 +89,8 @@ namespace tpp
         bool isBlock = false;
         int insertCol = 0;
     };
+
+    // ── Template function ──
 
     struct ParamDef
     {
