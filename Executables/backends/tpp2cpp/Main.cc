@@ -197,13 +197,16 @@ void tpp2cpp::log(const std::string &message)
 }
 
 nlohmann::json to_render_cpp_type_input(const tpp::CompilerOutput &compilerOutput,
-                                        const std::vector<std::string> &includes);
+                                        const std::vector<std::string> &includes,
+                                        const std::string &namespaceName);
 
 nlohmann::json to_render_cpp_functions_input(const tpp::CompilerOutput &compilerOutput,
-                                             const std::vector<std::string> &includes);
+                                             const std::vector<std::string> &includes,
+                                             const std::string &namespaceName);
 
 nlohmann::json to_render_cpp_implementation_input(const tpp::CompilerOutput &compilerOutput,
-                                                  const std::vector<std::string> &includes);
+                                                  const std::vector<std::string> &includes,
+                                                  const std::string &namespaceName);
 
 void tpp2cpp::run()
 {
@@ -249,19 +252,28 @@ void tpp2cpp::run()
     case Mode::Types:
     {
         functionName = "render_cpp_types";
-        toInputFunction = to_render_cpp_type_input;
+        auto ns = namespaceName;
+        toInputFunction = [ns](const tpp::CompilerOutput &co, const std::vector<std::string> &inc) {
+            return to_render_cpp_type_input(co, inc, ns);
+        };
         break;
     }
     case Mode::Functions:
     {
         functionName = "render_cpp_functions";
-        toInputFunction = to_render_cpp_functions_input;
+        auto ns = namespaceName;
+        toInputFunction = [ns](const tpp::CompilerOutput &co, const std::vector<std::string> &inc) {
+            return to_render_cpp_functions_input(co, inc, ns);
+        };
         break;
     }
     case Mode::Implementation:
     {
         functionName = "render_cpp_implementation";
-        toInputFunction = to_render_cpp_implementation_input;
+        auto ns = namespaceName;
+        toInputFunction = [ns](const tpp::CompilerOutput &co, const std::vector<std::string> &inc) {
+            return to_render_cpp_implementation_input(co, inc, ns);
+        };
         break;
     }
     }
@@ -283,23 +295,126 @@ void tpp2cpp::run()
     std::cout << renderedOutput << std::endl;
 }
 
-nlohmann::json to_render_cpp_type_input(const tpp::CompilerOutput &compilerOutput,
-                                        const std::vector<std::string> &includes)
+static std::string typeRefToCppString(const tpp::TypeRef &t)
 {
-    // TODO
-    return {};
+    if (std::holds_alternative<tpp::StringType>(t)) return "std::string";
+    if (std::holds_alternative<tpp::IntType>(t)) return "int";
+    if (std::holds_alternative<tpp::BoolType>(t)) return "bool";
+    if (auto *lt = std::get_if<std::shared_ptr<tpp::ListType>>(&t))
+        return "std::vector<" + typeRefToCppString((*lt)->elementType) + ">";
+    if (auto *ot = std::get_if<std::shared_ptr<tpp::OptionalType>>(&t))
+        return "std::optional<" + typeRefToCppString((*ot)->innerType) + ">";
+    if (auto *nt = std::get_if<tpp::NamedType>(&t))
+        return nt->name;
+    return "";
+}
+
+static std::string toCppStringLiteral(const std::string &s)
+{
+    std::string result = "\"";
+    for (char c : s)
+    {
+        if (c == '"') result += "\\\"";
+        else if (c == '\\') result += "\\\\";
+        else result += c;
+    }
+    return result + "\"";
+}
+
+nlohmann::json to_render_cpp_type_input(const tpp::CompilerOutput &compilerOutput,
+                                        const std::vector<std::string> &includes,
+                                        const std::string &namespaceName)
+{
+    nlohmann::json result;
+    result["includes"] = includes;
+    if (!namespaceName.empty())
+        result["namespaceName"] = namespaceName;
+    nlohmann::json typesJson = nlohmann::json::array();
+
+    // Emit enums first (often used as field types in structs)
+    for (const auto &e : compilerOutput.types.enums)
+    {
+        nlohmann::json enumJson;
+        enumJson["name"] = e.name;
+        nlohmann::json variants = nlohmann::json::array();
+        for (const auto &v : e.variants)
+        {
+            nlohmann::json variantJson;
+            variantJson["tag"] = v.tag;
+            if (v.payload.has_value())
+                variantJson["payloadType"] = typeRefToCppString(*v.payload);
+            variants.push_back(variantJson);
+        }
+        enumJson["variants"] = variants;
+        typesJson.push_back({{"Enum", enumJson}});
+    }
+
+    for (const auto &s : compilerOutput.types.structs)
+    {
+        nlohmann::json structJson;
+        structJson["name"] = s.name;
+        nlohmann::json fields = nlohmann::json::array();
+        for (const auto &f : s.fields)
+        {
+            nlohmann::json field;
+            bool isOpt = std::holds_alternative<std::shared_ptr<tpp::OptionalType>>(f.type);
+            field["name"] = f.name;
+            field["type"] = typeRefToCppString(f.type);
+            field["isOptional"] = isOpt;
+            if (isOpt)
+            {
+                auto *ot = std::get_if<std::shared_ptr<tpp::OptionalType>>(&f.type);
+                field["innerType"] = typeRefToCppString((*ot)->innerType);
+            }
+            fields.push_back(field);
+        }
+        structJson["fields"] = fields;
+        typesJson.push_back({{"Struct", structJson}});
+    }
+
+    result["types"] = typesJson;
+    return result;
+}
+
+static nlohmann::json buildFunctionsInput(const tpp::CompilerOutput &compilerOutput,
+                                          const std::vector<std::string> &includes,
+                                          const std::string &namespaceName)
+{
+    nlohmann::json result;
+    result["includes"] = includes;
+    if (!namespaceName.empty())
+        result["namespaceName"] = namespaceName;
+    result["compilerOutputJson"] = toCppStringLiteral(nlohmann::json(compilerOutput).dump());
+    nlohmann::json functions = nlohmann::json::array();
+    for (const auto &f : compilerOutput.functions)
+    {
+        nlohmann::json func;
+        func["name"] = f.name;
+        nlohmann::json params = nlohmann::json::array();
+        for (const auto &p : f.params)
+        {
+            nlohmann::json param;
+            param["name"] = p.name;
+            param["type"] = typeRefToCppString(p.type);
+            params.push_back(param);
+        }
+        func["params"] = params;
+        functions.push_back(func);
+    }
+    result["functions"] = functions;
+    return result;
 }
 
 nlohmann::json to_render_cpp_functions_input(const tpp::CompilerOutput &compilerOutput,
-                                             const std::vector<std::string> &includes)
+                                             const std::vector<std::string> &includes,
+                                             const std::string &namespaceName)
 {
-    // TODO
-    return {};
+    return buildFunctionsInput(compilerOutput, includes, namespaceName);
 }
 
 nlohmann::json to_render_cpp_implementation_input(const tpp::CompilerOutput &compilerOutput,
-                                                  const std::vector<std::string> &includes)
+                                                  const std::vector<std::string> &includes,
+                                                  const std::string &namespaceName)
 {
-    // TODO
-    return {};
+    return buildFunctionsInput(compilerOutput, includes, namespaceName);
 }

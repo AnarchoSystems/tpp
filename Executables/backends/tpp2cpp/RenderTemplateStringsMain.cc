@@ -22,7 +22,7 @@ std::string toGoodConstexprString(const std::string &content)
     {
         if (c == '\n')
         {
-            escapedContent += "\"\n\"";
+            escapedContent += "\\n\"\n\""; // preserve runtime newline; split source line for readability
         }
         else
         {
@@ -40,7 +40,10 @@ int main()
 {
     tpp::Compiler compiler;
     std::vector<tpp::DiagnosticLSPMessage> diagnostics;
-    diagnostics.reserve(1);
+    diagnostics.reserve(2);
+    auto typesContent = readFile(TYPES_TPP);
+    if (!typesContent.empty())
+        compiler.add_types(typesContent, diagnostics.emplace_back(TYPES_TPP).diagnostics);
     auto fileContent = readFile(DEFS_TPP);
     compiler.add_templates(fileContent, diagnostics.emplace_back(DEFS_TPP).diagnostics);
     tpp::CompilerOutput output;
@@ -63,7 +66,7 @@ int main()
         return EXIT_FAILURE;
     }
     std::string renderedCode;
-    std::vector<std::string> input = {toGoodConstexprString(fileContent), toGoodConstexprString(readFile(TYPES_TPP))};
+    std::vector<std::string> input = {toGoodConstexprString(readFile(TYPES_TPP)), toGoodConstexprString(fileContent)};
     if (!functionSymbol.render(nlohmann::json(input), renderedCode, error))
     {
         std::cerr << DEFS_TPP ": error: " << error << std::endl;

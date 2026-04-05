@@ -1,0 +1,58 @@
+struct CppFieldDef
+{
+    name : string;
+    type : string;
+    isOptional : bool;
+    innerType : optional<string>;
+}
+
+struct CppStructDef
+{
+    name : string;
+    fields : list<CppFieldDef>;
+}
+
+struct CppVariantDef
+{
+    tag : string;
+    payloadType : optional<string>;
+}
+
+struct CppEnumDef
+{
+    name : string;
+    variants : list<CppVariantDef>;
+}
+
+enum CppTypeDef
+{
+    Struct(CppStructDef),
+    Enum(CppEnumDef)
+}
+
+struct CppParamDef
+{
+    name : string;
+    type : string;
+}
+
+struct CppFunctionDef
+{
+    name : string;
+    params : list<CppParamDef>;
+}
+
+struct CppTypesInput
+{
+    includes : list<string>;
+    namespaceName : optional<string>;
+    types : list<CppTypeDef>;
+}
+
+struct CppFunctionsInput
+{
+    includes : list<string>;
+    namespaceName : optional<string>;
+    compilerOutputJson : string;
+    functions : list<CppFunctionDef>;
+}
