@@ -179,30 +179,8 @@ void tppApp::run()
     }
     for (const auto &diag : diags)
     {
-        for (const auto &d : diag.diagnostics)
+        for (const auto &diagnostic : diag.toGCCDiagnostics())
         {
-            std::string severityStr = "error";
-            if (d.severity)
-            {
-                switch (d.severity.value())
-                {
-                case DiagnosticSeverity::Error:
-                    severityStr = "error";
-                    break;
-                case DiagnosticSeverity::Warning:
-                    severityStr = "warning";
-                    break;
-                case DiagnosticSeverity::Information:
-                    severityStr = "info";
-                    break;
-                case DiagnosticSeverity::Hint:
-                    severityStr = "hint";
-                    break;
-                }
-            }
-            std::string diagnostic = diag.uri + ":" + std::to_string(d.range.start.line + 1) + ":" +
-                                     std::to_string(d.range.start.character + 1) + ": " +
-                                     severityStr + ": " + d.message;
             log(diagnostic);
             if (!verbose)
             {

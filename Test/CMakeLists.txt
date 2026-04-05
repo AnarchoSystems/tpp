@@ -6,14 +6,15 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(googletest)
 
-
 add_executable(lib_tpp_test Acceptance.cc)
 
 target_link_libraries(lib_tpp_test PRIVATE lib_tpp gtest_main)
 
-add_dependencies(lib_tpp_test tpp)
+add_dependencies(lib_tpp_test tpp render-tpp)
 
-target_compile_definitions(lib_tpp_test PUBLIC TPP_EXE="$<TARGET_FILE:tpp>")
+target_compile_definitions(lib_tpp_test PUBLIC TPP_EXE="$<TARGET_FILE:tpp>" RENDER_TPP_EXE="$<TARGET_FILE:render-tpp>")
+
+add_subdirectory(MakeStatTest)
 
 include(GoogleTest)
 

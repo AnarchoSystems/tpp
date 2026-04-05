@@ -41,6 +41,5 @@ target_link_libraries(lib_tpp PUBLIC nlohmann_json)
 target_include_directories(lib_tpp  PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
                                     PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+add_subdirectory(Executables)
 add_subdirectory(Test)
-
-add_subdirectory(Executables/tpp)

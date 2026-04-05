@@ -141,6 +141,37 @@ namespace tpp
         {
             return uri == other.uri && diagnostics == other.diagnostics;
         }
+        std::vector<std::string> toGCCDiagnostics() const
+        {
+            std::vector<std::string> gccDiagnostics;
+            for (const auto &diagnostic : diagnostics)
+            {
+                std::string severityStr;
+                switch (diagnostic.severity.value_or(DiagnosticSeverity::Error))
+                {
+                case DiagnosticSeverity::Error:
+                    severityStr = "error";
+                    break;
+                case DiagnosticSeverity::Warning:
+                    severityStr = "warning";
+                    break;
+                case DiagnosticSeverity::Information:
+                    severityStr = "info";
+                    break;
+                case DiagnosticSeverity::Hint:
+                    severityStr = "hint";
+                    break;
+                }
+                // GCC format: file:line:col: severity: message
+                std::string gccDiagnostic = uri + ":" +
+                                            std::to_string(diagnostic.range.start.line + 1) + ":" +
+                                            std::to_string(diagnostic.range.start.character + 1) + ": " +
+                                            severityStr + ": " +
+                                            diagnostic.message;
+                gccDiagnostics.push_back(gccDiagnostic);
+            }
+            return gccDiagnostics;
+        }
     };
 
 }
