@@ -264,7 +264,25 @@ namespace tpp
                 result += arg.text;
             } else if constexpr (std::is_same_v<T, InterpolationNode>) {
                 auto val = ctx.resolve(arg.expr);
-                result += ctx.jsonToString(val);
+                auto str = ctx.jsonToString(val);
+                auto lastNl = result.rfind('\n');
+                size_t col = (lastNl == std::string::npos) ? result.size() : result.size() - lastNl - 1;
+                if (col > 0 && str.find('\n') != std::string::npos) {
+                    std::string pad(col, ' ');
+                    std::string out;
+                    size_t start = 0;
+                    while (true) {
+                        auto end = str.find('\n', start);
+                        if (start > 0) out += pad;
+                        out += str.substr(start, end == std::string::npos ? end : end - start);
+                        if (end == std::string::npos) break;
+                        out += '\n';
+                        start = end + 1;
+                    }
+                    result += out;
+                } else {
+                    result += str;
+                }
             } else if constexpr (std::is_same_v<T, std::shared_ptr<ForNode>>) {
                 auto collection = ctx.resolve(arg->collectionExpr);
                 if (collection.is_array()) {
