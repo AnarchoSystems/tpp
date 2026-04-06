@@ -33,6 +33,7 @@ namespace tpp
     {
         std::string name;
         TypeRef type;
+        bool recursive = false;
     };
 
     struct StructDef
@@ -45,6 +46,7 @@ namespace tpp
     {
         std::string tag;
         std::optional<TypeRef> payload;
+        bool recursive = false;
     };
 
     struct EnumDef
@@ -168,11 +170,13 @@ namespace tpp
         nlohmann::json typeJson;
         to_json(typeJson, f.type);
         j = {{"name", f.name}, {"type", typeJson}};
+        if (f.recursive) j["recursive"] = true;
     }
     inline void from_json(const nlohmann::json &j, FieldDef &f)
     {
         j.at("name").get_to(f.name);
         f.type = j.at("type").get<TypeRef>();
+        f.recursive = j.value("recursive", false);
     }
 
     inline void to_json(nlohmann::json &j, const StructDef &s)
@@ -192,6 +196,7 @@ namespace tpp
             to_json(payloadJson, v.payload.value());
             j["payload"] = payloadJson;
         }
+        if (v.recursive) j["recursive"] = true;
     }
     inline void from_json(const nlohmann::json &j, VariantDef &v)
     {
@@ -200,6 +205,7 @@ namespace tpp
             v.payload = j.at("payload").get<TypeRef>();
         else
             v.payload = std::nullopt;
+        v.recursive = j.value("recursive", false);
     }
 
     inline void to_json(nlohmann::json &j, const EnumDef &e)

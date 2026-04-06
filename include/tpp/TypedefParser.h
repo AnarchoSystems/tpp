@@ -30,6 +30,10 @@ namespace tpp
         void parseStruct();
         void parseEnum();
         bool validateTypes();
+        // Returns false and emits diagnostics for any type with no finite minimal JSON value.
+        bool computeFiniteTypes();
+        // Sets recursive=true on FieldDef/VariantDef entries whose TypeRef references a cyclic NamedType.
+        void annotateRecursiveFields();
         void parse();
     };
 

@@ -1736,7 +1736,16 @@ namespace tpp
                 }
                 parser.validateTypes();
                 if (!src.diagnostics->empty())
+                {
                     typesHadErrors = true;
+                }
+                else
+                {
+                    if (!parser.computeFiniteTypes())
+                        typesHadErrors = true;
+                    else
+                        parser.annotateRecursiveFields();
+                }
             }
 
             if (!typesHadErrors)

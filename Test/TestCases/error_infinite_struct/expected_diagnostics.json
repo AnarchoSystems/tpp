@@ -1,0 +1,15 @@
+[
+    {
+        "uri": "error_infinite_struct/typedefs.tpp.types",
+        "diagnostics": [
+            {
+                "range": {
+                    "start": {"line": 0, "character": 7},
+                    "end": {"line": 0, "character": 11}
+                },
+                "message": "type 'Node' has no finite minimal JSON value",
+                "severity": "error"
+            }
+        ]
+    }
+]

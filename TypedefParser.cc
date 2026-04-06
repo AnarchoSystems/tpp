@@ -3,6 +3,8 @@
 #include <tpp/TypedefParser.h>
 #include <tpp/Diagnostic.h>
 #include <algorithm>
+#include <map>
+#include <set>
 
 namespace tpp
 {
@@ -412,6 +414,179 @@ namespace tpp
         }
 
         return allOk;
+    }
+
+    // ── Helpers shared by computeFiniteTypes and annotateRecursiveFields ──
+
+    static void collectNamedTypesFromRef(const TypeRef &tr, std::set<std::string> &out)
+    {
+        std::visit([&](const auto &arg)
+        {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, NamedType>)
+                out.insert(arg.name);
+            else if constexpr (std::is_same_v<T, std::shared_ptr<ListType>>)
+                collectNamedTypesFromRef(arg->elementType, out);
+            else if constexpr (std::is_same_v<T, std::shared_ptr<OptionalType>>)
+                collectNamedTypesFromRef(arg->innerType, out);
+        }, tr);
+    }
+
+    bool TypedefParser::computeFiniteTypes()
+    {
+        // Fixed-point: determine which NamedTypes have a finite minimal JSON value.
+        //   finite(string|int|bool)     = true
+        //   finite(list<T>)             = true  ([] is always valid)
+        //   finite(optional<T>)         = true  (null is always valid)
+        //   finite(NamedType{N})        = finite(reg[N])
+        //   finite(struct)              = ALL fields finite
+        //   finite(enum)                = ANY variant finite
+        //   finite(variant no payload)  = true
+        //   finite(variant payload T)   = finite(T)
+        std::set<std::string> finite;
+
+        auto isTypeRefFinite = [&](const TypeRef &tr) -> bool
+        {
+            return std::visit([&](const auto &arg) -> bool
+            {
+                using T = std::decay_t<decltype(arg)>;
+                if constexpr (std::is_same_v<T, StringType> || std::is_same_v<T, IntType> || std::is_same_v<T, BoolType>)
+                    return true;
+                else if constexpr (std::is_same_v<T, std::shared_ptr<ListType>>)
+                    return true;
+                else if constexpr (std::is_same_v<T, std::shared_ptr<OptionalType>>)
+                    return true;
+                else if constexpr (std::is_same_v<T, NamedType>)
+                    return finite.count(arg.name) > 0;
+                return false;
+            }, tr);
+        };
+
+        bool changed = true;
+        while (changed)
+        {
+            changed = false;
+            for (const auto &sd : reg.structs)
+            {
+                if (finite.count(sd.name)) continue;
+                bool all = true;
+                for (const auto &fd : sd.fields)
+                    if (!isTypeRefFinite(fd.type)) { all = false; break; }
+                if (all) { finite.insert(sd.name); changed = true; }
+            }
+            for (const auto &ed : reg.enums)
+            {
+                if (finite.count(ed.name)) continue;
+                bool any = false;
+                for (const auto &vd : ed.variants)
+                    if (!vd.payload.has_value() || isTypeRefFinite(vd.payload.value()))
+                    { any = true; break; }
+                if (any) { finite.insert(ed.name); changed = true; }
+            }
+        }
+
+        // Helper: find the token position of a type name (struct/enum keyword followed by name ident)
+        auto findTypeNameToken = [&](const std::string &typeName) -> const Token *
+        {
+            for (size_t p = 0; p + 1 < tokens.size(); ++p)
+            {
+                if ((tokens[p].kind == TokKind::Struct || tokens[p].kind == TokKind::Enum) &&
+                    tokens[p + 1].kind == TokKind::Ident &&
+                    tokens[p + 1].text == typeName)
+                    return &tokens[p + 1];
+            }
+            return nullptr;
+        };
+
+        bool allOk = true;
+        for (const auto &sd : reg.structs)
+        {
+            if (finite.count(sd.name)) continue;
+            const Token *t = findTypeNameToken(sd.name);
+            Diagnostic d;
+            if (t) d.range = {{t->line, t->col}, {t->line, t->col + (int)sd.name.size()}};
+            d.message = "type '" + sd.name + "' has no finite minimal JSON value";
+            d.severity = DiagnosticSeverity::Error;
+            diags.push_back(std::move(d));
+            allOk = false;
+        }
+        for (const auto &ed : reg.enums)
+        {
+            if (finite.count(ed.name)) continue;
+            const Token *t = findTypeNameToken(ed.name);
+            Diagnostic d;
+            if (t) d.range = {{t->line, t->col}, {t->line, t->col + (int)ed.name.size()}};
+            d.message = "type '" + ed.name + "' has no finite minimal JSON value";
+            d.severity = DiagnosticSeverity::Error;
+            diags.push_back(std::move(d));
+            allOk = false;
+        }
+        return allOk;
+    }
+
+    void TypedefParser::annotateRecursiveFields()
+    {
+        // Build direct NamedType reference sets for each type.
+        std::map<std::string, std::set<std::string>> directRefs;
+        for (const auto &sd : reg.structs)
+        {
+            auto &refs = directRefs[sd.name];
+            for (const auto &fd : sd.fields)
+                collectNamedTypesFromRef(fd.type, refs);
+        }
+        for (const auto &ed : reg.enums)
+        {
+            auto &refs = directRefs[ed.name];
+            for (const auto &vd : ed.variants)
+                if (vd.payload.has_value())
+                    collectNamedTypesFromRef(vd.payload.value(), refs);
+        }
+
+        // Compute transitive closure.
+        std::map<std::string, std::set<std::string>> closure = directRefs;
+        bool changed = true;
+        while (changed)
+        {
+            changed = false;
+            for (auto &[name, reachable] : closure)
+            {
+                std::vector<std::string> deps(reachable.begin(), reachable.end());
+                for (const auto &dep : deps)
+                {
+                    auto it = closure.find(dep);
+                    if (it == closure.end()) continue;
+                    for (const auto &transitive : it->second)
+                    {
+                        if (reachable.insert(transitive).second)
+                            changed = true;
+                    }
+                }
+            }
+        }
+
+        // A type is cyclic if its transitive closure contains itself.
+        std::set<std::string> cyclic;
+        for (const auto &[name, reachable] : closure)
+            if (reachable.count(name))
+                cyclic.insert(name);
+
+        // Annotate: a field/variant is recursive if any NamedType in its TypeRef is cyclic.
+        auto containsCyclic = [&](const TypeRef &tr) -> bool
+        {
+            std::set<std::string> mentioned;
+            collectNamedTypesFromRef(tr, mentioned);
+            for (const auto &n : mentioned)
+                if (cyclic.count(n)) return true;
+            return false;
+        };
+
+        for (auto &sd : reg.structs)
+            for (auto &fd : sd.fields)
+                fd.recursive = containsCyclic(fd.type);
+        for (auto &ed : reg.enums)
+            for (auto &vd : ed.variants)
+                if (vd.payload.has_value())
+                    vd.recursive = containsCyclic(vd.payload.value());
     }
 
     void TypedefParser::parse()

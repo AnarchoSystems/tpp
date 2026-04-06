@@ -337,10 +337,13 @@ nlohmann::json to_render_cpp_type_input(const tpp::CompilerOutput &compilerOutpu
         nlohmann::json enumJson;
         enumJson["name"] = e.name;
         nlohmann::json variants = nlohmann::json::array();
+        int variantIndex = 0;
         for (const auto &v : e.variants)
         {
             nlohmann::json variantJson;
             variantJson["tag"] = v.tag;
+            variantJson["index"] = variantIndex++;
+            variantJson["isRecursivePayload"] = v.recursive && v.payload.has_value();
             if (v.payload.has_value())
                 variantJson["payloadType"] = typeRefToCppString(*v.payload);
             variants.push_back(variantJson);
@@ -359,12 +362,30 @@ nlohmann::json to_render_cpp_type_input(const tpp::CompilerOutput &compilerOutpu
             nlohmann::json field;
             bool isOpt = std::holds_alternative<std::shared_ptr<tpp::OptionalType>>(f.type);
             field["name"] = f.name;
-            field["type"] = typeRefToCppString(f.type);
             field["isOptional"] = isOpt;
-            if (isOpt)
+            if (f.recursive)
             {
-                auto *ot = std::get_if<std::shared_ptr<tpp::OptionalType>>(&f.type);
-                field["innerType"] = typeRefToCppString((*ot)->innerType);
+                std::string innerT;
+                if (isOpt)
+                {
+                    auto *ot = std::get_if<std::shared_ptr<tpp::OptionalType>>(&f.type);
+                    innerT = typeRefToCppString((*ot)->innerType);
+                }
+                else
+                {
+                    innerT = typeRefToCppString(f.type);
+                }
+                field["type"] = "std::unique_ptr<" + innerT + ">";
+                field["recursiveInnerType"] = innerT;
+            }
+            else
+            {
+                field["type"] = typeRefToCppString(f.type);
+                if (isOpt)
+                {
+                    auto *ot = std::get_if<std::shared_ptr<tpp::OptionalType>>(&f.type);
+                    field["innerType"] = typeRefToCppString((*ot)->innerType);
+                }
             }
             fields.push_back(field);
         }

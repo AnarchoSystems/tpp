@@ -1,0 +1,4 @@
+enum Loop
+{
+    A(Loop)
+}

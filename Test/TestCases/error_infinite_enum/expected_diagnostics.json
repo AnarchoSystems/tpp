@@ -1,0 +1,15 @@
+[
+    {
+        "uri": "error_infinite_enum/typedefs.tpp.types",
+        "diagnostics": [
+            {
+                "range": {
+                    "start": {"line": 0, "character": 5},
+                    "end": {"line": 0, "character": 9}
+                },
+                "message": "type 'Loop' has no finite minimal JSON value",
+                "severity": "error"
+            }
+        ]
+    }
+]
