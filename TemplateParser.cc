@@ -1803,6 +1803,19 @@ namespace tpp
 
             bool typesHadErrors = false;
 
+            // Accumulate raw typedef source for embedding in generated output
+            std::string rawTypedefs;
+            for (auto &src : pendingSources_)
+            {
+                if (src.isTypes && !src.content.empty())
+                {
+                    if (!rawTypedefs.empty() && rawTypedefs.back() != '\n')
+                        rawTypedefs += '\n';
+                    rawTypedefs += src.content;
+                }
+            }
+            output.raw_typedefs = rawTypedefs;
+
             for (auto &src : pendingSources_)
             {
                 if (!src.isTypes)

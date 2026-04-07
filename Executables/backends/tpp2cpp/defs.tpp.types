@@ -11,6 +11,7 @@ struct CppStructDef
 {
     name : string;
     fields : list<CppFieldDef>;
+    definition : string;
 }
 
 struct CppVariantDef
@@ -25,6 +26,7 @@ struct CppEnumDef
 {
     name : string;
     variants : list<CppVariantDef>;
+    definition : string;
 }
 
 enum CppTypeDef

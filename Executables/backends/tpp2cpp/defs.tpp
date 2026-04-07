@@ -43,6 +43,10 @@ struct @s.name@
     @for field in s.fields@
     @field.type@ @field.name@;
     @end for@
+    static std::string tpp_typedefs() noexcept
+    {
+        return @s.definition@;
+    }
 };
 @end case@
 @case Enum(e)@
@@ -59,6 +63,10 @@ struct @e.name@
 {
     using Value = std::variant<@for variant in e.variants | sep=", "@@if not variant.payloadType@@e.name@_@variant.tag@@else@@if variant.isRecursivePayload@std::unique_ptr<@variant.payloadType@>@else@@variant.payloadType@@endif@@endif@@end for@>;
     Value value;
+    static std::string tpp_typedefs() noexcept
+    {
+        return @e.definition@;
+    }
 };
 @end case@
 @end switch@
@@ -143,6 +151,7 @@ END
 
 template render_cpp_functions(input: CppFunctionsInput)
 #pragma once
+#include <tpp/ArgType.h>
 @for inc in input.includes@
 #include "@inc@"
 @end for@
@@ -151,7 +160,7 @@ template render_cpp_functions(input: CppFunctionsInput)
 namespace @input.namespaceName@ {
 @endif@
 @for function in input.functions@
-std::string @function.name@(@for param in function.params | sep=", "@const @param.type@& @param.name@@end for@);
+std::string @function.name@(@for param in function.params | sep=", "@typename tpp::ArgType<@param.type@>::type @param.name@@end for@);
 @end for@
 @if input.namespaceName@
 } // namespace @input.namespaceName@
@@ -174,7 +183,7 @@ static const tpp::CompilerOutput& _getCompilerOutput()
     return co;
 }
 @for function in input.functions@
-std::string @function.name@(@for param in function.params | sep=", "@const @param.type@& @param.name@@end for@)
+std::string @function.name@(@for param in function.params | sep=", "@typename tpp::ArgType<@param.type@>::type @param.name@@end for@)
 {
     const auto& co = _getCompilerOutput();
     tpp::FunctionSymbol fs;

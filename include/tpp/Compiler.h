@@ -12,6 +12,13 @@ namespace tpp
         void add_types(const std::string &typedefs,
                        std::vector<Diagnostic> &diagnostics) noexcept;
 
+        template <typename Arg, typename = std::void_t<decltype(Arg::tpp_typedefs())>>
+        void add_type(std::vector<Diagnostic> &diagnostics) noexcept
+        {
+            using ActType = std::remove_const_t<std::remove_reference_t<Arg>>;
+            add_types(ActType::tpp_typedefs(), diagnostics);
+        }
+
         void clear_templates() noexcept;
         void add_templates(const std::string &templateString,
                            std::vector<Diagnostic> &diagnostics) noexcept;

@@ -9,4 +9,5 @@ struct Defs
     testName : string;
     inputs : list<Input>;
     expectedOutput : string;
+    compilerOutputJson : string;
 }

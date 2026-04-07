@@ -316,6 +316,8 @@ static std::string toCppStringLiteral(const std::string &s)
     {
         if (c == '"') result += "\\\"";
         else if (c == '\\') result += "\\\\";
+        else if (c == '\n') result += "\\n";
+        else if (c == '\r') result += "\\r";
         else result += c;
     }
     return result + "\"";
@@ -349,6 +351,7 @@ nlohmann::json to_render_cpp_type_input(const tpp::CompilerOutput &compilerOutpu
             variants.push_back(variantJson);
         }
         enumJson["variants"] = variants;
+        enumJson["definition"] = toCppStringLiteral(compilerOutput.raw_typedefs);
         typesJson.push_back({{"Enum", enumJson}});
     }
 
@@ -390,6 +393,7 @@ nlohmann::json to_render_cpp_type_input(const tpp::CompilerOutput &compilerOutpu
             fields.push_back(field);
         }
         structJson["fields"] = fields;
+        structJson["definition"] = toCppStringLiteral(compilerOutput.raw_typedefs);
         typesJson.push_back({{"Struct", structJson}});
     }
 
