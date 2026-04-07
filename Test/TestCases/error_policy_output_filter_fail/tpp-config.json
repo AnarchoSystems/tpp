@@ -1,0 +1,5 @@
+{
+    "types": [],
+    "templates": ["template.tpp"],
+    "replacement-policies": ["alpha-only.policy.json"]
+}

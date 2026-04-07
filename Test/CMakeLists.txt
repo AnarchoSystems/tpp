@@ -8,7 +8,7 @@ FetchContent_MakeAvailable(googletest)
 
 add_executable(lib_tpp_test Acceptance.cc)
 
-target_link_libraries(lib_tpp_test PRIVATE lib_tpp gtest_main)
+target_link_libraries(lib_tpp_test PRIVATE gtest_main)
 
 add_dependencies(lib_tpp_test tpp render-tpp)
 

@@ -1,0 +1,5 @@
+{
+    "types": [],
+    "templates": ["template.tpp"],
+    "replacement-policies": ["len-3-10.policy.json"]
+}

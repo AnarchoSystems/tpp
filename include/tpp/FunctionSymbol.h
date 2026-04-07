@@ -3,6 +3,7 @@
 #include <nlohmann/json.hpp>
 #include <tpp/AST.h>
 #include <tpp/Diagnostic.h>
+#include <tpp/Policy.h>
 
 namespace tpp
 {
@@ -17,5 +18,6 @@ namespace tpp
         TemplateFunction function;
         TypeRegistry types;
         std::vector<TemplateFunction> allFunctions;
+        PolicyRegistry policies;
     };
 }

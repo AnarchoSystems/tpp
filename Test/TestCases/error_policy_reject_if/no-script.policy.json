@@ -1,0 +1,1 @@
+{"tag": "no-script", "reject-if": {"regex": "<script", "message": "script tags not allowed"}}

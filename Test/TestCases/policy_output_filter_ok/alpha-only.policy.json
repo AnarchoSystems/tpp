@@ -1,0 +1,1 @@
+{"tag": "alpha-only", "replacements": [{"find": "0", "replace": ""}, {"find": "1", "replace": ""}, {"find": "2", "replace": ""}, {"find": "3", "replace": ""}, {"find": "4", "replace": ""}, {"find": "5", "replace": ""}, {"find": "6", "replace": ""}, {"find": "7", "replace": ""}, {"find": "8", "replace": ""}, {"find": "9", "replace": ""}], "output-filter": [{"regex": "^[a-z]+$"}]}

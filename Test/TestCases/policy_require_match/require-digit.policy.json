@@ -1,0 +1,1 @@
+{"tag": "require-digit", "require": [{"regex": "^(\\d+)$", "replace": "number: @subexpr_1@"}]}

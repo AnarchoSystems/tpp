@@ -1,0 +1,1 @@
+{"tag": "escape-amp", "replacements": [{"find": "&", "replace": "[and]"}]}

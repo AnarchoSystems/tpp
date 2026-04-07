@@ -236,13 +236,16 @@ namespace tpp
         return std::nullopt;
     }
 
-    // Parses space-separated flag keywords. Returns an error with position info, or nullopt on success.
-    static std::optional<ParseError> parseDirectiveFlags(
+    // Parses a mix of key="value" quoted-string pairs and bare flag keywords.
+    static std::optional<ParseError> parseDirectiveMixed(
         const std::string &optPart,
+        const std::set<std::string> &allowedStringKeys,
         const std::set<std::string> &allowedFlags,
+        std::map<std::string, std::string> &outValues,
         std::set<std::string> &outFlags)
     {
         size_t p = 0;
+        std::set<std::string> seen;
         while (p < optPart.size())
         {
             while (p < optPart.size() && std::isspace(static_cast<unsigned char>(optPart[p])))
@@ -250,18 +253,41 @@ namespace tpp
             if (p >= optPart.size())
                 break;
 
-            size_t start = p;
-            while (p < optPart.size() && !std::isspace(static_cast<unsigned char>(optPart[p])))
+            size_t keyStart = p;
+            while (p < optPart.size() && optPart[p] != '=' && !std::isspace(static_cast<unsigned char>(optPart[p])))
+                ++p;
+            std::string key = trim(optPart.substr(keyStart, p - keyStart));
+            if (!isIdentifier(key))
+                return ParseError{"invalid option '" + key + "'", (int)keyStart, (int)p};
+
+            while (p < optPart.size() && std::isspace(static_cast<unsigned char>(optPart[p])))
                 ++p;
 
-            std::string flag = trim(optPart.substr(start, p - start));
-            if (!isIdentifier(flag))
-                return ParseError{"invalid option '" + flag + "'", (int)start, (int)p};
-            if (allowedFlags.count(flag) == 0)
-                return ParseError{"unknown option '" + flag + "'", (int)start, (int)p};
-            if (outFlags.count(flag) != 0)
-                return ParseError{"duplicate option '" + flag + "'", (int)start, (int)p};
-            outFlags.insert(flag);
+            if (p < optPart.size() && optPart[p] == '=')
+            {
+                ++p;
+                while (p < optPart.size() && std::isspace(static_cast<unsigned char>(optPart[p])))
+                    ++p;
+                if (seen.count(key))
+                    return ParseError{"duplicate option '" + key + "'", (int)keyStart, (int)p};
+                seen.insert(key);
+                if (allowedStringKeys.count(key) == 0)
+                    return ParseError{"unknown option '" + key + "'", (int)keyStart, (int)p};
+                size_t before = p;
+                std::string value = parseStringLiteral(optPart, p);
+                if (before == p)
+                    return ParseError{"option '" + key + "' expects a quoted string value", (int)keyStart, (int)p};
+                outValues[key] = value;
+            }
+            else
+            {
+                if (seen.count(key))
+                    return ParseError{"duplicate option '" + key + "'", (int)keyStart, (int)p};
+                seen.insert(key);
+                if (allowedFlags.count(key) == 0)
+                    return ParseError{"unknown option '" + key + "'", (int)keyStart, (int)p};
+                outFlags.insert(key);
+            }
         }
         return std::nullopt;
     }
@@ -326,12 +352,13 @@ namespace tpp
             if (!optPart.empty())
             {
                 std::map<std::string, std::string> values;
-                if (auto err = parseDirectiveOptions(optPart, {"sep", "followedBy", "precededBy"}, {"iteratorVar"}, values))
+                if (auto err = parseDirectiveOptions(optPart, {"sep", "followedBy", "precededBy", "policy"}, {"iteratorVar"}, values))
                     return ErrorDirective{err->message, err->start, err->end};
                 d.sep = values["sep"];
                 d.followedBy = values["followedBy"];
                 d.precededBy = values["precededBy"];
                 d.iteratorVar = values["iteratorVar"];
+                d.policy = values["policy"];
             }
             return d;
         }
@@ -373,10 +400,12 @@ namespace tpp
             d.expr = parseExpression(exprText);
             if (!optPart.empty())
             {
+                std::map<std::string, std::string> values;
                 std::set<std::string> flags;
-                if (auto err = parseDirectiveFlags(optPart, {"checkExhaustive"}, flags))
+                if (auto err = parseDirectiveMixed(optPart, {"policy"}, {"checkExhaustive"}, values, flags))
                     return ErrorDirective{err->message, err->start, err->end};
                 d.checkExhaustive = flags.count("checkExhaustive") != 0;
+                d.policy = values["policy"];
             }
             return d;
         }
@@ -444,11 +473,12 @@ namespace tpp
             if (!optPart.empty())
             {
                 std::map<std::string, std::string> values;
-                if (auto err = parseDirectiveOptions(optPart, {"sep", "followedBy", "precededBy"}, {}, values))
+                if (auto err = parseDirectiveOptions(optPart, {"sep", "followedBy", "precededBy", "policy"}, {}, values))
                     return ErrorDirective{err->message, err->start, err->end};
                 d.sep = values["sep"];
                 d.followedBy = values["followedBy"];
                 d.precededBy = values["precededBy"];
+                d.policy = values["policy"];
             }
             return d;
         }
@@ -508,6 +538,22 @@ namespace tpp
             }
         }
 
+        // Check for pipe: @expr | policy="tag"@
+        {
+            size_t pipe = t.find('|');
+            if (pipe != std::string::npos)
+            {
+                std::string exprPart = trim(t.substr(0, pipe));
+                std::string optsPart = trim(t.substr(pipe + 1));
+                std::map<std::string, std::string> values;
+                if (auto err = parseDirectiveOptions(optsPart, {"policy"}, {}, values))
+                    return ErrorDirective{err->message, err->start, err->end};
+                ExprDirective d;
+                d.expr = parseExpression(exprPart);
+                d.policy = values["policy"];
+                return d;
+            }
+        }
         return ExprDirective{parseExpression(t)};
     }
 
@@ -594,7 +640,7 @@ namespace tpp
                 }
                 else if (auto *d = std::get_if<ExprDirective>(&s.info))
                 {
-                    sub.push_back(InterpolationNode{d->expr});
+                    sub.push_back(InterpolationNode{d->expr, d->policy});
                     ++pos;
                 }
                 else if (auto *d = std::get_if<FunctionCallDirective>(&s.info))
@@ -614,6 +660,7 @@ namespace tpp
                     forNode->sep = d->sep;
                     forNode->followedBy = d->followedBy;
                     forNode->precededBy = d->precededBy;
+                    forNode->policy = d->policy;
                     forNode->isBlock = false;
                     ++pos;
                     forNode->body = recurse();
@@ -655,6 +702,7 @@ namespace tpp
                     auto switchNode = std::make_shared<SwitchNode>();
                     switchNode->expr = d->expr;
                     switchNode->checkExhaustive = d->checkExhaustive;
+                    switchNode->policy = d->policy;
                     switchNode->isBlock = false;
                     ++pos;
                     while (pos < segs.size())
@@ -729,6 +777,7 @@ namespace tpp
                         forNode->sep = d->sep;
                         forNode->followedBy = d->followedBy;
                         forNode->precededBy = d->precededBy;
+                        forNode->policy = d->policy;
                         forNode->isBlock = true;
                         forNode->insertCol = tl.indent;
                         ++pos;
@@ -778,6 +827,7 @@ namespace tpp
                         auto switchNode = std::make_shared<SwitchNode>();
                         switchNode->expr = d->expr;
                         switchNode->checkExhaustive = d->checkExhaustive;
+                        switchNode->policy = d->policy;
                         switchNode->isBlock = true;
                         switchNode->insertCol = tl.indent;
                         ++pos;
@@ -855,6 +905,7 @@ namespace tpp
                         renderNode->sep = d->sep;
                         renderNode->followedBy = d->followedBy;
                         renderNode->precededBy = d->precededBy;
+                        renderNode->policy = d->policy;
                         renderNode->isBlock = true;
                         renderNode->insertCol = tl.indent;
                         nodes.push_back(std::move(renderNode));
@@ -905,7 +956,7 @@ namespace tpp
                         }
                         else if (auto *d = std::get_if<ExprDirective>(&seg.info))
                         {
-                            nodes.push_back(InterpolationNode{d->expr});
+                            nodes.push_back(InterpolationNode{d->expr, d->policy});
                         }
                     }
                     nodes.push_back(TextNode{"\n"});
@@ -1590,6 +1641,44 @@ namespace tpp
             return false;
         std::string paramsStr = afterTemplate.substr(parenOpen + 1, parenClose - parenOpen - 1);
 
+        // Extract | policy="..." from paramsStr (not inside <> brackets)
+        {
+            int angleDepth = 0;
+            for (size_t i = 0; i < paramsStr.size(); ++i)
+            {
+                if (paramsStr[i] == '<') ++angleDepth;
+                else if (paramsStr[i] == '>') --angleDepth;
+                else if (paramsStr[i] == '|' && angleDepth == 0)
+                {
+                    std::string optsPart = trim(paramsStr.substr(i + 1));
+                    paramsStr = paramsStr.substr(0, i);
+                    if (!optsPart.empty())
+                    {
+                        std::map<std::string, std::string> values;
+                        if (auto err = parseDirectiveOptions(optsPart, {"policy"}, {}, values))
+                        {
+                            if (diags)
+                            {
+                                size_t lineNum = 0;
+                                for (size_t k = 0; k < lineStart; ++k)
+                                    if (text[k] == '\n') ++lineNum;
+                                Diagnostic diag;
+                                diag.range = {{(int)lineNum, 0}, {(int)lineNum, (int)firstLine.size()}};
+                                diag.message = "invalid template option: " + err->message;
+                                diag.severity = DiagnosticSeverity::Error;
+                                diags->push_back(std::move(diag));
+                            }
+                        }
+                        else
+                        {
+                            func.policy = values["policy"];
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+
         if (!trim(paramsStr).empty())
         {
             // Split by comma, but respect angle brackets
@@ -1819,6 +1908,7 @@ namespace tpp
 
             output.functions = std::move(pendingFunctions);
             output.types = types;
+            output.policies = policies_;
             return true;
         }
         catch (...)

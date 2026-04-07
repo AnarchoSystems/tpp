@@ -1,0 +1,5 @@
+{
+    "types": ["typedefs.tpp"],
+    "templates": ["template.tpp"],
+    "replacement-policies": ["escape-lt.policy.json"]
+}

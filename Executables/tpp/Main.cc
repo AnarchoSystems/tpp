@@ -258,6 +258,37 @@ void tppApp::run()
         }
     }
     log("Finished loading files. Compiling...");
+
+    // Load replacement policies
+    for (const auto &policyEntry : config.value("replacement-policies", nlohmann::json::array()))
+    {
+        fs::path policyPath = fs::path(inputDirectory) / policyEntry.get<std::string>();
+        std::ifstream pf(policyPath);
+        if (!pf.is_open())
+        {
+            std::cerr << "Error: " << policyPath.string() << ": policy file not found\n";
+            exit(1);
+        }
+        nlohmann::json policyJson;
+        try
+        {
+            policyJson = nlohmann::json::parse(std::string(
+                (std::istreambuf_iterator<char>(pf)),
+                std::istreambuf_iterator<char>()));
+        }
+        catch (const std::exception &e)
+        {
+            std::cerr << "Error: " << policyPath.string() << ": invalid JSON: " << e.what() << "\n";
+            exit(1);
+        }
+        std::string policyError;
+        if (!compiler.add_policy(policyJson, policyError))
+        {
+            std::cerr << "Error: " << policyPath.string() << ": " << policyError << "\n";
+            exit(1);
+        }
+    }
+
     CompilerOutput output;
     bool success = compiler.compile(output);
     if (success)

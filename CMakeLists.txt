@@ -37,6 +37,7 @@ add_library(lib_tpp
     TemplateParser.cc
     CompilerOutput.cc
     Rendering.cc
+    tpp/PolicyParser.cc
 )
 
 target_link_libraries(lib_tpp PUBLIC nlohmann_json)

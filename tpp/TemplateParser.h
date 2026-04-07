@@ -20,8 +20,8 @@ namespace tpp
 
     // Error in directive syntax; carries the error message and character range.
     struct ErrorDirective        { std::string message; int start = 0, end = 0; };
-    // Inline expression interpolation: @expr@
-    struct ExprDirective         { Expression expr; };
+    // Inline expression interpolation: @expr@ or @expr | policy="name"@
+    struct ExprDirective         { Expression expr; std::string policy; };
     // Direct function call: @fn(arg1, arg2)@
     struct FunctionCallDirective { std::string name; std::vector<Expression> args; };
 
@@ -34,12 +34,13 @@ namespace tpp
         std::string followedBy;
         std::string precededBy;
         std::string iteratorVar;
+        std::string policy;
     };
 
     // @if expr@ / @if not expr@
     struct IfDirective     { Expression cond; std::string condText; bool negated = false; };
     // @switch expr | checkExhaustive@
-    struct SwitchDirective { Expression expr; bool checkExhaustive = false; };
+    struct SwitchDirective { Expression expr; bool checkExhaustive = false; std::string policy; };
     // @case Tag@ / @case Tag(binding)@
     struct CaseDirective   { std::string tag; std::string binding; };
     // @render collection via func | sep="," ...@
@@ -50,6 +51,7 @@ namespace tpp
         std::string sep;
         std::string followedBy;
         std::string precededBy;
+        std::string policy;
     };
 
     // Control-flow terminators — carry no data

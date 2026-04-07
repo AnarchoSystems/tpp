@@ -1,0 +1,1 @@
+{"tag": "escape-lt", "replacements": [{"find": "<", "replace": "[lt]"}]}

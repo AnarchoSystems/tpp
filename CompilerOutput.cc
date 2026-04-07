@@ -21,6 +21,7 @@ namespace tpp
                     functionSymbol.function = f;
                     functionSymbol.types = types;
                     functionSymbol.allFunctions = functions;
+                    functionSymbol.policies = policies;
                     return true;
                 }
             }

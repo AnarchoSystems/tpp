@@ -19,7 +19,7 @@ namespace tpp
     // ── AST nodes ──
 
     struct TextNode          { std::string text; };
-    struct InterpolationNode { Expression expr; };
+    struct InterpolationNode { Expression expr; std::string policy; };
     struct ForNode;
     struct IfNode;
     struct SwitchNode;
@@ -45,6 +45,7 @@ namespace tpp
         std::string precededBy;
         bool isBlock = false;
         int insertCol = 0;
+        std::string policy;
     };
 
     struct IfNode
@@ -72,6 +73,7 @@ namespace tpp
         std::vector<CaseNode> cases;
         bool isBlock = false;
         int insertCol = 0;
+        std::string policy;
     };
 
     struct FunctionCallNode
@@ -89,6 +91,7 @@ namespace tpp
         std::string precededBy;
         bool isBlock = false;
         int insertCol = 0;
+        std::string policy;
     };
 
     // ── Template function ──
@@ -104,6 +107,7 @@ namespace tpp
         std::string name;
         std::vector<ParamDef> params;
         std::vector<ASTNode> body;
+        std::string policy;
     };
 
     // ─────────────────────────────────────────────────────────────────
@@ -135,7 +139,7 @@ namespace tpp
     inline bool operator==(const TextNode &a, const TextNode &b)
     { return a.text == b.text; }
     inline bool operator==(const InterpolationNode &a, const InterpolationNode &b)
-    { return a.expr == b.expr; }
+    { return a.expr == b.expr && a.policy == b.policy; }
     inline bool operator==(const CaseNode &a, const CaseNode &b)
     { return a.tag == b.tag && a.bindingName == b.bindingName && a.body == b.body; }
     inline bool operator==(const ForNode &a, const ForNode &b)
@@ -143,7 +147,7 @@ namespace tpp
         return a.varName == b.varName && a.iteratorVarName == b.iteratorVarName &&
                a.collectionExpr == b.collectionExpr && a.body == b.body &&
                a.sep == b.sep && a.followedBy == b.followedBy && a.precededBy == b.precededBy &&
-               a.isBlock == b.isBlock && a.insertCol == b.insertCol;
+               a.isBlock == b.isBlock && a.insertCol == b.insertCol && a.policy == b.policy;
     }
     inline bool operator==(const IfNode &a, const IfNode &b)
     {
@@ -154,7 +158,8 @@ namespace tpp
     inline bool operator==(const SwitchNode &a, const SwitchNode &b)
     {
         return a.expr == b.expr && a.checkExhaustive == b.checkExhaustive &&
-               a.cases == b.cases && a.isBlock == b.isBlock && a.insertCol == b.insertCol;
+               a.cases == b.cases && a.isBlock == b.isBlock && a.insertCol == b.insertCol &&
+               a.policy == b.policy;
     }
     inline bool operator==(const FunctionCallNode &a, const FunctionCallNode &b)
     { return a.functionName == b.functionName && a.arguments == b.arguments; }
@@ -162,7 +167,7 @@ namespace tpp
     {
         return a.collectionExpr == b.collectionExpr && a.functionName == b.functionName &&
                a.sep == b.sep && a.followedBy == b.followedBy && a.precededBy == b.precededBy &&
-               a.isBlock == b.isBlock && a.insertCol == b.insertCol;
+               a.isBlock == b.isBlock && a.insertCol == b.insertCol && a.policy == b.policy;
     }
     inline bool operator==(const ASTNode &a, const ASTNode &b)
     {
@@ -184,7 +189,7 @@ namespace tpp
     inline bool operator==(const ParamDef &a, const ParamDef &b)
     { return a.name == b.name && a.type == b.type; }
     inline bool operator==(const TemplateFunction &a, const TemplateFunction &b)
-    { return a.name == b.name && a.params == b.params && a.body == b.body; }
+    { return a.name == b.name && a.params == b.params && a.body == b.body && a.policy == b.policy; }
 
     // ─────────────────────────────────────────────────────────────────
     // JSON serialization
@@ -248,7 +253,7 @@ namespace tpp
             else if constexpr (std::is_same_v<T, InterpolationNode>)
             {
                 nlohmann::json exprJson; to_json(exprJson, arg.expr);
-                j = {{"kind", "interpolation"}, {"expr", exprJson}};
+                j = {{"kind", "interpolation"}, {"expr", exprJson}, {"policy", arg.policy}};
             }
             else if constexpr (std::is_same_v<T, std::shared_ptr<ForNode>>)
             {
@@ -258,7 +263,7 @@ namespace tpp
                 j = {{"kind", "for"}, {"varName", arg->varName}, {"iteratorVarName", arg->iteratorVarName},
                      {"collectionExpr", collJson}, {"body", bodyJson},
                      {"sep", arg->sep}, {"followedBy", arg->followedBy}, {"precededBy", arg->precededBy},
-                     {"isBlock", arg->isBlock}, {"insertCol", arg->insertCol}};
+                     {"isBlock", arg->isBlock}, {"insertCol", arg->insertCol}, {"policy", arg->policy}};
             }
             else if constexpr (std::is_same_v<T, std::shared_ptr<IfNode>>)
             {
@@ -276,7 +281,8 @@ namespace tpp
                 to_json(exprJson, arg->expr);
                 for (const auto &c : arg->cases) { nlohmann::json cj; to_json(cj, c); casesJson.push_back(cj); }
                 j = {{"kind", "switch"}, {"expr", exprJson}, {"checkExhaustive", arg->checkExhaustive},
-                     {"cases", casesJson}, {"isBlock", arg->isBlock}, {"insertCol", arg->insertCol}};
+                     {"cases", casesJson}, {"isBlock", arg->isBlock}, {"insertCol", arg->insertCol},
+                     {"policy", arg->policy}};
             }
             else if constexpr (std::is_same_v<T, std::shared_ptr<FunctionCallNode>>)
             {
@@ -289,7 +295,7 @@ namespace tpp
                 nlohmann::json collJson; to_json(collJson, arg->collectionExpr);
                 j = {{"kind", "render"}, {"collectionExpr", collJson}, {"functionName", arg->functionName},
                      {"sep", arg->sep}, {"followedBy", arg->followedBy}, {"precededBy", arg->precededBy},
-                     {"isBlock", arg->isBlock}, {"insertCol", arg->insertCol}};
+                     {"isBlock", arg->isBlock}, {"insertCol", arg->insertCol}, {"policy", arg->policy}};
             }
         }, n);
     }
@@ -302,7 +308,10 @@ namespace tpp
         }
         else if (kind == "interpolation")
         {
-            n = InterpolationNode{j.at("expr").get<Expression>()};
+            InterpolationNode in;
+            in.expr = j.at("expr").get<Expression>();
+            if (j.contains("policy")) j.at("policy").get_to(in.policy);
+            n = std::move(in);
         }
         else if (kind == "for")
         {
@@ -316,6 +325,7 @@ namespace tpp
             fn->precededBy      = j.at("precededBy").get<std::string>();
             fn->isBlock         = j.at("isBlock").get<bool>();
             fn->insertCol       = j.at("insertCol").get<int>();
+            if (j.contains("policy")) j.at("policy").get_to(fn->policy);
             n = fn;
         }
         else if (kind == "if")
@@ -338,6 +348,7 @@ namespace tpp
             sn->cases            = j.at("cases").get<std::vector<CaseNode>>();
             sn->isBlock          = j.at("isBlock").get<bool>();
             sn->insertCol        = j.at("insertCol").get<int>();
+            if (j.contains("policy")) j.at("policy").get_to(sn->policy);
             n = sn;
         }
         else if (kind == "call")
@@ -357,6 +368,7 @@ namespace tpp
             rn->precededBy     = j.at("precededBy").get<std::string>();
             rn->isBlock        = j.at("isBlock").get<bool>();
             rn->insertCol      = j.at("insertCol").get<int>();
+            if (j.contains("policy")) j.at("policy").get_to(rn->policy);
             n = rn;
         }
     }
@@ -378,13 +390,14 @@ namespace tpp
         for (const auto &p : f.params) { nlohmann::json pj; to_json(pj, p); paramsJson.push_back(pj); }
         nlohmann::json bodyJson = nlohmann::json::array();
         for (const auto &n : f.body) { nlohmann::json nj; to_json(nj, n); bodyJson.push_back(nj); }
-        j = {{"name", f.name}, {"params", paramsJson}, {"body", bodyJson}};
+        j = {{"name", f.name}, {"params", paramsJson}, {"body", bodyJson}, {"policy", f.policy}};
     }
     inline void from_json(const nlohmann::json &j, TemplateFunction &f)
     {
         j.at("name").get_to(f.name);
         f.params = j.at("params").get<std::vector<ParamDef>>();
         f.body   = j.at("body").get<std::vector<ASTNode>>();
+        if (j.contains("policy")) j.at("policy").get_to(f.policy);
     }
 
 }

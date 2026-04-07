@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <sstream>
 #include <cmath>
+#include <regex>
 
 namespace tpp
 {
@@ -18,6 +19,9 @@ namespace tpp
         const TypeRegistry &types;
         const std::vector<TemplateFunction> &allFunctions;
         std::vector<std::pair<std::string, nlohmann::json>> bindings;
+        std::string activePolicy;
+        const PolicyRegistry *policyRegistry = nullptr;
+        std::string renderError;
 
         void pushBinding(const std::string &name, const nlohmann::json &val)
         {
@@ -74,6 +78,113 @@ namespace tpp
     // renderNodes and renderBlockBody are mutually recursive — forward declare both
     static std::string renderNodes(const std::vector<ASTNode> &nodes, RenderContext &ctx);
     static std::string renderBlockBody(const std::vector<ASTNode> &nodes, RenderContext &ctx, int insertCol);
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Policy pipeline
+    // ═══════════════════════════════════════════════════════════════════
+
+    static bool applyPolicy(const std::string &tag, const Policy &pol, std::string &value, std::string &outError)
+    {
+        // 1. Length check
+        if (pol.length.has_value())
+        {
+            int len = (int)value.size();
+            if (pol.length->min.has_value() && len < *pol.length->min)
+            {
+                outError = "[policy " + tag + "] value is below minimum length of " + std::to_string(*pol.length->min);
+                return false;
+            }
+            if (pol.length->max.has_value() && len > *pol.length->max)
+            {
+                outError = "[policy " + tag + "] value exceeds maximum length of " + std::to_string(*pol.length->max);
+                return false;
+            }
+        }
+
+        // 2. reject-if
+        if (pol.rejectIf.has_value())
+        {
+            std::regex rx(pol.rejectIf->regex);
+            if (std::regex_search(value, rx))
+            {
+                outError = "[policy " + tag + "] " + pol.rejectIf->message;
+                return false;
+            }
+        }
+
+        // 3. require[] — each step MUST match; if it does, apply optional replacement
+        for (auto &step : pol.require)
+        {
+            std::regex rx(step.regex);
+            std::smatch m;
+            if (!std::regex_search(value, m, rx))
+            {
+                outError = "[policy " + tag + "] value does not match required pattern";
+                return false;
+            }
+            if (!step.replace.empty())
+            {
+                // Convert @subexpr_N@ → $N for std::regex_replace
+                std::string repl;
+                size_t p = 0;
+                while (p < step.replace.size())
+                {
+                    if (step.replace[p] == '@')
+                    {
+                        size_t end = step.replace.find('@', p + 1);
+                        if (end != std::string::npos)
+                        {
+                            std::string inner = step.replace.substr(p + 1, end - p - 1);
+                            if (inner.substr(0, 8) == "subexpr_")
+                            {
+                                repl += "$" + inner.substr(8);
+                                p = end + 1;
+                                continue;
+                            }
+                        }
+                    }
+                    repl += step.replace[p];
+                    ++p;
+                }
+                value = std::regex_replace(value, rx, repl);
+            }
+        }
+
+        // 4. replacements[] — literal find+replace (all occurrences)
+        for (auto &rep : pol.replacements)
+        {
+            if (rep.find.empty())
+                continue;
+            std::string out;
+            size_t pos = 0;
+            while (true)
+            {
+                size_t found = value.find(rep.find, pos);
+                if (found == std::string::npos)
+                {
+                    out += value.substr(pos);
+                    break;
+                }
+                out += value.substr(pos, found - pos);
+                out += rep.replace;
+                pos = found + rep.find.size();
+            }
+            value = std::move(out);
+        }
+
+        // 5. output-filter[] — the final value must match every regex
+        for (auto &step : pol.outputFilter)
+        {
+            std::regex rx(step.regex);
+            if (!std::regex_match(value, rx))
+            {
+                outError = "[policy " + tag + "] output does not match required filter";
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     static std::string trim(const std::string &s)
     {
@@ -229,12 +340,19 @@ namespace tpp
                 }
             }
             RenderContext ctx{types, allFunctions};
+            ctx.activePolicy = function.policy;
+            ctx.policyRegistry = &policies;
             for (auto &p : function.params)
             {
                 if (boundArgs.contains(p.name))
                     ctx.pushBinding(p.name, boundArgs[p.name]);
             }
             std::string result = renderNodes(function.body, ctx);
+            if (!ctx.renderError.empty())
+            {
+                error = std::move(ctx.renderError);
+                return false;
+            }
             // Strip trailing newline — the template body naturally adds one for
             // the last line, but expected outputs don't include it
             if (!result.empty() && result.back() == '\n')
@@ -263,8 +381,17 @@ namespace tpp
             if constexpr (std::is_same_v<T, TextNode>) {
                 result += arg.text;
             } else if constexpr (std::is_same_v<T, InterpolationNode>) {
+                if (!ctx.renderError.empty()) return;
                 auto val = ctx.resolve(arg.expr);
                 auto str = ctx.jsonToString(val);
+                // Apply policy
+                std::string effPol = arg.policy.empty() ? ctx.activePolicy : arg.policy;
+                if (effPol != "none" && !effPol.empty() && ctx.policyRegistry)
+                {
+                    const Policy *pol = ctx.policyRegistry->find(effPol);
+                    if (pol && !applyPolicy(effPol, *pol, str, ctx.renderError))
+                        return;
+                }
                 auto lastNl = result.rfind('\n');
                 size_t col = (lastNl == std::string::npos) ? result.size() : result.size() - lastNl - 1;
                 if (col > 0 && str.find('\n') != std::string::npos) {
@@ -286,6 +413,8 @@ namespace tpp
             } else if constexpr (std::is_same_v<T, std::shared_ptr<ForNode>>) {
                 auto collection = ctx.resolve(arg->collectionExpr);
                 if (collection.is_array()) {
+                    std::string savedPolicy = ctx.activePolicy;
+                    if (!arg->policy.empty()) ctx.activePolicy = arg->policy;
                     for (size_t i = 0; i < collection.size(); ++i) {
                         ctx.pushBinding(arg->varName, collection[i]);
                         if (!arg->iteratorVarName.empty()) {
@@ -329,6 +458,7 @@ namespace tpp
                             }
                         }
                     }
+                    ctx.activePolicy = savedPolicy;
                 }
             } else if constexpr (std::is_same_v<T, std::shared_ptr<IfNode>>) {
                 auto val = ctx.resolve(arg->condExpr);
@@ -356,6 +486,8 @@ namespace tpp
             } else if constexpr (std::is_same_v<T, std::shared_ptr<SwitchNode>>) {
                 auto val = ctx.resolve(arg->expr);
                 if (val.is_object()) {
+                    std::string savedPolicy = ctx.activePolicy;
+                    if (!arg->policy.empty()) ctx.activePolicy = arg->policy;
                     for (auto &c : arg->cases) {
                         if (val.contains(c.tag)) {
                             if (!c.bindingName.empty()) {
@@ -372,6 +504,7 @@ namespace tpp
                             break;
                         }
                     }
+                    ctx.activePolicy = savedPolicy;
                 }
             } else if constexpr (std::is_same_v<T, std::shared_ptr<FunctionCallNode>>) {
                 // Find the function by name
@@ -388,7 +521,11 @@ namespace tpp
                         auto val = ctx.resolve(arg->arguments[i]);
                         ctx.pushBinding(targetFunc->params[i].name, val);
                     }
+                    // Propagate policy: function's own policy takes precedence; otherwise inherit caller's
+                    std::string savedPolicy = ctx.activePolicy;
+                    if (!targetFunc->policy.empty()) ctx.activePolicy = targetFunc->policy;
                     std::string callResult = renderNodes(targetFunc->body, ctx);
+                    ctx.activePolicy = savedPolicy;
                     // Strip trailing newline from function result
                     if (!callResult.empty() && callResult.back() == '\n')
                         callResult.pop_back();
@@ -401,6 +538,8 @@ namespace tpp
             } else if constexpr (std::is_same_v<T, std::shared_ptr<RenderViaNode>>) {
                 auto collection = ctx.resolve(arg->collectionExpr);
                 if (collection.is_array()) {
+                    std::string savedPolicy = ctx.activePolicy;
+                    if (!arg->policy.empty()) ctx.activePolicy = arg->policy;
                     for (size_t i = 0; i < collection.size(); ++i) {
                         // Find the right function overload
                         const TemplateFunction *targetFunc = nullptr;
@@ -444,7 +583,11 @@ namespace tpp
                                 }
                             }
                             ctx.pushBinding(targetFunc->params[0].name, elemVal);
+                            // Function's own policy takes precedence; otherwise inherit the render-via policy
+                            std::string funcSavedPolicy = ctx.activePolicy;
+                            if (!targetFunc->policy.empty()) ctx.activePolicy = targetFunc->policy;
                             std::string iterResult = renderNodes(targetFunc->body, ctx);
+                            ctx.activePolicy = funcSavedPolicy;
                             if (!iterResult.empty() && iterResult.back() == '\n')
                                 iterResult.pop_back();
                             ctx.popBinding();
@@ -457,6 +600,7 @@ namespace tpp
                             }
                         }
                     }
+                    ctx.activePolicy = savedPolicy;
                 }
             } }, node);
         }

@@ -25,6 +25,7 @@ struct tTestCase
 {
     std::string name;
     std::vector<SourceFile> sources;
+    std::vector<nlohmann::json> policies;
     nlohmann::json input;
     bool expectSuccess = true;
     std::string expectedOutput;
@@ -195,6 +196,20 @@ std::vector<tTestCase> GetTestCases()
                 testCase.sources.push_back({url, readFile(filePath), false});
             }
         }
+        for (const auto &policyEntry : config.value("replacement-policies", nlohmann::json::array()))
+        {
+            std::filesystem::path policyPath = entry.path() / policyEntry.get<std::string>();
+            std::ifstream pf(policyPath);
+            if (pf.is_open())
+            {
+                try
+                {
+                    testCase.policies.push_back(nlohmann::json::parse(
+                        std::string((std::istreambuf_iterator<char>(pf)), std::istreambuf_iterator<char>())));
+                }
+                catch (...) {}
+            }
+        }
 
         // Read input.json
         std::ifstream inputFile(entry.path() / "input.json");
@@ -279,6 +294,13 @@ TEST_P(AcceptanceTest, RunTestCase)
             compiler.add_types(src.content, fileDiags[i].diagnostics);
         else
             compiler.add_templates(src.content, fileDiags[i].diagnostics);
+    }
+
+    // Load policies
+    for (const auto &pol : testCase.policies)
+    {
+        std::string policyError;
+        compiler.add_policy(pol, policyError);
     }
 
     tpp::CompilerOutput output;
@@ -379,6 +401,11 @@ TEST_P(AcceptanceTest, CompareCompileByCLI)
         {
             compiler.add_templates(src.content, fileDiags.emplace_back(src.url).diagnostics);
         }
+    }
+    for (const auto &pol : testCase.policies)
+    {
+        std::string policyError;
+        compiler.add_policy(pol, policyError);
     }
     tpp::CompilerOutput expectedOutput;
     bool expectedSuccess = compiler.compile(expectedOutput);
