@@ -4,6 +4,7 @@
 #include <vector>
 #include <map>
 #include <optional>
+#include <regex>
 #include <nlohmann/json.hpp>
 
 namespace tpp
@@ -23,6 +24,8 @@ namespace tpp
     {
         std::string regex;
         std::string message;
+        // Pre-compiled; not serialized.
+        std::regex compiled_rx;
     };
 
     // One entry in the `require` or `output-filter` array.
@@ -32,7 +35,40 @@ namespace tpp
     {
         std::string regex;
         std::string replace; // empty = require-match only (no substitution)
+        // Pre-compiled; not serialized.
+        std::regex compiled_rx;
+        std::string compiled_replace; // replace with @subexpr_N@ → $N transformed
     };
+
+    // Transforms @subexpr_N@ → $N for use with std::regex_replace.
+    // Called once at policy-load time.
+    inline std::string precompile_replace(const std::string &replace)
+    {
+        std::string out;
+        out.reserve(replace.size());
+        size_t p = 0;
+        while (p < replace.size())
+        {
+            if (replace[p] == '@')
+            {
+                size_t end = replace.find('@', p + 1);
+                if (end != std::string::npos)
+                {
+                    std::string inner = replace.substr(p + 1, end - p - 1);
+                    if (inner.size() > 8 && inner.substr(0, 8) == "subexpr_")
+                    {
+                        out += '$';
+                        out += inner.substr(8);
+                        p = end + 1;
+                        continue;
+                    }
+                }
+            }
+            out += replace[p];
+            ++p;
+        }
+        return out;
+    }
 
     // One entry in the `replacements` array: literal-string find/replace.
     struct PolicyReplacement
@@ -103,6 +139,7 @@ namespace tpp
     {
         j.at("regex").get_to(v.regex);
         if (j.contains("message")) j.at("message").get_to(v.message);
+        v.compiled_rx = std::regex(v.regex);
     }
     inline void to_json(nlohmann::json &j, const PolicyRegexStep &v)
     { j = {{"regex", v.regex}, {"replace", v.replace}}; }
@@ -110,6 +147,8 @@ namespace tpp
     {
         j.at("regex").get_to(v.regex);
         if (j.contains("replace")) j.at("replace").get_to(v.replace);
+        v.compiled_rx = std::regex(v.regex);
+        if (!v.replace.empty()) v.compiled_replace = precompile_replace(v.replace);
     }
     inline void to_json(nlohmann::json &j, const PolicyReplacement &v)
     { j = {{"find", v.find}, {"replace", v.replace}}; }

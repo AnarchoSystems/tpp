@@ -21,7 +21,7 @@ struct SourceFile
     bool isTypes = false;
 };
 
-struct tTestCase
+struct tLoadedTestCase
 {
     std::string name;
     std::vector<SourceFile> sources;
@@ -32,6 +32,15 @@ struct tTestCase
     std::vector<tpp::DiagnosticLSPMessage> expectedDiagnostics;
     std::string getFunctionError;
     std::string renderError;
+};
+
+struct tTestCase
+{
+    std::string name;
+    std::filesystem::path path;
+    bool expectSuccess = true;
+
+    tLoadedTestCase extract() const;
 };
 
 void PrintTo(const tTestCase &testCase, std::ostream *os)
@@ -122,147 +131,115 @@ static std::vector<std::filesystem::path> expandPattern(const std::filesystem::p
     return results;
 }
 
+tLoadedTestCase tTestCase::extract() const
+{
+    tLoadedTestCase loaded;
+    loaded.name = name;
+
+    std::ifstream configFile(path / "tpp-config.json");
+    if (!configFile.is_open())
+        throw std::runtime_error("No tpp-config.json found in " + path.string());
+    nlohmann::json config;
+    try
+    {
+        config = nlohmann::json::parse(std::string(
+            (std::istreambuf_iterator<char>(configFile)),
+            std::istreambuf_iterator<char>()));
+    }
+    catch (const std::exception &e)
+    {
+        throw std::runtime_error("Invalid tpp-config.json in " + path.string() + ": " + e.what());
+    }
+
+    for (const auto &pattern : config.value("types", nlohmann::json::array()))
+    {
+        for (const auto &filePath : expandPattern(path, pattern.get<std::string>()))
+        {
+            std::string relPath = std::filesystem::relative(filePath, path).string();
+            std::string url = name + "/" + relPath;
+            loaded.sources.push_back({url, readFile(filePath), true});
+        }
+    }
+    for (const auto &pattern : config.value("templates", nlohmann::json::array()))
+    {
+        for (const auto &filePath : expandPattern(path, pattern.get<std::string>()))
+        {
+            std::string relPath = std::filesystem::relative(filePath, path).string();
+            std::string url = name + "/" + relPath;
+            loaded.sources.push_back({url, readFile(filePath), false});
+        }
+    }
+    for (const auto &policyEntry : config.value("replacement-policies", nlohmann::json::array()))
+    {
+        std::filesystem::path policyPath = path / policyEntry.get<std::string>();
+        std::ifstream pf(policyPath);
+        if (pf.is_open())
+        {
+            try
+            {
+                loaded.policies.push_back(nlohmann::json::parse(
+                    std::string((std::istreambuf_iterator<char>(pf)), std::istreambuf_iterator<char>())));
+            }
+            catch (...) {}
+        }
+    }
+
+    std::ifstream inputFile(path / "input.json");
+    if (!inputFile.is_open())
+        throw std::runtime_error("Failed to open input.json in " + path.string());
+    loaded.input = nlohmann::json::parse(
+        std::string((std::istreambuf_iterator<char>(inputFile)), std::istreambuf_iterator<char>()));
+
+    std::ifstream expectedOutputFile(path / "expected_output.txt");
+    if (expectedOutputFile.is_open())
+    {
+        loaded.expectSuccess = true;
+        loaded.expectedOutput = std::string(
+            (std::istreambuf_iterator<char>(expectedOutputFile)), std::istreambuf_iterator<char>());
+    }
+    else
+    {
+        loaded.expectSuccess = false;
+        std::ifstream expectedDiagnosticsFile(path / "expected_diagnostics.json");
+        if (expectedDiagnosticsFile.is_open())
+        {
+            auto j = nlohmann::json::parse(std::string(
+                (std::istreambuf_iterator<char>(expectedDiagnosticsFile)),
+                std::istreambuf_iterator<char>()));
+            loaded.expectedDiagnostics = j.get<std::vector<tpp::DiagnosticLSPMessage>>();
+        }
+        std::ifstream expectedErrorsFile(path / "expected_errors.json");
+        if (expectedErrorsFile.is_open())
+        {
+            auto j = nlohmann::json::parse(std::string(
+                (std::istreambuf_iterator<char>(expectedErrorsFile)),
+                std::istreambuf_iterator<char>()));
+            tErrors errs = j.get<tErrors>();
+            loaded.getFunctionError = errs.getFunctionError;
+            loaded.renderError = errs.renderError;
+        }
+    }
+
+    if (loaded.sources.empty())
+        throw std::runtime_error("No .tpp source files found in " + path.string());
+
+    return loaded;
+}
+
 std::vector<tTestCase> GetTestCases()
 {
     std::vector<tTestCase> testCases;
 
-    bool failed = false;
-
     for (const auto &entry : std::filesystem::directory_iterator("TestCases"))
     {
         if (!entry.is_directory())
-        {
             continue;
-        }
-
-        bool bHasContent = false;
-
-        for (const auto &file : std::filesystem::directory_iterator(entry.path()))
-        {
-            if (file.is_regular_file())
-            {
-                bHasContent = true;
-                break;
-            }
-        }
-
-        if (!bHasContent)
-        {
-            std::cerr << "Test case directory " << entry.path() << " is empty, skipping." << std::endl;
+        if (!std::filesystem::exists(entry.path() / "tpp-config.json"))
             continue;
-        }
-
-        auto &testCase = testCases.emplace_back();
-        testCase.name = entry.path().filename().string();
-
-        // Read tpp-config.json to determine which files are types vs templates
-        std::filesystem::path configPath = entry.path() / "tpp-config.json";
-        std::ifstream configFile(configPath);
-        if (!configFile.is_open())
-        {
-            std::cerr << "No tpp-config.json found in " << entry.path() << std::endl;
-            failed = true;
-            continue;
-        }
-        nlohmann::json config;
-        try
-        {
-            config = nlohmann::json::parse(std::string(
-                (std::istreambuf_iterator<char>(configFile)),
-                std::istreambuf_iterator<char>()));
-        }
-        catch (const std::exception &e)
-        {
-            std::cerr << "Invalid tpp-config.json in " << entry.path() << ": " << e.what() << std::endl;
-            failed = true;
-            continue;
-        }
-
-        for (const auto &pattern : config.value("types", nlohmann::json::array()))
-        {
-            for (const auto &filePath : expandPattern(entry.path(), pattern.get<std::string>()))
-            {
-                std::string relPath = std::filesystem::relative(filePath, entry.path()).string();
-                std::string url = testCase.name + "/" + relPath;
-                testCase.sources.push_back({url, readFile(filePath), true});
-            }
-        }
-        for (const auto &pattern : config.value("templates", nlohmann::json::array()))
-        {
-            for (const auto &filePath : expandPattern(entry.path(), pattern.get<std::string>()))
-            {
-                std::string relPath = std::filesystem::relative(filePath, entry.path()).string();
-                std::string url = testCase.name + "/" + relPath;
-                testCase.sources.push_back({url, readFile(filePath), false});
-            }
-        }
-        for (const auto &policyEntry : config.value("replacement-policies", nlohmann::json::array()))
-        {
-            std::filesystem::path policyPath = entry.path() / policyEntry.get<std::string>();
-            std::ifstream pf(policyPath);
-            if (pf.is_open())
-            {
-                try
-                {
-                    testCase.policies.push_back(nlohmann::json::parse(
-                        std::string((std::istreambuf_iterator<char>(pf)), std::istreambuf_iterator<char>())));
-                }
-                catch (...) {}
-            }
-        }
-
-        // Read input.json
-        std::ifstream inputFile(entry.path() / "input.json");
-        if (!inputFile.is_open())
-        {
-            std::cerr << "Failed to open input.json in " << entry.path() << std::endl;
-            failed = true;
-            continue;
-        }
-        testCase.input = nlohmann::json::parse(
-            std::string((std::istreambuf_iterator<char>(inputFile)), std::istreambuf_iterator<char>()));
-
-        // Determine success/failure expectation
-        std::ifstream expectedOutputFile(entry.path() / "expected_output.txt");
-        if (expectedOutputFile.is_open())
-        {
-            testCase.expectSuccess = true;
-            testCase.expectedOutput = std::string(
-                (std::istreambuf_iterator<char>(expectedOutputFile)), std::istreambuf_iterator<char>());
-        }
-        else
-        {
-            testCase.expectSuccess = false;
-            std::ifstream expectedDiagnosticsFile(entry.path() / "expected_diagnostics.json");
-            if (expectedDiagnosticsFile.is_open())
-            {
-                auto j = nlohmann::json::parse(std::string(
-                    (std::istreambuf_iterator<char>(expectedDiagnosticsFile)),
-                    std::istreambuf_iterator<char>()));
-                testCase.expectedDiagnostics = j.get<std::vector<tpp::DiagnosticLSPMessage>>();
-            }
-            std::ifstream expectedErrorsFile(entry.path() / "expected_errors.json");
-            if (expectedErrorsFile.is_open())
-            {
-                auto j = nlohmann::json::parse(std::string(
-                    (std::istreambuf_iterator<char>(expectedErrorsFile)),
-                    std::istreambuf_iterator<char>()));
-                tErrors errs = j.get<tErrors>();
-                testCase.getFunctionError = errs.getFunctionError;
-                testCase.renderError = errs.renderError;
-            }
-        }
-
-        if (testCase.sources.empty())
-        {
-            std::cerr << "No .tpp source files found in " << entry.path() << std::endl;
-            failed = true;
-        }
-    }
-
-    if (failed)
-    {
-        throw std::runtime_error("Failed to load test cases");
+        auto &tc = testCases.emplace_back();
+        tc.name = entry.path().filename().string();
+        tc.path = entry.path();
+        tc.expectSuccess = std::filesystem::exists(entry.path() / "expected_output.txt");
     }
 
     return testCases;
@@ -274,7 +251,7 @@ class AcceptanceTest : public ::testing::TestWithParam<tTestCase>
 
 TEST_P(AcceptanceTest, RunTestCase)
 {
-    const tTestCase &testCase = GetParam();
+    const auto testCase = GetParam().extract();
 
     tpp::Compiler compiler;
 
@@ -384,7 +361,7 @@ tCLIOutput runCommand(const std::string &command)
 
 TEST_P(AcceptanceTest, CompareCompileByCLI)
 {
-    auto testCase = GetParam();
+    const auto testCase = GetParam().extract();
 
     auto cliOutput = runCommand(TPP_EXE " " + std::filesystem::absolute("TestCases/" + testCase.name).string() + " 2>&1");
 
@@ -452,7 +429,7 @@ class AcceptanceTestOnlyPositives : public ::testing::TestWithParam<tTestCase>
 
 TEST_P(AcceptanceTestOnlyPositives, CompareRenderByCLI)
 {
-    auto testCase = GetParam();
+    const auto testCase = GetParam().extract();
 
     if (!testCase.expectSuccess)
     {

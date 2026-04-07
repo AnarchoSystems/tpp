@@ -6,6 +6,7 @@
 #include <sstream>
 #include <cmath>
 #include <regex>
+#include <unordered_map>
 
 namespace tpp
 {
@@ -20,7 +21,10 @@ namespace tpp
         const std::vector<TemplateFunction> &allFunctions;
         std::vector<std::pair<std::string, nlohmann::json>> bindings;
         std::string activePolicy;
+        const Policy *activePolicyPtr = nullptr;       // cached pointer; kept in sync with activePolicy
         const PolicyRegistry *policyRegistry = nullptr;
+        // Maps function name -> indices into allFunctions for O(1) lookup
+        std::unordered_map<std::string, std::vector<size_t>> functionIndex;
         std::string renderError;
 
         void pushBinding(const std::string &name, const nlohmann::json &val)
@@ -104,8 +108,7 @@ namespace tpp
         // 2. reject-if
         if (pol.rejectIf.has_value())
         {
-            std::regex rx(pol.rejectIf->regex);
-            if (std::regex_search(value, rx))
+            if (std::regex_search(value, pol.rejectIf->compiled_rx))
             {
                 outError = "[policy " + tag + "] " + pol.rejectIf->message;
                 return false;
@@ -115,38 +118,15 @@ namespace tpp
         // 3. require[] — each step MUST match; if it does, apply optional replacement
         for (auto &step : pol.require)
         {
-            std::regex rx(step.regex);
             std::smatch m;
-            if (!std::regex_search(value, m, rx))
+            if (!std::regex_search(value, m, step.compiled_rx))
             {
                 outError = "[policy " + tag + "] value does not match required pattern";
                 return false;
             }
             if (!step.replace.empty())
             {
-                // Convert @subexpr_N@ → $N for std::regex_replace
-                std::string repl;
-                size_t p = 0;
-                while (p < step.replace.size())
-                {
-                    if (step.replace[p] == '@')
-                    {
-                        size_t end = step.replace.find('@', p + 1);
-                        if (end != std::string::npos)
-                        {
-                            std::string inner = step.replace.substr(p + 1, end - p - 1);
-                            if (inner.substr(0, 8) == "subexpr_")
-                            {
-                                repl += "$" + inner.substr(8);
-                                p = end + 1;
-                                continue;
-                            }
-                        }
-                    }
-                    repl += step.replace[p];
-                    ++p;
-                }
-                value = std::regex_replace(value, rx, repl);
+                value = std::regex_replace(value, step.compiled_rx, step.compiled_replace);
             }
         }
 
@@ -175,8 +155,7 @@ namespace tpp
         // 5. output-filter[] — the final value must match every regex
         for (auto &step : pol.outputFilter)
         {
-            std::regex rx(step.regex);
-            if (!std::regex_match(value, rx))
+            if (!std::regex_match(value, step.compiled_rx))
             {
                 outError = "[policy " + tag + "] output does not match required filter";
                 return false;
@@ -342,6 +321,12 @@ namespace tpp
             RenderContext ctx{types, allFunctions};
             ctx.activePolicy = function.policy;
             ctx.policyRegistry = &policies;
+            // Cache pointer for the function-level active policy
+            if (!ctx.activePolicy.empty() && ctx.activePolicy != "none")
+                ctx.activePolicyPtr = policies.find(ctx.activePolicy);
+            // Build function index for O(1) overload lookup
+            for (size_t fi = 0; fi < allFunctions.size(); ++fi)
+                ctx.functionIndex[allFunctions[fi].name].push_back(fi);
             for (auto &p : function.params)
             {
                 if (boundArgs.contains(p.name))
@@ -385,10 +370,14 @@ namespace tpp
                 auto val = ctx.resolve(arg.expr);
                 auto str = ctx.jsonToString(val);
                 // Apply policy
-                std::string effPol = arg.policy.empty() ? ctx.activePolicy : arg.policy;
+                const std::string &effPol = arg.policy.empty() ? ctx.activePolicy : arg.policy;
                 if (effPol != "none" && !effPol.empty() && ctx.policyRegistry)
                 {
-                    const Policy *pol = ctx.policyRegistry->find(effPol);
+                    // Use cached pointer when using the active (inherited) policy;
+                    // only call find() for a per-node policy override.
+                    const Policy *pol = arg.policy.empty()
+                        ? ctx.activePolicyPtr
+                        : ctx.policyRegistry->find(effPol);
                     if (pol && !applyPolicy(effPol, *pol, str, ctx.renderError))
                         return;
                 }
@@ -414,7 +403,11 @@ namespace tpp
                 auto collection = ctx.resolve(arg->collectionExpr);
                 if (collection.is_array()) {
                     std::string savedPolicy = ctx.activePolicy;
-                    if (!arg->policy.empty()) ctx.activePolicy = arg->policy;
+                    const Policy *savedPolicyPtr = ctx.activePolicyPtr;
+                    if (!arg->policy.empty()) {
+                        ctx.activePolicy = arg->policy;
+                        ctx.activePolicyPtr = ctx.policyRegistry ? ctx.policyRegistry->find(arg->policy) : nullptr;
+                    }
                     for (size_t i = 0; i < collection.size(); ++i) {
                         ctx.pushBinding(arg->varName, collection[i]);
                         if (!arg->enumeratorName.empty()) {
@@ -459,6 +452,7 @@ namespace tpp
                         }
                     }
                     ctx.activePolicy = savedPolicy;
+                    ctx.activePolicyPtr = savedPolicyPtr;
                 }
             } else if constexpr (std::is_same_v<T, std::shared_ptr<IfNode>>) {
                 auto val = ctx.resolve(arg->condExpr);
@@ -487,7 +481,11 @@ namespace tpp
                 auto val = ctx.resolve(arg->expr);
                 if (val.is_object()) {
                     std::string savedPolicy = ctx.activePolicy;
-                    if (!arg->policy.empty()) ctx.activePolicy = arg->policy;
+                    const Policy *savedPolicyPtr = ctx.activePolicyPtr;
+                    if (!arg->policy.empty()) {
+                        ctx.activePolicy = arg->policy;
+                        ctx.activePolicyPtr = ctx.policyRegistry ? ctx.policyRegistry->find(arg->policy) : nullptr;
+                    }
                     for (auto &c : arg->cases) {
                         if (val.contains(c.tag)) {
                             if (!c.bindingName.empty()) {
@@ -505,16 +503,14 @@ namespace tpp
                         }
                     }
                     ctx.activePolicy = savedPolicy;
+                    ctx.activePolicyPtr = savedPolicyPtr;
                 }
             } else if constexpr (std::is_same_v<T, std::shared_ptr<FunctionCallNode>>) {
-                // Find the function by name
+                // Find the function by name via index (O(1))
                 const TemplateFunction *targetFunc = nullptr;
-                for (auto &f : ctx.allFunctions) {
-                    if (f.name == arg->functionName) {
-                        targetFunc = &f;
-                        break;
-                    }
-                }
+                auto fcIt = ctx.functionIndex.find(arg->functionName);
+                if (fcIt != ctx.functionIndex.end() && !fcIt->second.empty())
+                    targetFunc = &ctx.allFunctions[fcIt->second[0]];
                 if (targetFunc) {
                     // Evaluate arguments and push positional bindings
                     for (size_t i = 0; i < arg->arguments.size() && i < targetFunc->params.size(); ++i) {
@@ -523,9 +519,14 @@ namespace tpp
                     }
                     // Propagate policy: function's own policy takes precedence; otherwise inherit caller's
                     std::string savedPolicy = ctx.activePolicy;
-                    if (!targetFunc->policy.empty()) ctx.activePolicy = targetFunc->policy;
+                    const Policy *savedPolicyPtr = ctx.activePolicyPtr;
+                    if (!targetFunc->policy.empty()) {
+                        ctx.activePolicy = targetFunc->policy;
+                        ctx.activePolicyPtr = ctx.policyRegistry ? ctx.policyRegistry->find(targetFunc->policy) : nullptr;
+                    }
                     std::string callResult = renderNodes(targetFunc->body, ctx);
                     ctx.activePolicy = savedPolicy;
+                    ctx.activePolicyPtr = savedPolicyPtr;
                     // Strip trailing newline from function result
                     if (!callResult.empty() && callResult.back() == '\n')
                         callResult.pop_back();
@@ -539,15 +540,21 @@ namespace tpp
                 auto collection = ctx.resolve(arg->collectionExpr);
                 if (collection.is_array()) {
                     std::string savedPolicy = ctx.activePolicy;
-                    if (!arg->policy.empty()) ctx.activePolicy = arg->policy;
+                    const Policy *savedPolicyPtr = ctx.activePolicyPtr;
+                    if (!arg->policy.empty()) {
+                        ctx.activePolicy = arg->policy;
+                        ctx.activePolicyPtr = ctx.policyRegistry ? ctx.policyRegistry->find(arg->policy) : nullptr;
+                    }
+                    // Hoist overload resolution out of the per-item loop (O(F) -> O(F + N))
+                    std::vector<const TemplateFunction *> overloads;
+                    auto rvIt = ctx.functionIndex.find(arg->functionName);
+                    if (rvIt != ctx.functionIndex.end()) {
+                        for (size_t idx : rvIt->second)
+                            overloads.push_back(&ctx.allFunctions[idx]);
+                    }
                     for (size_t i = 0; i < collection.size(); ++i) {
-                        // Find the right function overload
+                        // Dispatch to correct overload for this item
                         const TemplateFunction *targetFunc = nullptr;
-                        std::vector<const TemplateFunction *> overloads;
-                        for (auto &f : ctx.allFunctions) {
-                            if (f.name == arg->functionName)
-                                overloads.push_back(&f);
-                        }
                         if (overloads.size() == 1) {
                             targetFunc = overloads[0];
                         } else if (overloads.size() > 1 && collection[i].is_object()) {
@@ -585,9 +592,14 @@ namespace tpp
                             ctx.pushBinding(targetFunc->params[0].name, elemVal);
                             // Function's own policy takes precedence; otherwise inherit the render-via policy
                             std::string funcSavedPolicy = ctx.activePolicy;
-                            if (!targetFunc->policy.empty()) ctx.activePolicy = targetFunc->policy;
+                            const Policy *funcSavedPolicyPtr = ctx.activePolicyPtr;
+                            if (!targetFunc->policy.empty()) {
+                                ctx.activePolicy = targetFunc->policy;
+                                ctx.activePolicyPtr = ctx.policyRegistry ? ctx.policyRegistry->find(targetFunc->policy) : nullptr;
+                            }
                             std::string iterResult = renderNodes(targetFunc->body, ctx);
                             ctx.activePolicy = funcSavedPolicy;
+                            ctx.activePolicyPtr = funcSavedPolicyPtr;
                             if (!iterResult.empty() && iterResult.back() == '\n')
                                 iterResult.pop_back();
                             ctx.popBinding();
@@ -601,6 +613,7 @@ namespace tpp
                         }
                     }
                     ctx.activePolicy = savedPolicy;
+                    ctx.activePolicyPtr = savedPolicyPtr;
                 }
             } }, node);
         }

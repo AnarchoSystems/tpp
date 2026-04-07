@@ -71,6 +71,7 @@ namespace tpp
             PolicyRejectIf ri;
             ri.regex   = rj.at("regex").get<std::string>();
             if (rj.contains("message")) ri.message = rj.at("message").get<std::string>();
+            ri.compiled_rx = std::regex(ri.regex);
             pol.rejectIf = ri;
         }
 
@@ -95,6 +96,8 @@ namespace tpp
                 PolicyRegexStep step;
                 step.regex = item.at("regex").get<std::string>();
                 if (item.contains("replace")) step.replace = item.at("replace").get<std::string>();
+                step.compiled_rx = std::regex(step.regex);
+                if (!step.replace.empty()) step.compiled_replace = precompile_replace(step.replace);
                 out.push_back(std::move(step));
             }
             return true;
