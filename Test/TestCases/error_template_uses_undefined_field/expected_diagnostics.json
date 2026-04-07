@@ -1,6 +1,6 @@
 [
     {
-        "uri": "template_uses_undefined_field/template.tpp",
+        "uri": "error_template_uses_undefined_field/template.tpp",
         "diagnostics": [
             {
                 "range": {

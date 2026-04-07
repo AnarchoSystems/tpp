@@ -1,6 +1,6 @@
 [
 	{
-		"uri": "switch_missing_case_check_exhaustive/template.tpp",
+		"uri": "error_switch_missing_case_check_exhaustive_block/template.tpp",
 		"diagnostics": [
 			{
 				"range": {

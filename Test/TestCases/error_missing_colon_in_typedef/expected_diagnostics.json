@@ -1,6 +1,6 @@
 [
     {
-        "uri": "missing_colon_in_typedef/typedefs.tpp.types",
+        "uri": "error_missing_colon_in_typedef/typedefs.tpp.types",
         "diagnostics": [
             {
                 "range": {
