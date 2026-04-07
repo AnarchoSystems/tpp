@@ -22,6 +22,7 @@ set(JIT_BUILD_ARCH x86_64-Linux)
 include(FetchContent)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
+include(TppHelpers)
 
 FetchContent_Declare(
   nlohmann_json

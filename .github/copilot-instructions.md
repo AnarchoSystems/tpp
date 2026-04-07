@@ -13,7 +13,7 @@
 | Public API | `include/tpp/` | `Compiler.h`, `Types.h`, `AST.h`, `Diagnostic.h`, etc. |
 | Internal headers | `tpp/` | `TypedefParser.h`, `TemplateParser.h`, `Tokenizer.h`, `Parser.h` |
 | CLI tool | `Executables/tpp/Main.cc` | Command-line entry point |
-| `tpp_library` macro | `cmake/TppHelpers.cmake` | CMake helper consumed by downstream test targets |
+| `tpp_add` macro | `cmake/TppHelpers.cmake` | CMake helper consumed by downstream test targets |
 
 All logic lives in the `tpp` namespace.
 

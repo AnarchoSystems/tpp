@@ -8,9 +8,8 @@
 #include <fstream>
 #include <iostream>
 
-#include "Types.h"
-#include "Functions.h"
-#include "Implementation.h"
+#include "make_stat_test_types.h"
+#include "make_stat_test_functions.h"
 
 static std::string readFile(const std::filesystem::path &path)
 {
