@@ -1,6 +1,6 @@
 [
     {
-        "uri": "error_duplicate_type/second.tpp.types",
+        "uri": "error_duplicate_type/second.tpp",
         "diagnostics": [
             {
                 "range": {

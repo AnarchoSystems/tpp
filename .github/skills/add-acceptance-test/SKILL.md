@@ -21,22 +21,37 @@ The test runner (`Acceptance.cc`) discovers all subdirectories automatically —
 
 | File | Purpose |
 |---|---|
-| `typedefs.tpp.types` | Type definitions (structs, variants). May be empty. |
+| `tpp-config.json` | Declares which `.tpp` files are type definitions and which are templates. |
 | `template.tpp` | Template source. Must contain a `template main(...)` function ending with `END`. |
 | `input.json` | JSON object with runtime input data. Use `{}` when `main` takes no parameters. |
 | `expected_output.txt` **or** `expected_errors.json` **or** `expected_diagnostics.json` | The expected result — see [formats reference](./references/expected-formats.md). |
 
-**Multiple source files are allowed.** Any file ending in `.tpp.types` is treated as type definitions;
-any file ending in `.tpp` is treated as a template source. All type files are processed before template
-files (sorted alphabetically within each group). This lets you split types or templates across several files.
+**Multiple source files are allowed.** List type files under `"types"` and template files under `"templates"` in `tpp-config.json`. Files are processed in the order they appear in the config (types before templates). This lets you split types or templates across several files.
 
 ## Procedure
 
 ### Step 1 — Choose the test name
 Follow the naming convention above. The directory name becomes the test name in CTest output.
 
-### Step 2 — Write `typedefs.tpp.types`
-Define any structs or variants needed. Leave the file empty if none are needed.
+### Step 2 — Write `tpp-config.json`
+Declare which `.tpp` files contain type definitions and which are templates. Use `"types": []` when no custom types are needed.
+
+```json
+{
+    "types": ["typedefs.tpp"],
+    "templates": ["template.tpp"]
+}
+```
+
+If the test needs no types:
+```json
+{"types": [], "templates": ["template.tpp"]}
+```
+
+Type files are plain `.tpp` files — the config, not the file extension, determines their role.
+
+### Step 3 — Write the type definitions file (if needed)
+If you listed a types file in `tpp-config.json`, create it and define any structs or variants.
 
 ```
 struct Point
@@ -46,7 +61,7 @@ struct Point
 }
 ```
 
-### Step 3 — Write `template.tpp`
+### Step 4 — Write `template.tpp`
 The entry point is always `template main(...)`. Use `@expr@` for interpolation and structural
 directives (`@for@`, `@if@`, `@switch@`, `@end for@`, etc.) for control flow.
 
@@ -56,14 +71,14 @@ template main(p: Point)
 END
 ```
 
-### Step 4 — Write `input.json`
+### Step 5 — Write `input.json`
 Provide a JSON object matching the parameters of `main`. Use `{}` for no parameters.
 
 ```json
 {"p": {"x": 3, "y": 7}}
 ```
 
-### Step 5 — Write the expected result file
+### Step 6 — Write the expected result file
 Choose **exactly one** of the three formats:
 
 - **Success** → `expected_output.txt`: the rendered string, **no trailing newline**
@@ -72,7 +87,7 @@ Choose **exactly one** of the three formats:
 
 See [expected formats reference](./references/expected-formats.md) for schemas and examples.
 
-### Step 6 — Build and run the new test
+### Step 7 — Build and run the new test
 Use the `test` skill to build and verify:
 1. `Build_CMakeTools` — compile
 2. `RunCtest_CMakeTools` — confirm only the new test (and all others) pass
@@ -81,6 +96,6 @@ If the test fails, compare actual vs expected and fix the expected output file o
 
 ## Key Rules
 - `expected_output.txt` must **not** end with a newline — the compiler strips the trailing `\n`
-- For diagnostics, `uri` is exactly `<test-name>/<filename>` — the relative path of the file that emitted the error (e.g. `error_undefined_type/typedefs.tpp.types` or `my_test/template.tpp`)
+- For diagnostics, `uri` is exactly `<test-name>/<filename>` — the relative path of the file that emitted the error (e.g. `error_undefined_type/typedefs.tpp` or `my_test/template.tpp`)
 - `severity` in diagnostics must be the string `"error"` (lowercase)
 - Line and character numbers in diagnostic ranges are **0-based**

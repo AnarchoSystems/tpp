@@ -1,6 +1,6 @@
 [
     {
-        "uri": "error_undefined_type/typedefs.tpp.types",
+        "uri": "error_undefined_type/typedefs.tpp",
         "diagnostics": [
             {
                 "range": {

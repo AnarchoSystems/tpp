@@ -1,12 +1,13 @@
 // usage: make-stat-test <input_folder>
-// Reads .tpp/.tpp.types files from input_folder, compiles them, extracts the
-// main function's parameter info, and renders a test file (to stdout).
+// Reads .tpp files from input_folder according to tpp-config.json, compiles them,
+// extracts the main function's parameter info, and renders a test file (to stdout).
 
 #include <tpp/Compiler.h>
 #include <nlohmann/json.hpp>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <algorithm>
 
 #include "make_stat_test_types.h"
 #include "make_stat_test_functions.h"
@@ -16,6 +17,66 @@ static std::string readFile(const std::filesystem::path &path)
     std::ifstream f(path);
     return std::string((std::istreambuf_iterator<char>(f)),
                        std::istreambuf_iterator<char>());
+}
+
+// Returns true if text matches the glob pattern (supports '*' wildcard only).
+static bool matchGlob(const std::string &pattern, const std::string &text)
+{
+    size_t pi = 0, ti = 0, starPos = std::string::npos, matchPos = 0;
+    while (ti < text.size())
+    {
+        if (pi < pattern.size() && (pattern[pi] == '?' || pattern[pi] == text[ti]))
+        {
+            ++pi; ++ti;
+        }
+        else if (pi < pattern.size() && pattern[pi] == '*')
+        {
+            starPos = pi++;
+            matchPos = ti;
+        }
+        else if (starPos != std::string::npos)
+        {
+            pi = starPos + 1;
+            ti = ++matchPos;
+        }
+        else
+        {
+            return false;
+        }
+    }
+    while (pi < pattern.size() && pattern[pi] == '*')
+        ++pi;
+    return pi == pattern.size();
+}
+
+// Expands a single config pattern to a sorted list of file paths.
+static std::vector<std::filesystem::path> expandPattern(const std::filesystem::path &baseDir, const std::string &pattern)
+{
+    std::filesystem::path patPath(pattern);
+    std::string filename = patPath.filename().string();
+    std::filesystem::path parentDir = baseDir / patPath.parent_path();
+
+    if (filename.find('*') == std::string::npos)
+    {
+        return {baseDir / pattern};
+    }
+
+    std::vector<std::filesystem::path> results;
+    if (std::filesystem::is_directory(parentDir))
+    {
+        for (const auto &entry : std::filesystem::directory_iterator(parentDir))
+        {
+            if (!entry.is_regular_file())
+                continue;
+            auto name = entry.path().filename().string();
+            if (name.size() < 4 || name.substr(name.size() - 4) != ".tpp")
+                continue;
+            if (matchGlob(filename, name))
+                results.push_back(entry.path());
+        }
+        std::sort(results.begin(), results.end());
+    }
+    return results;
 }
 
 static std::string typeRefToCppStringNs(const tpp::TypeRef &t, const std::string &ns);
@@ -69,22 +130,43 @@ int main(int argc, char *argv[])
     std::filesystem::path testDir(argv[1]);
     std::string testName = testDir.filename().string();
 
-    // Collect .tpp and .tpp.types files
+    // Read tpp-config.json
+    std::filesystem::path configPath = testDir / "tpp-config.json";
+    std::ifstream configFile(configPath);
+    if (!configFile.is_open())
+    {
+        std::cerr << testDir.string() << ": error: tpp-config.json not found" << std::endl;
+        return EXIT_FAILURE;
+    }
+    nlohmann::json config;
+    try
+    {
+        config = nlohmann::json::parse(std::string(
+            (std::istreambuf_iterator<char>(configFile)),
+            std::istreambuf_iterator<char>()));
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << configPath.string() << ": error: invalid JSON: " << e.what() << std::endl;
+        return EXIT_FAILURE;
+    }
+
+    // Collect .tpp files in config order: types first, then templates
     struct FileEntry
     {
         std::filesystem::path path;
         bool isTypes;
     };
     std::vector<FileEntry> fileEntries;
-    for (const auto &entry : std::filesystem::recursive_directory_iterator(testDir))
+    for (const auto &pattern : config.value("types", nlohmann::json::array()))
     {
-        if (!entry.is_regular_file())
-            continue;
-        auto s = entry.path().string();
-        if (s.size() > 10 && s.compare(s.size() - 10, 10, ".tpp.types") == 0)
-            fileEntries.push_back({entry.path(), true});
-        else if (s.size() > 4 && s.compare(s.size() - 4, 4, ".tpp") == 0)
-            fileEntries.push_back({entry.path(), false});
+        for (const auto &p : expandPattern(testDir, pattern.get<std::string>()))
+            fileEntries.push_back({p, true});
+    }
+    for (const auto &pattern : config.value("templates", nlohmann::json::array()))
+    {
+        for (const auto &p : expandPattern(testDir, pattern.get<std::string>()))
+            fileEntries.push_back({p, false});
     }
 
     tpp::Compiler compiler;

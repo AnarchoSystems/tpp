@@ -61,6 +61,66 @@ static std::string readFile(const std::filesystem::path &path)
     return std::string((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
 }
 
+// Returns true if text matches the glob pattern (supports '*' wildcard only).
+static bool matchGlob(const std::string &pattern, const std::string &text)
+{
+    size_t pi = 0, ti = 0, starPos = std::string::npos, matchPos = 0;
+    while (ti < text.size())
+    {
+        if (pi < pattern.size() && (pattern[pi] == '?' || pattern[pi] == text[ti]))
+        {
+            ++pi; ++ti;
+        }
+        else if (pi < pattern.size() && pattern[pi] == '*')
+        {
+            starPos = pi++;
+            matchPos = ti;
+        }
+        else if (starPos != std::string::npos)
+        {
+            pi = starPos + 1;
+            ti = ++matchPos;
+        }
+        else
+        {
+            return false;
+        }
+    }
+    while (pi < pattern.size() && pattern[pi] == '*')
+        ++pi;
+    return pi == pattern.size();
+}
+
+// Expands a single config pattern to a sorted list of .tpp file paths.
+static std::vector<std::filesystem::path> expandPattern(const std::filesystem::path &baseDir, const std::string &pattern)
+{
+    std::filesystem::path patPath(pattern);
+    std::string filename = patPath.filename().string();
+    std::filesystem::path parentDir = baseDir / patPath.parent_path();
+
+    if (filename.find('*') == std::string::npos)
+    {
+        return {baseDir / pattern};
+    }
+
+    std::vector<std::filesystem::path> results;
+    if (std::filesystem::is_directory(parentDir))
+    {
+        for (const auto &entry : std::filesystem::directory_iterator(parentDir))
+        {
+            if (!entry.is_regular_file())
+                continue;
+            auto name = entry.path().filename().string();
+            if (name.size() < 4 || name.substr(name.size() - 4) != ".tpp")
+                continue;
+            if (matchGlob(filename, name))
+                results.push_back(entry.path());
+        }
+        std::sort(results.begin(), results.end());
+    }
+    return results;
+}
+
 std::vector<tTestCase> GetTestCases()
 {
     std::vector<tTestCase> testCases;
@@ -94,32 +154,47 @@ std::vector<tTestCase> GetTestCases()
         auto &testCase = testCases.emplace_back();
         testCase.name = entry.path().filename().string();
 
-        // Collect source files (.tpp.types and .tpp), skip everything else
-        for (const auto &file : std::filesystem::directory_iterator(entry.path()))
+        // Read tpp-config.json to determine which files are types vs templates
+        std::filesystem::path configPath = entry.path() / "tpp-config.json";
+        std::ifstream configFile(configPath);
+        if (!configFile.is_open())
         {
-            if (!file.is_regular_file())
-                continue;
-            std::string filename = file.path().filename().string();
-            std::string url = testCase.name + "/" + filename;
-
-            if (filename.size() > 10 && filename.substr(filename.size() - 10) == ".tpp.types")
-            {
-                testCase.sources.push_back({url, readFile(file.path()), true});
-            }
-            else if (filename.size() > 4 && filename.substr(filename.size() - 4) == ".tpp")
-            {
-                testCase.sources.push_back({url, readFile(file.path()), false});
-            }
+            std::cerr << "No tpp-config.json found in " << entry.path() << std::endl;
+            failed = true;
+            continue;
+        }
+        nlohmann::json config;
+        try
+        {
+            config = nlohmann::json::parse(std::string(
+                (std::istreambuf_iterator<char>(configFile)),
+                std::istreambuf_iterator<char>()));
+        }
+        catch (const std::exception &e)
+        {
+            std::cerr << "Invalid tpp-config.json in " << entry.path() << ": " << e.what() << std::endl;
+            failed = true;
+            continue;
         }
 
-        // Sort: types files first, then template files; alphabetically within each group
-        std::sort(testCase.sources.begin(), testCase.sources.end(),
-                  [](const SourceFile &a, const SourceFile &b)
-                  {
-                      if (a.isTypes != b.isTypes)
-                          return a.isTypes > b.isTypes; // types first
-                      return a.url < b.url;
-                  });
+        for (const auto &pattern : config.value("types", nlohmann::json::array()))
+        {
+            for (const auto &filePath : expandPattern(entry.path(), pattern.get<std::string>()))
+            {
+                std::string relPath = std::filesystem::relative(filePath, entry.path()).string();
+                std::string url = testCase.name + "/" + relPath;
+                testCase.sources.push_back({url, readFile(filePath), true});
+            }
+        }
+        for (const auto &pattern : config.value("templates", nlohmann::json::array()))
+        {
+            for (const auto &filePath : expandPattern(entry.path(), pattern.get<std::string>()))
+            {
+                std::string relPath = std::filesystem::relative(filePath, entry.path()).string();
+                std::string url = testCase.name + "/" + relPath;
+                testCase.sources.push_back({url, readFile(filePath), false});
+            }
+        }
 
         // Read input.json
         std::ifstream inputFile(entry.path() / "input.json");
@@ -165,7 +240,7 @@ std::vector<tTestCase> GetTestCases()
 
         if (testCase.sources.empty())
         {
-            std::cerr << "No .tpp or .tpp.types source files found in " << entry.path() << std::endl;
+            std::cerr << "No .tpp source files found in " << entry.path() << std::endl;
             failed = true;
         }
     }

@@ -1,12 +1,15 @@
 #include <tpp/Compiler.h>
+#include <nlohmann/json.hpp>
 #include <iostream>
 #include <fstream>
 #include <filesystem>
+#include <algorithm>
 
+namespace fs = std::filesystem;
 using namespace tpp;
 
 // input: a single folder. if none is specified, use working directory.
-// recursively find all .tpp and .tpp.types files, add either as types or as templates.
+// reads tpp-config.json in that folder which specifies which .tpp files are types and which are templates.
 // finally, compile.
 // if not successful, print diagnostics to stderr in a format that vscode's problem matcher gcc can understand it.
 // if successful, serialize the CompilerOutput to stdout as JSON.
@@ -14,6 +17,69 @@ using namespace tpp;
 // -h, --help: print usage info
 // -v, --verbose: this run is not meant to be machine readable, pretty print any output and print what you're doing to stdout
 // --log <file>: also log output to the specified file (for debugging tpp itself)
+
+// Returns true if the string matches the glob pattern (supports '*' wildcard only).
+static bool matchGlob(const std::string &pattern, const std::string &text)
+{
+    size_t pi = 0, ti = 0, starPos = std::string::npos, matchPos = 0;
+    while (ti < text.size())
+    {
+        if (pi < pattern.size() && (pattern[pi] == '?' || pattern[pi] == text[ti]))
+        {
+            ++pi; ++ti;
+        }
+        else if (pi < pattern.size() && pattern[pi] == '*')
+        {
+            starPos = pi++;
+            matchPos = ti;
+        }
+        else if (starPos != std::string::npos)
+        {
+            pi = starPos + 1;
+            ti = ++matchPos;
+        }
+        else
+        {
+            return false;
+        }
+    }
+    while (pi < pattern.size() && pattern[pi] == '*')
+        ++pi;
+    return pi == pattern.size();
+}
+
+// Expands a single config pattern to a sorted list of .tpp file paths.
+// If the pattern contains no '*', returns the single path directly.
+// If it contains '*', scans the parent directory and returns matching .tpp files.
+static std::vector<fs::path> expandPattern(const fs::path &baseDir, const std::string &pattern)
+{
+    fs::path patPath(pattern);
+    std::string filename = patPath.filename().string();
+    fs::path parentDir = baseDir / patPath.parent_path();
+
+    if (filename.find('*') == std::string::npos)
+    {
+        // Literal path — return as-is (file may or may not exist; errors surface later)
+        return {baseDir / pattern};
+    }
+
+    std::vector<fs::path> results;
+    if (fs::is_directory(parentDir))
+    {
+        for (const auto &entry : fs::directory_iterator(parentDir))
+        {
+            if (!entry.is_regular_file())
+                continue;
+            auto name = entry.path().filename().string();
+            if (name.size() < 4 || name.substr(name.size() - 4) != ".tpp")
+                continue;
+            if (matchGlob(filename, name))
+                results.push_back(entry.path());
+        }
+        std::sort(results.begin(), results.end());
+    }
+    return results;
+}
 
 struct tppApp
 {
@@ -44,7 +110,11 @@ tppApp::tppApp(int argc, char *argv[])
                          "Options:\n"
                          "  -h, --help       Show this help message\n"
                          "  -v, --verbose    Print verbose output\n"
-                         "  --log <file>     Log output to the specified file\n";
+                         "  --log <file>     Log output to the specified file\n"
+                         "\n"
+                         "The folder must contain a tpp-config.json file specifying which .tpp files\n"
+                         "are type definitions and which are templates:\n"
+                         "  {\"types\": [\"types.tpp\", \"types/*\"], \"templates\": [\"templates/*\"]}\n";
             exit(0);
         }
         else if (arg == "-v" || arg == "--verbose")
@@ -109,6 +179,29 @@ void tppApp::log(const std::string &message)
 
 void tppApp::run()
 {
+    // Read tpp-config.json from the input directory
+    fs::path configPath = fs::path(inputDirectory) / "tpp-config.json";
+    nlohmann::json config;
+    {
+        std::ifstream configFile(configPath);
+        if (!configFile.is_open())
+        {
+            std::cerr << "Error: " << configPath.string() << ": tpp-config.json not found\n";
+            exit(1);
+        }
+        try
+        {
+            config = nlohmann::json::parse(std::string(
+                (std::istreambuf_iterator<char>(configFile)),
+                std::istreambuf_iterator<char>()));
+        }
+        catch (const std::exception &e)
+        {
+            std::cerr << "Error: " << configPath.string() << ": invalid JSON: " << e.what() << "\n";
+            exit(1);
+        }
+    }
+
     // Collect file paths first so we can reserve diags to the exact size needed.
     // This is important: add_types / add_templates store raw pointers into
     // diags[i].diagnostics; if diags later reallocates those pointers dangle.
@@ -118,15 +211,17 @@ void tppApp::run()
         bool isTypes;
     };
     std::vector<FileEntry> fileEntries;
-    for (const auto &entry : std::filesystem::recursive_directory_iterator(inputDirectory))
+
+    fs::path baseDir(inputDirectory);
+    for (const auto &pattern : config.value("types", nlohmann::json::array()))
     {
-        if (!entry.is_regular_file())
-            continue;
-        auto pathString = entry.path().string();
-        if (pathString.size() > 10 && pathString.substr(pathString.size() - 10) == ".tpp.types")
-            fileEntries.push_back({pathString, true});
-        else if (pathString.size() > 4 && pathString.substr(pathString.size() - 4) == ".tpp")
-            fileEntries.push_back({pathString, false});
+        for (const auto &p : expandPattern(baseDir, pattern.get<std::string>()))
+            fileEntries.push_back({p.string(), true});
+    }
+    for (const auto &pattern : config.value("templates", nlohmann::json::array()))
+    {
+        for (const auto &p : expandPattern(baseDir, pattern.get<std::string>()))
+            fileEntries.push_back({p.string(), false});
     }
 
     std::vector<DiagnosticLSPMessage> diags;
