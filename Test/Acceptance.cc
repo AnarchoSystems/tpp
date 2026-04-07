@@ -70,7 +70,26 @@ std::vector<tTestCase> GetTestCases()
     for (const auto &entry : std::filesystem::directory_iterator("TestCases"))
     {
         if (!entry.is_directory())
+        {
             continue;
+        }
+
+        bool bHasContent = false;
+
+        for (const auto &file : std::filesystem::directory_iterator(entry.path()))
+        {
+            if (file.is_regular_file())
+            {
+                bHasContent = true;
+                break;
+            }
+        }
+
+        if (!bHasContent)
+        {
+            std::cerr << "Test case directory " << entry.path() << " is empty, skipping." << std::endl;
+            continue;
+        }
 
         auto &testCase = testCases.emplace_back();
         testCase.name = entry.path().filename().string();

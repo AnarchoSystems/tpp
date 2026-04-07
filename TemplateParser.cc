@@ -39,12 +39,6 @@ namespace tpp
                 segs.push_back({false, src.substr(at), (int)at, (int)src.size()});
                 break;
             }
-            if (end == at + 1)
-            {
-                // Empty @@ pair — skip it; re-examine 'end' as potential opener
-                i = end;
-                continue;
-            }
             segs.push_back({true, src.substr(at + 1, end - at - 1), (int)(at + 1), (int)end});
             i = end + 1;
         }
@@ -275,6 +269,9 @@ namespace tpp
     DirectiveInfo classifyDirective(const std::string &s)
     {
         std::string t = trim(s);
+
+        if (t.empty())
+            return ErrorDirective{"empty directive"};
 
         if (t == "else")
             return ElseDirective{};
