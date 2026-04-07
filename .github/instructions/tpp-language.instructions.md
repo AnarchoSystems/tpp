@@ -80,7 +80,7 @@ Renders the value of a variable or field path. Field access uses `.`:
 | `sep="…"` | `sep=", "` | String inserted *between* items |
 | `precededBy="…"` | `precededBy=">"` | String inserted *before* the first item if it exists |
 | `followedBy="…"` | `followedBy="!"` | String inserted *after* the last item if it exists |
-| `iteratorVar=name` | `iteratorVar=idx` | 0-based integer index variable |
+| `enumerator=name` | `enumerator=idx` | 0-based integer index variable |
 
 **Compact inline form** (no body whitespace):
 
@@ -158,7 +158,7 @@ END
 @render collection via functionName | options@
 ```
 
-Dispatches to `functionName` for each item in `collection`, concatenating the results. The item is passed as an implicit argument. Options are the same as for `@for@` loops (e.g. `sep="…"`, `iteratorVar=idx`).
+Dispatches to `functionName` for each item in `collection`, concatenating the results. The item is passed as an implicit argument. Options are the same as for `@for@` loops (e.g. `sep="…"`, `enumerator=idx`).
 
 render_via can also be used for switch. In that case, it does not take options.
 

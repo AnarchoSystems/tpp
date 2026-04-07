@@ -33,7 +33,7 @@ namespace tpp
         std::string sep;
         std::string followedBy;
         std::string precededBy;
-        std::string iteratorVar;
+        std::string enumerator;
         std::string policy;
     };
 

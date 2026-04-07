@@ -37,7 +37,7 @@ namespace tpp
     struct ForNode
     {
         std::string varName;
-        std::string iteratorVarName;
+        std::string enumeratorName;
         Expression collectionExpr;
         std::vector<ASTNode> body;
         std::string sep;
@@ -144,7 +144,7 @@ namespace tpp
     { return a.tag == b.tag && a.bindingName == b.bindingName && a.body == b.body; }
     inline bool operator==(const ForNode &a, const ForNode &b)
     {
-        return a.varName == b.varName && a.iteratorVarName == b.iteratorVarName &&
+        return a.varName == b.varName && a.enumeratorName == b.enumeratorName &&
                a.collectionExpr == b.collectionExpr && a.body == b.body &&
                a.sep == b.sep && a.followedBy == b.followedBy && a.precededBy == b.precededBy &&
                a.isBlock == b.isBlock && a.insertCol == b.insertCol && a.policy == b.policy;
@@ -260,7 +260,7 @@ namespace tpp
                 nlohmann::json collJson, bodyJson = nlohmann::json::array();
                 to_json(collJson, arg->collectionExpr);
                 for (const auto &bn : arg->body) { nlohmann::json bj; to_json(bj, bn); bodyJson.push_back(bj); }
-                j = {{"kind", "for"}, {"varName", arg->varName}, {"iteratorVarName", arg->iteratorVarName},
+                j = {{"kind", "for"}, {"varName", arg->varName}, {"enumeratorName", arg->enumeratorName},
                      {"collectionExpr", collJson}, {"body", bodyJson},
                      {"sep", arg->sep}, {"followedBy", arg->followedBy}, {"precededBy", arg->precededBy},
                      {"isBlock", arg->isBlock}, {"insertCol", arg->insertCol}, {"policy", arg->policy}};
@@ -317,7 +317,7 @@ namespace tpp
         {
             auto fn = std::make_shared<ForNode>();
             fn->varName         = j.at("varName").get<std::string>();
-            fn->iteratorVarName = j.at("iteratorVarName").get<std::string>();
+            fn->enumeratorName = j.at("enumeratorName").get<std::string>();
             fn->collectionExpr  = j.at("collectionExpr").get<Expression>();
             fn->body            = j.at("body").get<std::vector<ASTNode>>();
             fn->sep             = j.at("sep").get<std::string>();

@@ -417,8 +417,8 @@ namespace tpp
                     if (!arg->policy.empty()) ctx.activePolicy = arg->policy;
                     for (size_t i = 0; i < collection.size(); ++i) {
                         ctx.pushBinding(arg->varName, collection[i]);
-                        if (!arg->iteratorVarName.empty()) {
-                            ctx.pushBinding(arg->iteratorVarName, (int64_t)i);
+                        if (!arg->enumeratorName.empty()) {
+                            ctx.pushBinding(arg->enumeratorName, (int64_t)i);
                         }
                         std::string iterResult;
                         if (arg->isBlock) {
@@ -426,7 +426,7 @@ namespace tpp
                         } else {
                             iterResult = renderNodes(arg->body, ctx);
                         }
-                        if (!arg->iteratorVarName.empty()) {
+                        if (!arg->enumeratorName.empty()) {
                             ctx.popBinding();
                         }
                         ctx.popBinding();

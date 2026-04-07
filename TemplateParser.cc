@@ -346,18 +346,18 @@ namespace tpp
                 if (rest.find("sep=") != std::string::npos ||
                     rest.find("followedBy=") != std::string::npos ||
                     rest.find("precededBy=") != std::string::npos ||
-                    rest.find("iteratorVar=") != std::string::npos)
+                    rest.find("enumerator=") != std::string::npos)
                     return ErrorDirective{"for options require '|' before option list"};
             }
             if (!optPart.empty())
             {
                 std::map<std::string, std::string> values;
-                if (auto err = parseDirectiveOptions(optPart, {"sep", "followedBy", "precededBy", "policy"}, {"iteratorVar"}, values))
+                if (auto err = parseDirectiveOptions(optPart, {"sep", "followedBy", "precededBy", "policy"}, {"enumerator"}, values))
                     return ErrorDirective{err->message, err->start, err->end};
                 d.sep = values["sep"];
                 d.followedBy = values["followedBy"];
                 d.precededBy = values["precededBy"];
-                d.iteratorVar = values["iteratorVar"];
+                d.enumerator = values["enumerator"];
                 d.policy = values["policy"];
             }
             return d;
@@ -655,7 +655,7 @@ namespace tpp
                 {
                     auto forNode = std::make_shared<ForNode>();
                     forNode->varName = d->var;
-                    forNode->iteratorVarName = d->iteratorVar;
+                    forNode->enumeratorName = d->enumerator;
                     forNode->collectionExpr = d->collection;
                     forNode->sep = d->sep;
                     forNode->followedBy = d->followedBy;
@@ -772,7 +772,7 @@ namespace tpp
                     {
                         auto forNode = std::make_shared<ForNode>();
                         forNode->varName = d->var;
-                        forNode->iteratorVarName = d->iteratorVar;
+                        forNode->enumeratorName = d->enumerator;
                         forNode->collectionExpr = d->collection;
                         forNode->sep = d->sep;
                         forNode->followedBy = d->followedBy;
@@ -1359,8 +1359,8 @@ namespace tpp
                     auto listType = std::get<std::shared_ptr<ListType>>(exprType);
                     ValidationFrame frame{ScopeKind::For};
                     frame.vars[d->var] = listType->elementType;
-                    if (!d->iteratorVar.empty())
-                        frame.vars[d->iteratorVar] = IntType{};
+                    if (!d->enumerator.empty())
+                        frame.vars[d->enumerator] = IntType{};
                     frame.openLineIndex = (int)li;
                     frame.openSeg = seg;
                     frames.push_back(std::move(frame));
