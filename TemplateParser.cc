@@ -301,7 +301,7 @@ namespace tpp
 
         if (t == "else")
             return ElseDirective{};
-        if (t == "endif")
+        if (t == "end if")
             return EndIfDirective{};
         if (t == "end for")
             return EndForDirective{};
@@ -1604,7 +1604,7 @@ namespace tpp
                 msg = "missing @end case@";
                 break;
             case ScopeKind::If:
-                msg = "missing @endif@";
+                msg = "missing @end if@";
                 break;
             default:
                 break;

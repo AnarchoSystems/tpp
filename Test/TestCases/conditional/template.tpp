@@ -4,5 +4,5 @@ User: @user.name@
 Contact: @user.email@
 @else@
 Contact: N/A
-@endif@
+@end if@
 END

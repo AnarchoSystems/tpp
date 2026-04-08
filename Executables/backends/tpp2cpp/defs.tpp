@@ -18,7 +18,7 @@ template render_cpp_types(input: CppTypesInput)
 #include <variant>
 @if input.namespaceName@
 namespace @input.namespaceName@ {
-@endif@
+@end if@
 template<typename _TppT>
 inline nlohmann::json _tpp_j(const _TppT& v) { return nlohmann::json(v); }
 template<typename _TppT>
@@ -57,11 +57,11 @@ struct @e.name@_@variant.tag@
     friend void to_json(nlohmann::json& j, const @e.name@_@variant.tag@&) { j = nlohmann::json::object(); }
     friend void from_json(const nlohmann::json&, @e.name@_@variant.tag@&) {}
 };
-@endif@
+@end if@
 @end for@
 struct @e.name@
 {
-    using Value = std::variant<@for variant in e.variants | sep=", "@@if not variant.payloadType@@e.name@_@variant.tag@@else@@if variant.isRecursivePayload@std::unique_ptr<@variant.payloadType@>@else@@variant.payloadType@@endif@@endif@@end for@>;
+    using Value = std::variant<@for variant in e.variants | sep=", "@@if not variant.payloadType@@e.name@_@variant.tag@@else@@if variant.isRecursivePayload@std::unique_ptr<@variant.payloadType@>@else@@variant.payloadType@@end if@@end if@@end for@>;
     Value value;
     static std::string tpp_typedefs() noexcept
     {
@@ -96,14 +96,14 @@ inline void from_json(const nlohmann::json& j, @s.name@& v)
     if (j.contains("@field.name@") && !j.at("@field.name@").is_null()) v.@field.name@ = std::make_unique<@field.recursiveInnerType@>(j.at("@field.name@").get<@field.recursiveInnerType@>());
     @else@
     v.@field.name@ = std::make_unique<@field.recursiveInnerType@>(j.at("@field.name@").get<@field.recursiveInnerType@>());
-    @endif@
+    @end if@
     @else@
     @if field.innerType@
     if (j.contains("@field.name@") && !j.at("@field.name@").is_null()) v.@field.name@ = j.at("@field.name@").get<@field.innerType@>();
     @else@
     j.at("@field.name@").get_to(v.@field.name@);
-    @endif@
-    @endif@
+    @end if@
+    @end if@
     @end for@
 }
 inline void to_json(nlohmann::json& j, const @s.name@& v)
@@ -115,14 +115,14 @@ inline void to_json(nlohmann::json& j, const @s.name@& v)
     if (v.@field.name@) j["@field.name@"] = *v.@field.name@;
     @else@
     j["@field.name@"] = *v.@field.name@;
-    @endif@
+    @end if@
     @else@
     @if field.isOptional@
     if (v.@field.name@.has_value()) j["@field.name@"] = *v.@field.name@;
     @else@
     j["@field.name@"] = v.@field.name@;
-    @endif@
-    @endif@
+    @end if@
+    @end if@
     @end for@
 }
 @end case@
@@ -130,7 +130,7 @@ inline void to_json(nlohmann::json& j, const @s.name@& v)
 inline void from_json(const nlohmann::json& j, @e.name@& v)
 {
     @for variant in e.variants | sep="\n    else "@
-    if (j.contains("@variant.tag@")) @if not variant.payloadType@v.value.emplace<@variant.index@>();@else@@if variant.isRecursivePayload@v.value.emplace<@variant.index@>(std::make_unique<@variant.payloadType@>(j["@variant.tag@"].get<@variant.payloadType@>()));@else@v.value.emplace<@variant.index@>(j["@variant.tag@"].get<@variant.payloadType@>());@endif@@endif@
+    if (j.contains("@variant.tag@")) @if not variant.payloadType@v.value.emplace<@variant.index@>();@else@@if variant.isRecursivePayload@v.value.emplace<@variant.index@>(std::make_unique<@variant.payloadType@>(j["@variant.tag@"].get<@variant.payloadType@>()));@else@v.value.emplace<@variant.index@>(j["@variant.tag@"].get<@variant.payloadType@>());@end if@@end if@
     @end for@
 }
 inline void to_json(nlohmann::json& j, const @e.name@& v)
@@ -146,7 +146,7 @@ inline void to_json(nlohmann::json& j, const @e.name@& v)
 @end for@
 @if input.namespaceName@
 } // namespace @input.namespaceName@
-@endif@
+@end if@
 END
 
 template render_cpp_functions(input: CppFunctionsInput)
@@ -158,13 +158,13 @@ template render_cpp_functions(input: CppFunctionsInput)
 #include <string>
 @if input.namespaceName@
 namespace @input.namespaceName@ {
-@endif@
+@end if@
 @for function in input.functions@
 std::string @function.name@(@for param in function.params | sep=", "@typename tpp::ArgType<@param.type@>::type @param.name@@end for@);
 @end for@
 @if input.namespaceName@
 } // namespace @input.namespaceName@
-@endif@
+@end if@
 END
 
 template render_cpp_implementation(input: CppFunctionsInput)
@@ -175,7 +175,7 @@ template render_cpp_implementation(input: CppFunctionsInput)
 #include <nlohmann/json.hpp>
 @if input.namespaceName@
 namespace @input.namespaceName@ {
-@endif@
+@end if@
 static const tpp::CompilerOutput& _getCompilerOutput()
 {
     static const tpp::CompilerOutput co =
@@ -197,5 +197,5 @@ std::string @function.name@(@for param in function.params | sep=", "@typename tp
 @end for@
 @if input.namespaceName@
 } // namespace @input.namespaceName@
-@endif@
+@end if@
 END

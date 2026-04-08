@@ -107,7 +107,7 @@ Renders the value of a variable or field path. Field access uses `.`:
   true branch
 @else@
   false branch
-@endif@
+@end if@
 ```
 
 - `condition` is a field path. True if: a `bool` field is true, or an `optional<T>` field is present.
@@ -146,7 +146,7 @@ Invokes another template function inline and inserts its output at that position
 
 ```
 template render_node(node: IntListNode)
-@node.value@@if node.next@, @render_node(node.next)@@endif@
+@node.value@@if node.next@, @render_node(node.next)@@end if@
 END
 ```
 

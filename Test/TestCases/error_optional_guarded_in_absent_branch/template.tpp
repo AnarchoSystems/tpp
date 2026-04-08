@@ -1,3 +1,3 @@
 template main(p: Profile)
-@if p.nick@ok@else@@if p.nick@wrong@endif@@endif@
+@if p.nick@ok@else@@if p.nick@wrong@end if@@end if@
 END

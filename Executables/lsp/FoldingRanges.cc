@@ -37,13 +37,13 @@ static void collectFoldNode(std::vector<nlohmann::json> &out, const ASTNode &nod
 
             if (arg->elseBody.empty())
             {
-                // No else: fold @if@ → @endif@
+                // No else: fold @if@ → @end if@
                 if (ifLine >= 0 && endLine > ifLine)
                     out.push_back(makeRange(ifLine, endLine));
             }
             else
             {
-                // Fold @if@ → @else@ and @else@ → @endif@ separately
+                // Fold @if@ → @else@ and @else@ → @end if@ separately
                 if (ifLine >= 0 && elseLine > ifLine)
                     out.push_back(makeRange(ifLine, elseLine));
                 if (elseLine >= 0 && endLine > elseLine)

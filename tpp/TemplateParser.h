@@ -116,7 +116,7 @@ namespace tpp
         size_t bodyStartLine = 0; // 0-based line offset of the body within the file
 
         // outEndRange, if non-null, is filled with the range of the closing directive
-        // (e.g. @end for@, @endif@) when the block is terminated by one.
+        // (e.g. @end for@, @end if@) when the block is terminated by one.
         std::vector<ASTNode> parseBlock(int insertCol, Range *outEndRange = nullptr);
 
     private:
