@@ -29,6 +29,15 @@ namespace tpp
                 segs.push_back({false, src.substr(i), (int)i, (int)src.size()});
                 break;
             }
+            // \@ → literal @
+            if (at > 0 && src[at - 1] == '\\')
+            {
+                if (at - 1 > i)
+                    segs.push_back({false, src.substr(i, at - 1 - i), (int)i, (int)(at - 1)});
+                segs.push_back({false, "@", (int)at, (int)(at + 1)});
+                i = at + 1;
+                continue;
+            }
             if (at > i)
             {
                 segs.push_back({false, src.substr(i, at - i), (int)i, (int)at});
@@ -1683,6 +1692,27 @@ namespace tpp
         }
 
         std::string body = text.substr(nl + 1, endPos - nl - 1);
+
+        // Unescape \END at the start of lines → literal END
+        {
+            std::string unescaped;
+            unescaped.reserve(body.size());
+            size_t p = 0;
+            while (p < body.size())
+            {
+                bool atLineStart = (p == 0) || body[p - 1] == '\n';
+                if (atLineStart && body.size() - p >= 4 &&
+                    body[p] == '\\' && body[p+1] == 'E' && body[p+2] == 'N' && body[p+3] == 'D' &&
+                    (p + 4 >= body.size() || body[p+4] == '\n' || body[p+4] == '\r'))
+                {
+                    unescaped += "END";
+                    p += 4;
+                    continue;
+                }
+                unescaped += body[p++];
+            }
+            body = std::move(unescaped);
+        }
 
         size_t parenClose = afterTemplate.find(')', parenOpen);
         if (parenClose == std::string::npos)
