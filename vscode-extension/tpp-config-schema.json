@@ -34,7 +34,7 @@
     },
     "previews": {
       "type": "array",
-      "description": "Preview configurations used by the LSP and acceptance tests to render the template with sample input.",
+      "description": "Preview configurations used by the LSP to render the template with sample input.",
       "items": {
         "type": "object",
         "additionalProperties": false,

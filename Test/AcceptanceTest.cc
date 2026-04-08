@@ -5,32 +5,34 @@
 
 class AcceptanceTest : public ::testing::TestWithParam<tTestCase>
 {
+protected:
+    tLoadedTestCase testCase;
+    tpp::Compiler compiler;
+    std::vector<tpp::DiagnosticLSPMessage> fileDiags;
+    void SetUp() override
+    {
+        testCase = GetParam().extract();
+        fileDiags.reserve(testCase.sources.size());
+        for (const auto &src : testCase.sources)
+            fileDiags.push_back(tpp::DiagnosticLSPMessage(src.url));
+        for (size_t i = 0; i < testCase.sources.size(); ++i)
+        {
+            const auto &src = testCase.sources[i];
+            if (src.isTypes)
+                compiler.add_types(src.content, fileDiags[i].diagnostics);
+            else
+                compiler.add_templates(src.content, fileDiags[i].diagnostics);
+        }
+        for (const auto &pol : testCase.policies)
+        {
+            std::string err;
+            compiler.add_policy(pol, err);
+        }
+    }
 };
 
 TEST_P(AcceptanceTest, RunTestCase)
 {
-    const auto testCase = GetParam().extract();
-
-    tpp::Compiler compiler;
-    std::vector<tpp::DiagnosticLSPMessage> fileDiags;
-    fileDiags.reserve(testCase.sources.size());
-    for (const auto &src : testCase.sources)
-        fileDiags.push_back(tpp::DiagnosticLSPMessage(src.url));
-
-    for (size_t i = 0; i < testCase.sources.size(); ++i)
-    {
-        const auto &src = testCase.sources[i];
-        if (src.isTypes)
-            compiler.add_types(src.content, fileDiags[i].diagnostics);
-        else
-            compiler.add_templates(src.content, fileDiags[i].diagnostics);
-    }
-    for (const auto &pol : testCase.policies)
-    {
-        std::string err;
-        compiler.add_policy(pol, err);
-    }
-
     tpp::CompilerOutput output;
     std::string getFunctionError, renderError, renderedOutput;
     tpp::FunctionSymbol functionSymbol;
@@ -48,7 +50,8 @@ TEST_P(AcceptanceTest, RunTestCase)
     {
         std::vector<tpp::DiagnosticLSPMessage> actualDiags;
         for (const auto &d : fileDiags)
-            if (!d.diagnostics.empty()) actualDiags.push_back(d);
+            if (!d.diagnostics.empty())
+                actualDiags.push_back(d);
         EXPECT_EQ(actualDiags, testCase.expectedDiagnostics)
             << "Test case: " << testCase.name
             << "\nActual diagnostics: " << nlohmann::json(actualDiags).dump(2);
@@ -61,33 +64,14 @@ TEST_P(AcceptanceTest, RunTestCase)
 
 TEST_P(AcceptanceTest, CompareCompileByCLI)
 {
-    const auto testCase = GetParam().extract();
+    auto cliOutput = runCommand(TPP_EXE " " + std::filesystem::absolute("TestCases/" + testCase.name).string() + " 2>&1");
 
-    auto cliOutput = runCommand(
-        TPP_EXE " " + std::filesystem::absolute("TestCases/" + testCase.name).string() + " 2>&1");
-
-    tpp::Compiler compiler;
-    std::vector<tpp::DiagnosticLSPMessage> fileDiags;
-    fileDiags.reserve(testCase.sources.size());
-    for (const auto &src : testCase.sources)
-        fileDiags.push_back(tpp::DiagnosticLSPMessage(src.url));
-    for (size_t i = 0; i < testCase.sources.size(); ++i)
-    {
-        if (testCase.sources[i].isTypes)
-            compiler.add_types(testCase.sources[i].content, fileDiags[i].diagnostics);
-        else
-            compiler.add_templates(testCase.sources[i].content, fileDiags[i].diagnostics);
-    }
-    for (const auto &pol : testCase.policies)
-    {
-        std::string err;
-        compiler.add_policy(pol, err);
-    }
     tpp::CompilerOutput expectedOutput;
     bool expectedSuccess = compiler.compile(expectedOutput);
 
     EXPECT_EQ(cliOutput.success, expectedSuccess) << "Test case: " << testCase.name;
-    if (cliOutput.success != expectedSuccess) return;
+    if (cliOutput.success != expectedSuccess)
+        return;
 
     if (expectedSuccess)
     {
@@ -95,7 +79,7 @@ TEST_P(AcceptanceTest, CompareCompileByCLI)
         EXPECT_EQ(actualOutput, expectedOutput)
             << "Test case: " << testCase.name
             << "\nExpected: " << nlohmann::json(expectedOutput).dump(2)
-            << "\nActual: "   << nlohmann::json(actualOutput).dump(2);
+            << "\nActual: " << nlohmann::json(actualOutput).dump(2);
     }
     else
     {
@@ -114,6 +98,6 @@ TEST_P(AcceptanceTest, CompareCompileByCLI)
 }
 
 INSTANTIATE_TEST_SUITE_P(AcceptanceTests, AcceptanceTest,
-    ::testing::ValuesIn(GetTestCases()),
-    [](const testing::TestParamInfo<AcceptanceTest::ParamType> &info)
-    { return info.param.name; });
+                         ::testing::ValuesIn(GetTestCases()),
+                         [](const testing::TestParamInfo<AcceptanceTest::ParamType> &info)
+                         { return info.param.name; });
