@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "tpp project configuration",
+  "description": "Configuration file for a tpp template project. Place tpp-config.json in the project root.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "types": {
+      "type": "array",
+      "description": "Glob patterns (relative to this config file) for type definition files (.tpp.types).",
+      "items": {
+        "type": "string",
+        "description": "A glob pattern such as \"*.tpp.types\" or \"types/*.tpp.types\"."
+      },
+      "default": ["*.tpp.types"]
+    },
+    "templates": {
+      "type": "array",
+      "description": "Glob patterns (relative to this config file) for template source files (.tpp).",
+      "items": {
+        "type": "string",
+        "description": "A glob pattern such as \"*.tpp\" or \"templates/*.tpp\"."
+      },
+      "default": ["*.tpp"]
+    }
+  }
+}

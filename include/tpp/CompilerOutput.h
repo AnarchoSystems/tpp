@@ -3,6 +3,7 @@
 #include <tpp/FunctionSymbol.h>
 #include <tpp/Policy.h>
 #include <tpp/ArgType.h>
+#include <tpp/RenderMapping.h>
 
 namespace tpp
 {
@@ -36,6 +37,14 @@ namespace tpp
                 return output;
             };
         }
+
+        // Render a named function against the given JSON input and collect source->output mappings
+        // for every ForNode, IfNode, and SwitchNode encountered during rendering.
+        // Throws std::runtime_error on any render error.
+        [[nodiscard]]
+        std::string renderTracked(const std::string &functionName,
+                                  const nlohmann::json &input,
+                                  std::vector<RenderMapping> &mappings) const;
 
         bool operator==(const CompilerOutput &other) const
         {

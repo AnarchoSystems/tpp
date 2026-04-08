@@ -1,6 +1,7 @@
 #pragma once
 
 #include <tpp/Types.h>
+#include <tpp/Diagnostic.h>
 #include <string>
 #include <vector>
 #include <variant>
@@ -19,7 +20,7 @@ namespace tpp
     // ── AST nodes ──
 
     struct TextNode          { std::string text; };
-    struct InterpolationNode { Expression expr; std::string policy; };
+    struct InterpolationNode { Expression expr; std::string policy; Range sourceRange{}; };
     struct ForNode;
     struct IfNode;
     struct SwitchNode;
@@ -46,6 +47,8 @@ namespace tpp
         bool isBlock = false;
         int insertCol = 0;
         std::string policy;
+        Range sourceRange{};
+        Range endRange{};
     };
 
     struct IfNode
@@ -57,6 +60,9 @@ namespace tpp
         std::vector<ASTNode> elseBody;
         bool isBlock = false;
         int insertCol = 0;
+        Range sourceRange{};
+        Range elseRange{};
+        Range endRange{};
     };
 
     struct CaseNode
@@ -64,6 +70,8 @@ namespace tpp
         std::string tag;
         std::string bindingName;
         std::vector<ASTNode> body;
+        Range sourceRange{};
+        Range endRange{};
     };
 
     struct SwitchNode
@@ -74,12 +82,15 @@ namespace tpp
         bool isBlock = false;
         int insertCol = 0;
         std::string policy;
+        Range sourceRange{};
+        Range endRange{};
     };
 
     struct FunctionCallNode
     {
         std::string functionName;
         std::vector<Expression> arguments;
+        Range sourceRange{};
     };
 
     struct RenderViaNode
@@ -92,6 +103,7 @@ namespace tpp
         bool isBlock = false;
         int insertCol = 0;
         std::string policy;
+        Range sourceRange{};
     };
 
     // ── Template function ──
@@ -108,6 +120,7 @@ namespace tpp
         std::vector<ParamDef> params;
         std::vector<ASTNode> body;
         std::string policy;
+        Range sourceRange{};
     };
 
     // ─────────────────────────────────────────────────────────────────

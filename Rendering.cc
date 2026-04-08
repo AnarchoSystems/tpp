@@ -1,4 +1,6 @@
 #include <tpp/FunctionSymbol.h>
+#include <tpp/CompilerOutput.h>
+#include <tpp/RenderMapping.h>
 #include <nlohmann/json.hpp>
 #include <functional>
 #include <iostream>
@@ -26,6 +28,8 @@ namespace tpp
         // Maps function name -> indices into allFunctions for O(1) lookup
         std::unordered_map<std::string, std::vector<size_t>> functionIndex;
         std::string renderError;
+        // Optional tracking output for renderTracked(); null during normal rendering.
+        std::vector<RenderMapping> *trackingOut = nullptr;
 
         void pushBinding(const std::string &name, const nlohmann::json &val)
         {
@@ -185,7 +189,8 @@ namespace tpp
 
     bool FunctionSymbol::render(const nlohmann::json &input,
                                std::string &output,
-                               std::string &error) const noexcept
+                               std::string &error,
+                               std::vector<RenderMapping> *tracking) const noexcept
     {
         try
         {
@@ -327,6 +332,7 @@ namespace tpp
             // Build function index for O(1) overload lookup
             for (size_t fi = 0; fi < allFunctions.size(); ++fi)
                 ctx.functionIndex[allFunctions[fi].name].push_back(fi);
+            ctx.trackingOut = tracking;
             for (auto &p : function.params)
             {
                 if (boundArgs.contains(p.name))
@@ -402,6 +408,7 @@ namespace tpp
             } else if constexpr (std::is_same_v<T, std::shared_ptr<ForNode>>) {
                 auto collection = ctx.resolve(arg->collectionExpr);
                 if (collection.is_array()) {
+                    int trackStart = (int)result.size();
                     std::string savedPolicy = ctx.activePolicy;
                     const Policy *savedPolicyPtr = ctx.activePolicyPtr;
                     if (!arg->policy.empty()) {
@@ -453,8 +460,11 @@ namespace tpp
                     }
                     ctx.activePolicy = savedPolicy;
                     ctx.activePolicyPtr = savedPolicyPtr;
+                    if (ctx.trackingOut)
+                        ctx.trackingOut->push_back({arg->sourceRange, trackStart, (int)result.size()});
                 }
             } else if constexpr (std::is_same_v<T, std::shared_ptr<IfNode>>) {
+                int trackStart = (int)result.size();
                 auto val = ctx.resolve(arg->condExpr);
                 bool cond = false;
                 if (arg->negated) {
@@ -477,7 +487,10 @@ namespace tpp
                         result += renderNodes(arg->elseBody, ctx);
                     }
                 }
+                if (ctx.trackingOut)
+                    ctx.trackingOut->push_back({arg->sourceRange, trackStart, (int)result.size()});
             } else if constexpr (std::is_same_v<T, std::shared_ptr<SwitchNode>>) {
+                int trackStart = (int)result.size();
                 auto val = ctx.resolve(arg->expr);
                 if (val.is_object()) {
                     std::string savedPolicy = ctx.activePolicy;
@@ -504,6 +517,8 @@ namespace tpp
                     }
                     ctx.activePolicy = savedPolicy;
                     ctx.activePolicyPtr = savedPolicyPtr;
+                    if (ctx.trackingOut)
+                        ctx.trackingOut->push_back({arg->sourceRange, trackStart, (int)result.size()});
                 }
             } else if constexpr (std::is_same_v<T, std::shared_ptr<FunctionCallNode>>) {
                 // Find the function by name via index (O(1))
@@ -674,6 +689,21 @@ namespace tpp
         }
 
         return result;
+    }
+
+    std::string CompilerOutput::renderTracked(const std::string &functionName,
+                                              const nlohmann::json &input,
+                                              std::vector<RenderMapping> &mappings) const
+    {
+        FunctionSymbol fs;
+        std::string error;
+        if (!get_function(functionName, fs, error))
+            throw std::runtime_error(error);
+        std::string output;
+        mappings.clear();
+        if (!fs.render(input, output, error, &mappings))
+            throw std::runtime_error(error);
+        return output;
     }
 
 } // namespace tpp

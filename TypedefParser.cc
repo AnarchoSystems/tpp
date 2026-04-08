@@ -241,6 +241,8 @@ namespace tpp
         eat(TokKind::Ident);
         StructDef sd;
         sd.name = nameTok.text;
+        sd.sourceRange = {{nameTok.line, nameTok.col},
+                          {nameTok.line, nameTok.col + (int)nameTok.text.size()}};
         eat(TokKind::LBrace);
         while (!at(TokKind::RBrace) && !at(TokKind::Eof) && ok)
         {
@@ -255,7 +257,12 @@ namespace tpp
             if (!ok)
                 break;
             eat(TokKind::Semi);
-            sd.fields.push_back({fnameTok.text, type});
+            FieldDef fd;
+            fd.name = fnameTok.text;
+            fd.type = type;
+            fd.sourceRange = {{fnameTok.line, fnameTok.col},
+                              {fnameTok.line, fnameTok.col + (int)fnameTok.text.size()}};
+            sd.fields.push_back(std::move(fd));
         }
         eat(TokKind::RBrace);
         if (at(TokKind::Semi))
@@ -284,6 +291,8 @@ namespace tpp
         eat(TokKind::Ident);
         EnumDef ed;
         ed.name = nameTok.text;
+        ed.sourceRange = {{nameTok.line, nameTok.col},
+                          {nameTok.line, nameTok.col + (int)nameTok.text.size()}};
         eat(TokKind::LBrace);
         while (!at(TokKind::RBrace) && !at(TokKind::Eof) && ok)
         {
@@ -293,6 +302,8 @@ namespace tpp
                 break;
             VariantDef vd;
             vd.tag = tagTok.text;
+            vd.sourceRange = {{tagTok.line, tagTok.col},
+                              {tagTok.line, tagTok.col + (int)tagTok.text.size()}};
             if (at(TokKind::LParen))
             {
                 eat(TokKind::LParen);

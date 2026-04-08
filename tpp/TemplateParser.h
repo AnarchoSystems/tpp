@@ -113,12 +113,24 @@ namespace tpp
     {
         const std::vector<TemplateLine> &lines;
         size_t pos = 0;
+        size_t bodyStartLine = 0; // 0-based line offset of the body within the file
 
-        std::vector<ASTNode> parseBlock(int insertCol);
+        // outEndRange, if non-null, is filled with the range of the closing directive
+        // (e.g. @end for@, @endif@) when the block is terminated by one.
+        std::vector<ASTNode> parseBlock(int insertCol, Range *outEndRange = nullptr);
 
     private:
         // Parses inline segments (a single non-block line) into AST nodes.
-        std::vector<ASTNode> parseInline(const std::vector<LineSeg> &segs, size_t startPos = 0);
+        // lineIndex is the 0-based index of this line within the body (added to bodyStartLine).
+        std::vector<ASTNode> parseInline(const std::vector<LineSeg> &segs,
+                                         size_t startPos = 0,
+                                         int lineIndex = 0);
+
+        Range makeRange(int lineIndex, const LineSeg &seg) const
+        {
+            return {{(int)(bodyStartLine + lineIndex), seg.startCol - 1},
+                    {(int)(bodyStartLine + lineIndex), seg.endCol + 1}};
+        }
     };
 
     // ── High-level template parsing ──
@@ -128,5 +140,7 @@ namespace tpp
                           size_t *outBodyStartLine = nullptr,
                           std::string *outBodyText = nullptr,
                           std::vector<TemplateLine> *outTemplateLines = nullptr,
-                          std::vector<Diagnostic> *diags = nullptr);
+                          std::vector<Diagnostic> *diags = nullptr,
+                          Range *outHeaderRange = nullptr,
+                          std::string *outHeaderText = nullptr);
 }

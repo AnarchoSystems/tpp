@@ -620,10 +620,13 @@ namespace tpp
         return result;
     }
 
-    std::vector<ASTNode> ASTBuilder::parseInline(const std::vector<LineSeg> &segs, size_t startPos)
+    std::vector<ASTNode> ASTBuilder::parseInline(const std::vector<LineSeg> &segs,
+                                                  size_t startPos,
+                                                  int lineIndex)
     {
         std::vector<ASTNode> nodes;
         size_t pos = startPos;
+        Range lastTerminatorRange{}; // set by terminator handlers, read by enclosing directive
 
         // Helper to recurse into a sub-range (e.g. for/if body on same line)
         std::function<std::vector<ASTNode>()> recurse = [&]() -> std::vector<ASTNode>
@@ -640,7 +643,11 @@ namespace tpp
                 }
                 else if (auto *d = std::get_if<ExprDirective>(&s.info))
                 {
-                    sub.push_back(InterpolationNode{d->expr, d->policy});
+                    InterpolationNode in;
+                    in.expr = d->expr;
+                    in.policy = d->policy;
+                    in.sourceRange = makeRange(lineIndex, s);
+                    sub.push_back(std::move(in));
                     ++pos;
                 }
                 else if (auto *d = std::get_if<FunctionCallDirective>(&s.info))
@@ -648,6 +655,7 @@ namespace tpp
                     auto callNode = std::make_shared<FunctionCallNode>();
                     callNode->functionName = d->name;
                     callNode->arguments = d->args;
+                    callNode->sourceRange = makeRange(lineIndex, s);
                     sub.push_back(std::move(callNode));
                     ++pos;
                 }
@@ -662,12 +670,16 @@ namespace tpp
                     forNode->precededBy = d->precededBy;
                     forNode->policy = d->policy;
                     forNode->isBlock = false;
+                    forNode->sourceRange = makeRange(lineIndex, s);
                     ++pos;
                     forNode->body = recurse();
+                    forNode->endRange = lastTerminatorRange;
+                    lastTerminatorRange = {};
                     sub.push_back(std::move(forNode));
                 }
                 else if (std::holds_alternative<EndForDirective>(s.info))
                 {
+                    lastTerminatorRange = makeRange(lineIndex, s);
                     ++pos;
                     return sub;
                 }
@@ -678,14 +690,19 @@ namespace tpp
                     ifNode->negated = d->negated;
                     ifNode->condText = d->condText;
                     ifNode->isBlock = false;
+                    ifNode->sourceRange = makeRange(lineIndex, s);
                     ++pos;
                     ifNode->thenBody = recurse();
                     if (pos < segs.size() && segs[pos].isDirective &&
                         std::holds_alternative<ElseDirective>(segs[pos].info))
                     {
+                        ifNode->elseRange = makeRange(lineIndex, segs[pos]);
                         ++pos;
+                        lastTerminatorRange = {};
                         ifNode->elseBody = recurse();
                     }
+                    ifNode->endRange = lastTerminatorRange;
+                    lastTerminatorRange = {};
                     sub.push_back(std::move(ifNode));
                 }
                 else if (std::holds_alternative<ElseDirective>(s.info))
@@ -694,6 +711,7 @@ namespace tpp
                 }
                 else if (std::holds_alternative<EndIfDirective>(s.info))
                 {
+                    lastTerminatorRange = makeRange(lineIndex, s);
                     ++pos;
                     return sub;
                 }
@@ -704,6 +722,7 @@ namespace tpp
                     switchNode->checkExhaustive = d->checkExhaustive;
                     switchNode->policy = d->policy;
                     switchNode->isBlock = false;
+                    switchNode->sourceRange = makeRange(lineIndex, s);
                     ++pos;
                     while (pos < segs.size())
                     {
@@ -715,6 +734,7 @@ namespace tpp
                         }
                         if (std::holds_alternative<EndSwitchDirective>(cs.info))
                         {
+                            switchNode->endRange = makeRange(lineIndex, cs);
                             ++pos;
                             break;
                         }
@@ -723,8 +743,12 @@ namespace tpp
                             CaseNode cn;
                             cn.tag = cd->tag;
                             cn.bindingName = cd->binding;
+                            cn.sourceRange = makeRange(lineIndex, cs);
                             ++pos;
+                            lastTerminatorRange = {};
                             cn.body = recurse();
+                            cn.endRange = lastTerminatorRange;
+                            lastTerminatorRange = {};
                             switchNode->cases.push_back(std::move(cn));
                         }
                         else
@@ -736,6 +760,7 @@ namespace tpp
                 }
                 else if (std::holds_alternative<EndCaseDirective>(s.info))
                 {
+                    lastTerminatorRange = makeRange(lineIndex, s);
                     ++pos;
                     return sub;
                 }
@@ -755,7 +780,7 @@ namespace tpp
         return nodes;
     }
 
-    std::vector<ASTNode> ASTBuilder::parseBlock(int insertCol)
+    std::vector<ASTNode> ASTBuilder::parseBlock(int insertCol, Range *outEndRange)
     {
         std::vector<ASTNode> nodes;
         while (pos < lines.size())
@@ -780,12 +805,16 @@ namespace tpp
                         forNode->policy = d->policy;
                         forNode->isBlock = true;
                         forNode->insertCol = tl.indent;
+                        forNode->sourceRange = makeRange((int)pos, seg);
                         ++pos;
-                        forNode->body = parseBlock(tl.indent);
+                        Range forEndRange{};
+                        forNode->body = parseBlock(tl.indent, &forEndRange);
+                        forNode->endRange = forEndRange;
                         nodes.push_back(std::move(forNode));
                     }
                     else if (std::holds_alternative<EndForDirective>(seg.info))
                     {
+                        if (outEndRange) *outEndRange = makeRange((int)pos, seg);
                         ++pos;
                         return nodes;
                     }
@@ -797,20 +826,24 @@ namespace tpp
                         ifNode->condText = d->condText;
                         ifNode->isBlock = true;
                         ifNode->insertCol = tl.indent;
+                        ifNode->sourceRange = makeRange((int)pos, seg);
                         ++pos;
-                        ifNode->thenBody = parseBlock(tl.indent);
+                        Range ifEndRange{};
+                        ifNode->thenBody = parseBlock(tl.indent, &ifEndRange);
                         if (pos < lines.size() && lines[pos].isBlockLine)
                         {
                             for (auto &s2 : lines[pos].segments)
                             {
                                 if (s2.isDirective && std::holds_alternative<ElseDirective>(s2.info))
                                 {
+                                    ifNode->elseRange = makeRange((int)pos, s2);
                                     ++pos;
-                                    ifNode->elseBody = parseBlock(tl.indent);
+                                    ifNode->elseBody = parseBlock(tl.indent, &ifEndRange);
                                     break;
                                 }
                             }
                         }
+                        ifNode->endRange = ifEndRange;
                         nodes.push_back(std::move(ifNode));
                     }
                     else if (std::holds_alternative<ElseDirective>(seg.info))
@@ -819,6 +852,7 @@ namespace tpp
                     }
                     else if (std::holds_alternative<EndIfDirective>(seg.info))
                     {
+                        if (outEndRange) *outEndRange = makeRange((int)pos, seg);
                         ++pos;
                         return nodes;
                     }
@@ -830,6 +864,7 @@ namespace tpp
                         switchNode->policy = d->policy;
                         switchNode->isBlock = true;
                         switchNode->insertCol = tl.indent;
+                        switchNode->sourceRange = makeRange((int)pos, seg);
                         ++pos;
                         while (pos < lines.size())
                         {
@@ -842,6 +877,7 @@ namespace tpp
                                         continue;
                                     if (std::holds_alternative<EndSwitchDirective>(s2.info))
                                     {
+                                        switchNode->endRange = makeRange((int)pos, s2);
                                         ++pos;
                                         done = true;
                                         break;
@@ -851,8 +887,11 @@ namespace tpp
                                         CaseNode cn;
                                         cn.tag = cd->tag;
                                         cn.bindingName = cd->binding;
+                                        cn.sourceRange = makeRange((int)pos, s2);
                                         ++pos;
-                                        cn.body = parseBlock(tl.indent);
+                                        Range caseEndRange{};
+                                        cn.body = parseBlock(tl.indent, &caseEndRange);
+                                        cn.endRange = caseEndRange;
                                         switchNode->cases.push_back(std::move(cn));
                                         break;
                                     }
@@ -861,6 +900,7 @@ namespace tpp
                                         CaseNode cn;
                                         cn.tag = rd->exprText;
                                         cn.bindingName = "__payload";
+                                        cn.sourceRange = makeRange((int)pos, s2);
                                         auto callNode = std::make_shared<FunctionCallNode>();
                                         callNode->functionName = rd->func;
                                         callNode->arguments.push_back(Variable{"__payload"});
@@ -885,6 +925,7 @@ namespace tpp
                     }
                     else if (std::holds_alternative<EndSwitchDirective>(seg.info))
                     {
+                        if (outEndRange) *outEndRange = makeRange((int)pos, seg);
                         ++pos;
                         return nodes;
                     }
@@ -894,6 +935,7 @@ namespace tpp
                     }
                     else if (std::holds_alternative<EndCaseDirective>(seg.info))
                     {
+                        if (outEndRange) *outEndRange = makeRange((int)pos, seg);
                         ++pos;
                         return nodes;
                     }
@@ -908,6 +950,7 @@ namespace tpp
                         renderNode->policy = d->policy;
                         renderNode->isBlock = true;
                         renderNode->insertCol = tl.indent;
+                        renderNode->sourceRange = makeRange((int)pos, seg);
                         nodes.push_back(std::move(renderNode));
                         ++pos;
                     }
@@ -933,7 +976,7 @@ namespace tpp
                 }
                 if (hasInline)
                 {
-                    auto inlineNodes = parseInline(tl.segments);
+                    auto inlineNodes = parseInline(tl.segments, 0, (int)pos);
                     for (auto &n : inlineNodes)
                         nodes.push_back(std::move(n));
                     nodes.push_back(TextNode{"\n"});
@@ -952,11 +995,16 @@ namespace tpp
                             auto callNode = std::make_shared<FunctionCallNode>();
                             callNode->functionName = d->name;
                             callNode->arguments = d->args;
+                            callNode->sourceRange = makeRange((int)pos, seg);
                             nodes.push_back(std::move(callNode));
                         }
                         else if (auto *d = std::get_if<ExprDirective>(&seg.info))
                         {
-                            nodes.push_back(InterpolationNode{d->expr, d->policy});
+                            InterpolationNode in;
+                            in.expr = d->expr;
+                            in.policy = d->policy;
+                            in.sourceRange = makeRange((int)pos, seg);
+                            nodes.push_back(std::move(in));
                         }
                     }
                     nodes.push_back(TextNode{"\n"});
@@ -1595,8 +1643,8 @@ namespace tpp
                           std::string *outBodyText,
                           std::vector<TemplateLine> *outTemplateLines,
                           std::vector<Diagnostic> *diags,
-                          Range *outHeaderRange = nullptr,
-                          std::string *outHeaderText = nullptr)
+                          Range *outHeaderRange,
+                          std::string *outHeaderText)
     {
         // Find "template " line
         size_t lineStart = pos;
@@ -1724,7 +1772,18 @@ namespace tpp
         }
 
         auto templateLines = parseTemplateLines(body);
-        ASTBuilder builder{templateLines};
+
+        // Compute bodyStartLine: number of newlines before the body in the full text.
+        size_t bodyStartLine = 0;
+        for (size_t i = 0; i < lineStart; ++i)
+            if (text[i] == '\n') ++bodyStartLine;
+        if (nl < text.size() && text[nl] == '\n') ++bodyStartLine;
+
+        // Compute header line number for func.sourceRange
+        size_t headerLineNum = bodyStartLine > 0 ? bodyStartLine - 1 : 0;
+        func.sourceRange = {{(int)headerLineNum, 0}, {(int)headerLineNum, (int)(nl - lineStart)}};
+
+        ASTBuilder builder{templateLines, 0, bodyStartLine};
         func.body = builder.parseBlock(0);
 
         if (outBodyText)
@@ -1732,31 +1791,16 @@ namespace tpp
         if (outTemplateLines)
             *outTemplateLines = templateLines;
         if (outBodyStartLine)
-        {
-            // count newlines up to the start of the body to produce a 0-based line number
-            size_t lineCount = 0;
-            for (size_t i = 0; i < lineStart; ++i)
-                if (text[i] == '\n')
-                    ++lineCount;
-            // body starts on the line after the template header
-            if (nl < text.size() && text[nl] == '\n')
-                ++lineCount;
-            *outBodyStartLine = lineCount;
-        }
+            *outBodyStartLine = bodyStartLine;
 
         if (outHeaderRange)
         {
-            // Compute 0-based line number of the function header for error reporting
-            size_t lineNum = 0;
-            for (size_t i = 0; i < lineStart; ++i)
-                if (text[i] == '\n')
-                    ++lineNum;
             // column: "template " is 9 chars, then any leading-whitespace-trimmed name starts
             std::string afterTemplate = trim(text.substr(lineStart, nl - lineStart)).substr(9);
             size_t nameStart = afterTemplate.find_first_not_of(' ');
             int col = 9 + (int)(nameStart == std::string::npos ? 0 : nameStart);
-            *outHeaderRange = {{(int)lineNum, col},
-                               {(int)lineNum, col + (int)func.name.size()}};
+            *outHeaderRange = {{(int)headerLineNum, col},
+                               {(int)headerLineNum, col + (int)func.name.size()}};
         }
 
         if (outHeaderText)

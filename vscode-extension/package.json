@@ -1,0 +1,93 @@
+{
+  "name": "tpp-language-support",
+  "displayName": "tpp Template Language Support",
+  "description": "Language support for tpp template files (.tpp, .tpp.types) with LSP backend.",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Other"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/placeholder/tpp"
+  },
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "tpp",
+        "aliases": [
+          "tpp Template",
+          "tpp"
+        ],
+        "extensions": [
+          ".tpp"
+        ],
+        "configuration": "./language-configuration-tpp.json"
+      },
+      {
+        "id": "tpp-types",
+        "aliases": [
+          "tpp Types",
+          "tpp.types"
+        ],
+        "extensions": [
+          ".tpp.types"
+        ],
+        "filenamePatterns": [
+          "*.tpp.types"
+        ],
+        "configuration": "./language-configuration-tpp-types.json"
+      }
+    ],
+    "grammars": [],
+    "jsonValidation": [
+      {
+        "fileMatch": "tpp-config.json",
+        "url": "./tpp-config-schema.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "tpp.openPreview",
+        "title": "tpp: Open Render Preview",
+        "icon": "$(open-preview)"
+      }
+    ],
+    "configuration": {
+      "title": "tpp",
+      "properties": {
+        "tpp.lspServerPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the tpp-lsp binary (required). Absolute path or relative to the workspace root. Build it with: cmake -DTPP_BUILD_LSP=ON -B build && cmake --build build --target tpp-lsp"
+        },
+        "tpp.trace.server": {
+          "type": "string",
+          "enum": ["off", "messages", "verbose"],
+          "default": "off",
+          "description": "Trace LSP communication between VS Code and the tpp language server. View in Output → tpp Language Server."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build-lsp": "bash scripts/build-lsp.sh",
+    "compile": "esbuild src/extension.ts --bundle --minify --outfile=out/extension.js --external:vscode --format=cjs --platform=node",
+    "watch": "npm run compile -- --watch",
+    "package": "npm run compile && echo y | vsce package --allow-missing-repository --no-dependencies"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.7.1",
+    "esbuild": "^0.20.0",
+    "typescript": "^5.0.0"
+  }
+}

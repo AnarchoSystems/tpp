@@ -4,6 +4,7 @@
 #include <tpp/AST.h>
 #include <tpp/Diagnostic.h>
 #include <tpp/Policy.h>
+#include <tpp/RenderMapping.h>
 
 namespace tpp
 {
@@ -13,7 +14,8 @@ namespace tpp
         [[nodiscard]]
         bool render(const nlohmann::json &input,
                     std::string &output,
-                    std::string &error) const noexcept;
+                    std::string &error,
+                    std::vector<RenderMapping> *tracking = nullptr) const noexcept;
 
         TemplateFunction function;
         TypeRegistry types;

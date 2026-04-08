@@ -1,5 +1,6 @@
 #pragma once
 
+#include <tpp/Diagnostic.h>
 #include <string>
 #include <vector>
 #include <variant>
@@ -34,12 +35,14 @@ namespace tpp
         std::string name;
         TypeRef type;
         bool recursive = false;
+        Range sourceRange{};
     };
 
     struct StructDef
     {
         std::string name;
         std::vector<FieldDef> fields;
+        Range sourceRange{};
     };
 
     struct VariantDef
@@ -47,12 +50,14 @@ namespace tpp
         std::string tag;
         std::optional<TypeRef> payload;
         bool recursive = false;
+        Range sourceRange{};
     };
 
     struct EnumDef
     {
         std::string name;
         std::vector<VariantDef> variants;
+        Range sourceRange{};
     };
 
     // ── Type registry ──
