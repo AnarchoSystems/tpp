@@ -1,1 +1,69 @@
-{"types": ["typedefs.tpp"], "templates": ["template.tpp"]}
+{
+    "types": [
+        "typedefs.tpp"
+    ],
+    "templates": [
+        "template.tpp"
+    ],
+    "previews": [
+        {
+            "template": "main",
+            "input": {
+                "name": "MyFeature",
+                "scenarios": [
+                    {
+                        "name": "MyScenario",
+                        "steps": [
+                            {
+                                "name": "some_step",
+                                "regexArgs": [
+                                    "\"Foo\"",
+                                    "42"
+                                ],
+                                "argument": {
+                                    "None": {}
+                                }
+                            },
+                            {
+                                "name": "some_other_step",
+                                "regexArgs": [],
+                                "argument": {
+                                    "DocString": "\"DocString\""
+                                }
+                            },
+                            {
+                                "name": "some_table_step",
+                                "regexArgs": [],
+                                "argument": {
+                                    "DataTable": [
+                                        [
+                                            "\"John\"",
+                                            "\"Doe\""
+                                        ],
+                                        [
+                                            "\"James\"",
+                                            "\"Bond\""
+                                        ]
+                                    ]
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "name": "MyOtherScenario",
+                        "steps": [
+                            {
+                                "name": "some_strange_step",
+                                "regexArgs": [],
+                                "argument": {
+                                    "None": {}
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+            "name": "default"
+        }
+    ]
+}

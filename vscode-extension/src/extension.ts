@@ -101,14 +101,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     for (const cfg of configs) {
       if (!cfg.previews) continue;
       for (let i = 0; i < cfg.previews.length; i++) {
-        const label = cfg.previews[i].name || cfg.previews[i].template;
+        const previewName = cfg.previews[i].name || cfg.previews[i].template;
+        const folderName = path.basename(path.dirname(cfg.configPath));
         items.push({
-          label,
-          description: path.relative(
-            vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '',
-            cfg.configPath
-          ),
-          detail: `preview[${i}]`
+          label: `${folderName}/${previewName}`,
+          detail: cfg.configPath,
         });
       }
     }
@@ -124,8 +121,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     for (const cfg of configs) {
       if (!cfg.previews) continue;
       for (let i = 0; i < cfg.previews.length; i++) {
-        const label = cfg.previews[i].name || cfg.previews[i].template;
-        if (label === picked.label) {
+        const previewName = cfg.previews[i].name || cfg.previews[i].template;
+        const folderName = path.basename(path.dirname(cfg.configPath));
+        if (`${folderName}/${previewName}` === picked.label) {
           PreviewPanel.createOrShow(context, client!, cfg, i);
           return;
         }

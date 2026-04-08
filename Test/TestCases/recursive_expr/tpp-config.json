@@ -1,1 +1,31 @@
-{"types": ["typedefs.tpp"], "templates": ["template.tpp"]}
+{
+    "types": [
+        "typedefs.tpp"
+    ],
+    "templates": [
+        "template.tpp"
+    ],
+    "previews": [
+        {
+            "template": "main",
+            "input": {
+                "Add": {
+                    "left": {
+                        "Num": 1
+                    },
+                    "right": {
+                        "Mul": {
+                            "left": {
+                                "Num": 2
+                            },
+                            "right": {
+                                "Num": 3
+                            }
+                        }
+                    }
+                }
+            },
+            "name": "default"
+        }
+    ]
+}

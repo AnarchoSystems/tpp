@@ -1,1 +1,20 @@
-{"types": [], "templates": ["helper.tpp", "template.tpp"]}
+{
+    "types": [],
+    "templates": [
+        "helper.tpp",
+        "template.tpp"
+    ],
+    "previews": [
+        {
+            "template": "main",
+            "input": [
+                [
+                    "a",
+                    "b",
+                    "c"
+                ]
+            ],
+            "name": "default"
+        }
+    ]
+}

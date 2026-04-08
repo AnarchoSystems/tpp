@@ -1,1 +1,16 @@
-{"types": ["first.tpp", "second.tpp"], "templates": ["template.tpp"]}
+{
+    "types": [
+        "first.tpp",
+        "second.tpp"
+    ],
+    "templates": [
+        "template.tpp"
+    ],
+    "previews": [
+        {
+            "template": "main",
+            "input": {},
+            "name": "default"
+        }
+    ]
+}

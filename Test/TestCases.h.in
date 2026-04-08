@@ -1,0 +1,10 @@
+#pragma once
+// Generated at configure time by CMake. Do not edit manually.
+
+static const char* const kTppSuccessCases[] = {
+@TPP_SUCCESS_CASE_ENTRIES@    nullptr
+};
+
+static const char* const kTppFailureCases[] = {
+@TPP_FAILURE_CASE_ENTRIES@    nullptr
+};

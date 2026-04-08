@@ -1,5 +1,16 @@
 {
     "types": [],
-    "templates": ["template.tpp"],
-    "replacement-policies": ["no-script.policy.json"]
+    "templates": [
+        "template.tpp"
+    ],
+    "replacement-policies": [
+        "no-script.policy.json"
+    ],
+    "previews": [
+        {
+            "template": "main",
+            "input": "<script>alert(1)</script>",
+            "name": "default"
+        }
+    ]
 }

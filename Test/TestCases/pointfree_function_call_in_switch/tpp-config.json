@@ -1,1 +1,25 @@
-{"types": ["typedefs.tpp"], "templates": ["template.tpp"]}
+{
+    "types": [
+        "typedefs.tpp"
+    ],
+    "templates": [
+        "template.tpp"
+    ],
+    "previews": [
+        {
+            "template": "main",
+            "input": [
+                {
+                    "Integer": 42
+                },
+                {
+                    "Str": "Hello, world!"
+                },
+                {
+                    "Bool": true
+                }
+            ],
+            "name": "default"
+        }
+    ]
+}

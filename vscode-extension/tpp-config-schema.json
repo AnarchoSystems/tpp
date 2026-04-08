@@ -7,12 +7,12 @@
   "properties": {
     "types": {
       "type": "array",
-      "description": "Glob patterns (relative to this config file) for type definition files (.tpp.types).",
+      "description": "Glob patterns (relative to this config file) for type definition files (.tpp).",
       "items": {
         "type": "string",
-        "description": "A glob pattern such as \"*.tpp.types\" or \"types/*.tpp.types\"."
+        "description": "A glob pattern such as \"*.tpp\" or \"types/*.tpp\"."
       },
-      "default": ["*.tpp.types"]
+      "default": []
     },
     "templates": {
       "type": "array",
@@ -22,6 +22,43 @@
         "description": "A glob pattern such as \"*.tpp\" or \"templates/*.tpp\"."
       },
       "default": ["*.tpp"]
+    },
+    "replacement-policies": {
+      "type": "array",
+      "description": "Paths (relative to this config file) to replacement-policy JSON files.",
+      "items": {
+        "type": "string",
+        "description": "A path to a replacement-policy JSON file."
+      },
+      "default": []
+    },
+    "previews": {
+      "type": "array",
+      "description": "Preview configurations used by the LSP and acceptance tests to render the template with sample input.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["template"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Optional display name for this preview entry."
+          },
+          "template": {
+            "type": "string",
+            "description": "Name of the template function to render (e.g. \"main\")."
+          },
+          "input": {
+            "description": "Input data for the template. Either an inline JSON value or a path string pointing to a .json file relative to this config.",
+            "oneOf": [
+              { "type": "string", "description": "Path to a JSON input file, relative to this config." },
+              { "type": "object", "description": "Inline JSON object input." },
+              { "type": "array",  "description": "Inline JSON array input." }
+            ]
+          }
+        }
+      },
+      "default": []
     }
   }
 }

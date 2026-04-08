@@ -1,5 +1,20 @@
 {
-    "types": ["typedefs.tpp"],
-    "templates": ["template.tpp"],
-    "replacement-policies": ["escape-lt.policy.json"]
+    "types": [
+        "typedefs.tpp"
+    ],
+    "templates": [
+        "template.tpp"
+    ],
+    "replacement-policies": [
+        "escape-lt.policy.json"
+    ],
+    "previews": [
+        {
+            "template": "main",
+            "input": {
+                "A": "x<y"
+            },
+            "name": "default"
+        }
+    ]
 }

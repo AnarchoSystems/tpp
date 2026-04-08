@@ -1,0 +1,119 @@
+#include "TestUtils.h"
+#include <nlohmann/json.hpp>
+
+// ── AcceptanceTest — in-process compile + render ──────────────────────────────
+
+class AcceptanceTest : public ::testing::TestWithParam<tTestCase>
+{
+};
+
+TEST_P(AcceptanceTest, RunTestCase)
+{
+    const auto testCase = GetParam().extract();
+
+    tpp::Compiler compiler;
+    std::vector<tpp::DiagnosticLSPMessage> fileDiags;
+    fileDiags.reserve(testCase.sources.size());
+    for (const auto &src : testCase.sources)
+        fileDiags.push_back(tpp::DiagnosticLSPMessage(src.url));
+
+    for (size_t i = 0; i < testCase.sources.size(); ++i)
+    {
+        const auto &src = testCase.sources[i];
+        if (src.isTypes)
+            compiler.add_types(src.content, fileDiags[i].diagnostics);
+        else
+            compiler.add_templates(src.content, fileDiags[i].diagnostics);
+    }
+    for (const auto &pol : testCase.policies)
+    {
+        std::string err;
+        compiler.add_policy(pol, err);
+    }
+
+    tpp::CompilerOutput output;
+    std::string getFunctionError, renderError, renderedOutput;
+    tpp::FunctionSymbol functionSymbol;
+
+    const bool isSuccess = compiler.compile(output) &&
+                           output.get_function("main", functionSymbol, getFunctionError) &&
+                           functionSymbol.render(testCase.input, renderedOutput, renderError);
+
+    EXPECT_EQ(isSuccess, testCase.expectSuccess) << "Test case: " << testCase.name;
+    if (isSuccess)
+    {
+        EXPECT_EQ(renderedOutput, testCase.expectedOutput) << "Test case: " << testCase.name;
+    }
+    else
+    {
+        std::vector<tpp::DiagnosticLSPMessage> actualDiags;
+        for (const auto &d : fileDiags)
+            if (!d.diagnostics.empty()) actualDiags.push_back(d);
+        EXPECT_EQ(actualDiags, testCase.expectedDiagnostics)
+            << "Test case: " << testCase.name
+            << "\nActual diagnostics: " << nlohmann::json(actualDiags).dump(2);
+        EXPECT_EQ(getFunctionError, testCase.getFunctionError) << "Test case: " << testCase.name;
+        EXPECT_EQ(renderError, testCase.renderError) << "Test case: " << testCase.name;
+    }
+}
+
+// ── CompareCompileByCLI — compare tpp CLI JSON output with in-process ─────────
+
+TEST_P(AcceptanceTest, CompareCompileByCLI)
+{
+    const auto testCase = GetParam().extract();
+
+    auto cliOutput = runCommand(
+        TPP_EXE " " + std::filesystem::absolute("TestCases/" + testCase.name).string() + " 2>&1");
+
+    tpp::Compiler compiler;
+    std::vector<tpp::DiagnosticLSPMessage> fileDiags;
+    fileDiags.reserve(testCase.sources.size());
+    for (const auto &src : testCase.sources)
+        fileDiags.push_back(tpp::DiagnosticLSPMessage(src.url));
+    for (size_t i = 0; i < testCase.sources.size(); ++i)
+    {
+        if (testCase.sources[i].isTypes)
+            compiler.add_types(testCase.sources[i].content, fileDiags[i].diagnostics);
+        else
+            compiler.add_templates(testCase.sources[i].content, fileDiags[i].diagnostics);
+    }
+    for (const auto &pol : testCase.policies)
+    {
+        std::string err;
+        compiler.add_policy(pol, err);
+    }
+    tpp::CompilerOutput expectedOutput;
+    bool expectedSuccess = compiler.compile(expectedOutput);
+
+    EXPECT_EQ(cliOutput.success, expectedSuccess) << "Test case: " << testCase.name;
+    if (cliOutput.success != expectedSuccess) return;
+
+    if (expectedSuccess)
+    {
+        tpp::CompilerOutput actualOutput = nlohmann::json::parse(cliOutput.output);
+        EXPECT_EQ(actualOutput, expectedOutput)
+            << "Test case: " << testCase.name
+            << "\nExpected: " << nlohmann::json(expectedOutput).dump(2)
+            << "\nActual: "   << nlohmann::json(actualOutput).dump(2);
+    }
+    else
+    {
+        std::vector<std::string> expectedDiagStrings;
+        for (const auto &fd : testCase.expectedDiagnostics)
+        {
+            auto copy = fd;
+            copy.uri = std::filesystem::absolute("TestCases/" + copy.uri).string();
+            for (const auto &d : copy.toGCCDiagnostics())
+                expectedDiagStrings.push_back(d);
+        }
+        EXPECT_EQ(cliOutput.diagnostics, expectedDiagStrings)
+            << "Test case: " << testCase.name
+            << "\nActual: " << nlohmann::json(cliOutput.diagnostics).dump(2);
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(AcceptanceTests, AcceptanceTest,
+    ::testing::ValuesIn(GetTestCases()),
+    [](const testing::TestParamInfo<AcceptanceTest::ParamType> &info)
+    { return info.param.name; });

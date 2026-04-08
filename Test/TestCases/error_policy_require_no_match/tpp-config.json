@@ -1,5 +1,16 @@
 {
     "types": [],
-    "templates": ["template.tpp"],
-    "replacement-policies": ["require-digit.policy.json"]
+    "templates": [
+        "template.tpp"
+    ],
+    "replacement-policies": [
+        "require-digit.policy.json"
+    ],
+    "previews": [
+        {
+            "template": "main",
+            "input": "hello",
+            "name": "default"
+        }
+    ]
 }

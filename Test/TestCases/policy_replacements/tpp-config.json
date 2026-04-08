@@ -1,5 +1,16 @@
 {
     "types": [],
-    "templates": ["template.tpp"],
-    "replacement-policies": ["escape-lt.policy.json"]
+    "templates": [
+        "template.tpp"
+    ],
+    "replacement-policies": [
+        "escape-lt.policy.json"
+    ],
+    "previews": [
+        {
+            "template": "main",
+            "input": "a < b < c",
+            "name": "default"
+        }
+    ]
 }

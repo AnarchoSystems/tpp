@@ -1,1 +1,18 @@
-{"types": ["typedefs.tpp"], "templates": ["template.tpp"]}
+{
+    "types": [
+        "typedefs.tpp"
+    ],
+    "templates": [
+        "template.tpp"
+    ],
+    "previews": [
+        {
+            "template": "main",
+            "input": {
+                "name": "Bob",
+                "email": "bob@example.com"
+            },
+            "name": "default"
+        }
+    ]
+}

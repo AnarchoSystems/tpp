@@ -1,1 +1,29 @@
-{"types": ["typedefs.tpp"], "templates": ["template.tpp"]}
+{
+    "types": [
+        "typedefs.tpp"
+    ],
+    "templates": [
+        "template.tpp"
+    ],
+    "previews": [
+        {
+            "template": "main",
+            "input": {
+                "name": "Foo",
+                "fields": [
+                    {
+                        "name": "bar",
+                        "type": "int",
+                        "initialValue": "42"
+                    },
+                    {
+                        "name": "baz",
+                        "type": "std::string",
+                        "initialValue": "\"Hello, World!\""
+                    }
+                ]
+            },
+            "name": "default"
+        }
+    ]
+}
