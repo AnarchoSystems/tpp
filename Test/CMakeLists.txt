@@ -1,11 +1,3 @@
-FetchContent_Declare(
-  googletest
-  GIT_REPOSITORY https://github.com/google/googletest.git
-  GIT_TAG        v1.14.0
-)
-
-FetchContent_MakeAvailable(googletest)
-
 # ── Configure-time test case discovery ───────────────────────────────────────
 # Scan TestCases/ at configure time; separate success (expected_output.txt)
 # from failure (expected_diagnostics.json / expected_errors.json) cases.
@@ -102,11 +94,10 @@ add_executable(tpp_acceptance_test
     src/LspTest.cc
 )
 
-target_link_libraries(tpp_acceptance_test PRIVATE gtest_main lib_tpp)
+target_link_libraries(tpp_acceptance_test PRIVATE gtest_main lib_tpp tpp_lsp_defs)
 target_include_directories(tpp_acceptance_test PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${CMAKE_SOURCE_DIR}/Executables/lsp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 add_dependencies(tpp_acceptance_test tpp render-tpp tpp-lsp)
 

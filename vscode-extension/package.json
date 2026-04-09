@@ -63,7 +63,7 @@
         "tpp.lspServerPath": {
           "type": "string",
           "default": "",
-          "description": "Path to the tpp-lsp binary (required). Absolute path or relative to the workspace root. Build it with: cmake -DTPP_BUILD_LSP=ON -B build && cmake --build build --target tpp-lsp"
+          "description": "Path to the tpp-lsp binary (required). Absolute path or relative to the workspace root. Build it with: cmake -B build && cmake --build build --target tpp-lsp"
         },
         "tpp.trace.server": {
           "type": "string",

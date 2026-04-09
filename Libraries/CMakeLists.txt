@@ -1,0 +1,2 @@
+add_subdirectory(lib_tpp)
+add_subdirectory(lsp_defs)

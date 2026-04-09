@@ -64,7 +64,9 @@ TEST_P(AcceptanceTest, RunTestCase)
 
 TEST_P(AcceptanceTest, CompareCompileByCLI)
 {
-    auto cliOutput = runCommand(TPP_EXE " " + std::filesystem::absolute("TestCases/" + testCase.name).string() + " 2>&1");
+    // Run tpp directly (no shell) to avoid pipe inheritance issues on macOS.
+    auto cliOutput = runCommandDirect({TPP_EXE,
+        std::filesystem::absolute("TestCases/" + testCase.name).string()});
 
     tpp::CompilerOutput expectedOutput;
     bool expectedSuccess = compiler.compile(expectedOutput);

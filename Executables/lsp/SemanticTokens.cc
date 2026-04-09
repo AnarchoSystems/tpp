@@ -14,6 +14,7 @@ static constexpr int TT_FUNCTION  = lsp::tokenTypeIndex(lsp::SemanticTokenType::
 [[maybe_unused]] static constexpr int TT_STRING    = lsp::tokenTypeIndex(lsp::SemanticTokenType::string_);
 static constexpr int TT_PARAMETER = lsp::tokenTypeIndex(lsp::SemanticTokenType::parameter);
 static constexpr int TT_OPERATOR  = lsp::tokenTypeIndex(lsp::SemanticTokenType::operator_);
+static constexpr int TT_ENUM_MEMBER = lsp::tokenTypeIndex(lsp::SemanticTokenType::enumMember);
 
 namespace tpp
 {
@@ -82,9 +83,9 @@ static void emitCaseDirective(std::vector<RawToken> &out, const CaseNode &c)
 
     out.push_back({ln, col, 6, TT_KEYWORD, 0}); // "@case "
 
-    // tag name (enum variant → type colour)
+    // tag name (variant tag → enumMember colour)
     if (!c.tag.empty())
-        out.push_back({ln, col + 6, (int)c.tag.size(), TT_TYPE, 0});
+        out.push_back({ln, col + 6, (int)c.tag.size(), TT_ENUM_MEMBER, 0});
 
     int afterTag = col + 6 + (int)c.tag.size();
     // optional binding: (varname)
@@ -135,7 +136,11 @@ static void walkNode(std::vector<RawToken> &out, const ASTNode &node)
     {
         using T = std::decay_t<decltype(arg)>;
 
-        if constexpr (std::is_same_v<T, InterpolationNode>)
+        if constexpr (std::is_same_v<T, AlignmentCellNode>)
+        {
+            emitRange(out, arg.sourceRange, TT_OPERATOR);
+        }
+        else if constexpr (std::is_same_v<T, InterpolationNode>)
         {
             const int ln    = arg.sourceRange.start.line;
             const int start = arg.sourceRange.start.character;
@@ -388,31 +393,85 @@ static void emitTypeTokens(std::vector<RawToken> &out, const std::string &src,
                             const TypeRegistry *reg)
 {
     const auto &tokens = tokenize_typedefs(src);
+
+    // State machine to distinguish struct/enum names, field names, tag names, type refs.
+    bool inEnum = false;           // inside an enum { } body
+    int  depth  = 0;               // brace depth
+    bool expectDeclName = false;   // next Ident is a struct/enum type name
+    bool expectMemberName = false; // next Ident at depth=1 is a field or tag name
+
     for (const auto &tok : tokens)
     {
         if (tok.kind == TokKind::Eof) break;
         int len = (int)tok.text.size();
         if (len <= 0) continue;
         int type = -1;
+
         switch (tok.kind)
         {
-        case TokKind::Struct: case TokKind::Enum:
+        case TokKind::Struct:
+            inEnum = false;
+            expectDeclName = true;
+            expectMemberName = false;
+            type = TT_KEYWORD;
+            break;
+        case TokKind::Enum:
+            inEnum = true;
+            expectDeclName = true;
+            expectMemberName = false;
+            type = TT_KEYWORD;
+            break;
         case TokKind::KwOptional: case TokKind::KwList:
         case TokKind::KwString: case TokKind::KwInt: case TokKind::KwBool:
-            type = TT_KEYWORD; break;
-        case TokKind::Ident:
-            if (reg && reg->nameIndex.count(tok.text))
-                type = TT_TYPE;
-            else
-                type = TT_PROPERTY;
+            type = TT_KEYWORD;
             break;
-        case TokKind::Colon: case TokKind::Semi:
-        case TokKind::LAngle: case TokKind::RAngle:
-        case TokKind::LBrace: case TokKind::RBrace:
+        case TokKind::LBrace:
+            depth++;
+            if (depth == 1) expectMemberName = true;
+            type = TT_OPERATOR;
+            break;
+        case TokKind::RBrace:
+            depth--;
+            if (depth == 0) { inEnum = false; expectMemberName = false; }
+            type = TT_OPERATOR;
+            break;
+        case TokKind::Semi:
+            if (depth == 1) { expectMemberName = true; }
+            type = TT_OPERATOR;
+            break;
         case TokKind::LParen: case TokKind::RParen:
-            type = TT_OPERATOR; break;
-        default: break;
+            type = TT_OPERATOR;
+            break;
+        case TokKind::Colon:
+            type = TT_OPERATOR;
+            break;
+        case TokKind::Comma:
+            type = TT_OPERATOR;
+            break;
+        case TokKind::LAngle: case TokKind::RAngle:
+            type = TT_OPERATOR;
+            break;
+        case TokKind::Ident:
+            if (expectDeclName)
+            {
+                type = TT_TYPE;            // struct/enum declaration name
+                expectDeclName = false;
+            }
+            else if (expectMemberName && depth == 1)
+            {
+                type = inEnum ? TT_ENUM_MEMBER : TT_PROPERTY;
+                expectMemberName = false;
+            }
+            else
+            {
+                // Type reference (field type, tag payload, generic param)
+                type = TT_TYPE;
+            }
+            break;
+        default:
+            break;
         }
+
         if (type >= 0)
             out.push_back({tok.line, tok.col, len, type, 0});
     }

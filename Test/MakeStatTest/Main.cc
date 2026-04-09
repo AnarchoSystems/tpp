@@ -229,8 +229,14 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    // Read input.json
-    nlohmann::json inputJson = nlohmann::json::parse(readFile(testDir / "input.json"));
+    // Read input from previews[0].input in tpp-config.json
+    const auto &previews = config.value("previews", nlohmann::json::array());
+    if (previews.empty() || !previews[0].contains("input"))
+    {
+        std::cerr << configPath.string() << ": error: no previews[0].input found" << std::endl;
+        return EXIT_FAILURE;
+    }
+    nlohmann::json inputJson = previews[0].at("input");
 
     // Read expected_output.txt (strip trailing newline)
     std::string expectedRaw = readFile(testDir / "expected_output.txt");

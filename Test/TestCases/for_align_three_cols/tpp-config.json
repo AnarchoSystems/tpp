@@ -1,0 +1,16 @@
+{
+    "types": ["typedefs.tpp"],
+    "templates": ["template.tpp"],
+    "previews": [
+        {
+            "template": "main",
+            "input": {
+                "rows": [
+                    {"name": "x",        "type": "int",    "value": "100"},
+                    {"name": "longname", "type": "string", "value": "true"}
+                ]
+            },
+            "name": "default"
+        }
+    ]
+}

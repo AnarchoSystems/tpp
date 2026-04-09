@@ -1,0 +1,17 @@
+{
+    "types": ["typedefs.tpp"],
+    "templates": ["template.tpp"],
+    "previews": [
+        {
+            "template": "main",
+            "input": {
+                "items": [
+                    {"label": "apples",  "count": "5"},
+                    {"label": "fig",     "count": "42"},
+                    {"label": "bananas", "count": "3"}
+                ]
+            },
+            "name": "default"
+        }
+    ]
+}

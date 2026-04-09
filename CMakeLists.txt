@@ -8,16 +8,13 @@ set(CMAKE_CXX_STANDARD 17)
 enable_testing()
 message(STATUS "Building arm 64Bit")
 
-set(CMAKE_CXX_FLAGS "-funsigned-char -pipe  -Wall -pedantic -Wno-unknown-pragmas -DLinux -DDEBUG -DNDEBUG")
+set(CMAKE_CXX_FLAGS "-funsigned-char -pipe  -Wall -pedantic -Wno-unknown-pragmas -DDEBUG -DNDEBUG")
 set(CMAKE_CXX_FLAGS_DEBUG "-g -Werror")
 set(CMAKE_CXX_FLAGS_RELEASE "-g -O")
 
-set(CMAKE_C_FLAGS "-funsigned-char -pipe  -Wall -pedantic -Wno-unknown-pragmas -DLinux -DDEBUG -DNDEBUG")
+set(CMAKE_C_FLAGS "-funsigned-char -pipe  -Wall -pedantic -Wno-unknown-pragmas -DDEBUG -DNDEBUG")
 set(CMAKE_C_FLAGS_DEBUG "-g -Werror")
 set(CMAKE_C_FLAGS_RELEASE "-g -O")
-
-set(JIT_BUILD_ARCH x86_64-Linux)
-
 
 include(FetchContent)
 
@@ -30,22 +27,15 @@ FetchContent_Declare(
   GIT_TAG        v3.12.0
 )
 
-FetchContent_MakeAvailable(nlohmann_json)
-
-add_library(lib_tpp
-    TypedefParser.cc
-    TemplateParser.cc
-    CompilerOutput.cc
-    Rendering.cc
-    tpp/PolicyParser.cc
+FetchContent_Declare(
+  googletest
+  GIT_REPOSITORY https://github.com/google/googletest.git
+  GIT_TAG        v1.14.0
 )
 
-target_link_libraries(lib_tpp PUBLIC nlohmann_json)
+FetchContent_MakeAvailable(nlohmann_json)
+FetchContent_MakeAvailable(googletest)
 
-target_include_directories(lib_tpp  PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
-                                    PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-
-option(TPP_BUILD_LSP "Build the tpp-lsp language server" OFF)
-
+add_subdirectory(Libraries)
 add_subdirectory(Executables)
 add_subdirectory(Test)

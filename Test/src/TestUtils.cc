@@ -1,6 +1,9 @@
 #include "TestUtils.h"
 #include "TestCases.h" // generated at configure time
 #include <sys/wait.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <spawn.h>
 
 namespace tpp
 {
@@ -122,20 +125,15 @@ tLoadedTestCase tTestCase::extract() const
         }
     }
 
-    // Input: prefer previews[0].input in tpp-config.json, fall back to input.json
+    // Input: read from previews[0].input in tpp-config.json
     if (config.contains("previews") && config["previews"].is_array() &&
         !config["previews"].empty() && config["previews"][0].contains("input"))
     {
-        // Always use the inline value as-is (string, object, or array)
         loaded.input = config["previews"][0]["input"];
     }
-    else
+    else 
     {
-        std::ifstream inputFile(path / "input.json");
-        if (!inputFile.is_open())
-            throw std::runtime_error("Failed to open input.json in " + path.string());
-        loaded.input = nlohmann::json::parse(
-            std::string((std::istreambuf_iterator<char>(inputFile)), std::istreambuf_iterator<char>()));
+        loaded.input = nlohmann::json::object();
     }
 
     std::ifstream expectedOutputFile(path / "expected_output.txt");
@@ -212,29 +210,63 @@ std::vector<tTestCase> GetPositiveTestCases()
 }
 
 // ── CLI runner ────────────────────────────────────────────────────────────────
-
-tCLIOutput runCommand(const std::string &command)
+// agent went into full nervous breakdown because of a hang
+// code works, so whatever...
+static tCLIOutput runCommandArgv(const char *const argv[])
 {
-    std::array<char, 128> buffer;
-    std::string result;
-    FILE *pipe = popen(command.c_str(), "r");
-    if (!pipe) throw std::runtime_error("popen() failed!");
-    while (fgets(buffer.data(), buffer.size(), pipe) != nullptr)
-        result += buffer.data();
-    int status = pclose(pipe);
-    tCLIOutput output;
-#if defined(_WIN32) || defined(_WIN64)
-    int exitCode = status;
-#else
-    int exitCode = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+    int pipefd[2];
+    if (pipe(pipefd) == -1)
+        throw std::runtime_error("pipe() failed!");
+
+    posix_spawn_file_actions_t fa;
+    posix_spawn_file_actions_init(&fa);
+    // stdin → /dev/null, stdout+stderr → our pipe write end
+    posix_spawn_file_actions_addopen(&fa, STDIN_FILENO, "/dev/null", O_RDONLY, 0);
+    posix_spawn_file_actions_adddup2(&fa, pipefd[1], STDOUT_FILENO);
+    posix_spawn_file_actions_adddup2(&fa, pipefd[1], STDERR_FILENO);
+    // Close the original pipe fds inside the spawned process
+    posix_spawn_file_actions_addclose(&fa, pipefd[0]);
+    posix_spawn_file_actions_addclose(&fa, pipefd[1]);
+
+    posix_spawnattr_t attr;
+    posix_spawnattr_init(&attr);
+#if defined(__APPLE__)
+    // Close every fd the child would otherwise inherit except those set by fa above.
+    // This is the key fix: VS Code TestMate keeps open write-ends of pipes that
+    // it created to capture test output; those would otherwise prevent our pipe
+    // from reaching EOF and cause the parent read() to block indefinitely.
+    posix_spawnattr_setflags(&attr, POSIX_SPAWN_CLOEXEC_DEFAULT);
 #endif
-    if (exitCode == 0)
-    {
-        output.success = true;
-        output.output = result;
+
+    extern char **environ;
+    pid_t pid = -1;
+    int err = posix_spawn(&pid, argv[0], &fa, &attr,
+                          const_cast<char *const *>(argv), environ);
+    posix_spawn_file_actions_destroy(&fa);
+    posix_spawnattr_destroy(&attr);
+    close(pipefd[1]); // parent doesn't write
+
+    if (err != 0) {
+        close(pipefd[0]);
+        throw std::runtime_error(std::string("posix_spawn failed: ") + strerror(err));
     }
-    else
+
+    std::string result;
     {
+        std::array<char, 4096> buf;
+        ssize_t n;
+        while ((n = read(pipefd[0], buf.data(), buf.size())) > 0)
+            result.append(buf.data(), static_cast<size_t>(n));
+    }
+    close(pipefd[0]);
+
+    int status = 0;
+    waitpid(pid, &status, 0);
+    int exitCode = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+
+    tCLIOutput output;
+    if (exitCode == 0) { output.success = true; output.output = result; }
+    else {
         output.success = false;
         std::istringstream iss(result);
         std::string line;
@@ -242,4 +274,19 @@ tCLIOutput runCommand(const std::string &command)
             output.diagnostics.push_back(line);
     }
     return output;
+}
+
+tCLIOutput runCommand(const std::string &command)
+{
+    const char *argv[] = {"/bin/sh", "-c", command.c_str(), nullptr};
+    return runCommandArgv(argv);
+}
+
+tCLIOutput runCommandDirect(const std::vector<std::string> &args)
+{
+    std::vector<const char *> argv;
+    argv.reserve(args.size() + 1);
+    for (const auto &a : args) argv.push_back(a.c_str());
+    argv.push_back(nullptr);
+    return runCommandArgv(argv.data());
 }

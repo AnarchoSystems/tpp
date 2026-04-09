@@ -37,12 +37,13 @@ namespace tpp
 
         // ── Request / notification handlers ────────────────────────────
         nlohmann::json onInitialize(const nlohmann::json &params);
-        void           onInitialized(const nlohmann::json &params);
+        void           onInitialized(const nlohmann::json &params, std::vector<nlohmann::json> &outNotifs);
         nlohmann::json onShutdown();
 
         void onDidOpen(const nlohmann::json &params, std::vector<nlohmann::json> &outNotifs);
         void onDidChange(const nlohmann::json &params, std::vector<nlohmann::json> &outNotifs);
         void onDidClose(const nlohmann::json &params);
+        void onDidChangeWatchedFiles(const nlohmann::json &params, std::vector<nlohmann::json> &outNotifs);
 
         nlohmann::json onSemanticTokensFull(const nlohmann::json &params);
         nlohmann::json onFoldingRange(const nlohmann::json &params);

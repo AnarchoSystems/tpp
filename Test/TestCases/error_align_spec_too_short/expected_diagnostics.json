@@ -1,0 +1,23 @@
+[
+  {
+    "uri": "error_align_spec_too_short/template.tpp",
+    "diagnostics": [
+      {
+        "message": "@&@ exceeds align spec — spec only covers 2 column(s)",
+        "range": {
+          "start": {"line": 1, "character": 60},
+          "end":   {"line": 1, "character": 63}
+        },
+        "severity": "error"
+      },
+      {
+        "message": "align spec has 2 column(s) but the loop body has 3",
+        "range": {
+          "start": {"line": 1, "character": 0},
+          "end":   {"line": 1, "character": 41}
+        },
+        "severity": "error"
+      }
+    ]
+  }
+]

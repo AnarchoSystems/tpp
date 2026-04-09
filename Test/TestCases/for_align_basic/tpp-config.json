@@ -1,0 +1,17 @@
+{
+    "types": ["typedefs.tpp"],
+    "templates": ["template.tpp"],
+    "previews": [
+        {
+            "template": "main",
+            "input": {
+                "rows": [
+                    {"name": "width",   "type": "int",    "value": "100"},
+                    {"name": "label",   "type": "string", "value": "hello"},
+                    {"name": "visible", "type": "bool",   "value": "true"}
+                ]
+            },
+            "name": "default"
+        }
+    ]
+}

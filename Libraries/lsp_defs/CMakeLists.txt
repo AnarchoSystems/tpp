@@ -1,0 +1,2 @@
+add_library(tpp_lsp_defs INTERFACE)
+target_include_directories(tpp_lsp_defs INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)

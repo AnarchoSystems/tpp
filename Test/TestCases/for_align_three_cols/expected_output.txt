@@ -1,0 +1,2 @@
+       x int    100
+longname string true

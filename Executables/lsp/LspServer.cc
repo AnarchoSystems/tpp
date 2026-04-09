@@ -19,6 +19,9 @@ namespace fs = std::filesystem;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+static std::string uriDecode(const std::string &s);
+static std::string uriToFsPath(const std::string &uri);
+
 static nlohmann::json makeResponse(const nlohmann::json &id, const nlohmann::json &result)
 {
     return {{"jsonrpc", "2.0"}, {"id", id}, {"result", result}};
@@ -62,7 +65,14 @@ nlohmann::json LspServer::handle(const std::string &rawMessage)
 
     if (method == "initialized")
     {
-        onInitialized(params);
+        std::vector<nlohmann::json> notifs;
+        onInitialized(params, notifs);
+        for (const auto &n : notifs)
+        {
+            std::string body = n.dump();
+            std::cout << "Content-Length: " << body.size() << "\r\n\r\n" << body;
+            std::cout.flush();
+        }
         return nullptr; // notification, no response
     }
 
@@ -76,6 +86,19 @@ nlohmann::json LspServer::handle(const std::string &rawMessage)
 
     if (!initialized_)
         return makeError(id, -32002, "Server not initialized");
+
+    if (method == "workspace/didChangeWatchedFiles")
+    {
+        std::vector<nlohmann::json> notifs;
+        onDidChangeWatchedFiles(params, notifs);
+        for (const auto &n : notifs)
+        {
+            std::string body = n.dump();
+            std::cout << "Content-Length: " << body.size() << "\r\n\r\n" << body;
+            std::cout.flush();
+        }
+        return nullptr;
+    }
 
     if (method == "textDocument/didOpen")
     {
@@ -167,15 +190,87 @@ nlohmann::json LspServer::onInitialize(const nlohmann::json &params)
     };
 }
 
-void LspServer::onInitialized(const nlohmann::json &)
+void LspServer::onInitialized(const nlohmann::json &, std::vector<nlohmann::json> &outNotifs)
 {
-    // Nothing extra needed; workspace was scanned in onInitialize.
+    // Register a file watcher so we're notified when tpp-config.json is created
+    // or modified anywhere in the workspace, allowing us to pick up new projects
+    // without requiring a window reload.
+    nlohmann::json reg = {
+        {"id", "tpp-lsp-watch-configs"},
+        {"method", "client/registerCapability"},
+        {"jsonrpc", "2.0"},
+        {"params", {
+            {"registrations", nlohmann::json::array({
+                {
+                    {"id", "tpp-config-watcher"},
+                    {"method", "workspace/didChangeWatchedFiles"},
+                    {"registerOptions", {
+                        {"watchers", nlohmann::json::array({
+                            {{"globPattern", "**/tpp-config.json"}}
+                        })}
+                    }}
+                }
+            })}
+        }}
+    };
+    outNotifs.push_back(std::move(reg));
 }
 
 nlohmann::json LspServer::onShutdown()
 {
     shutdown_ = true;
     return nullptr;
+}
+
+// ── File watch ────────────────────────────────────────────────────────────────
+
+void LspServer::onDidChangeWatchedFiles(const nlohmann::json &params,
+                                         std::vector<nlohmann::json> &outNotifs)
+{
+    // Called when tpp-config.json is created or modified in the workspace.
+    // Create a new project for configs we haven't seen, or reload existing ones.
+    const auto &changes = params.value("changes", nlohmann::json::array());
+    for (const auto &change : changes)
+    {
+        std::string uri = uriDecode(change.value("uri", ""));
+        if (uri.empty()) continue;
+        fs::path cfgPath = uriToFsPath(uri);
+        if (cfgPath.filename() != "tpp-config.json") continue;
+
+        // Check if we already have a project for this config.
+        TppProject *existing = nullptr;
+        for (auto &p : projects_)
+            if (fs::weakly_canonical(p->configPath()) == fs::weakly_canonical(cfgPath))
+                { existing = p.get(); break; }
+
+        if (existing)
+        {
+            existing->reloadConfig();
+            existing->recompile();
+            publishDiagnostics(*existing, outNotifs);
+        }
+        else
+        {
+            std::error_code ec;
+            if (!fs::exists(cfgPath, ec) || ec) continue;
+            auto project = std::make_unique<TppProject>(cfgPath);
+
+            // Migrate any standalone-buffer files that belong to this new project.
+            for (auto it = standaloneBuffer_.begin(); it != standaloneBuffer_.end(); )
+            {
+                if (project->ownsUri(it->first))
+                {
+                    project->setDirty(it->first, it->second);
+                    it = standaloneBuffer_.erase(it);
+                }
+                else ++it;
+            }
+
+            project->recompile();
+            publishDiagnostics(*project, outNotifs);
+            projects_.push_back(std::move(project));
+        }
+    }
 }
 
 // ── Workspace scan ────────────────────────────────────────────────────────────
@@ -368,7 +463,30 @@ void LspServer::onDidChange(const nlohmann::json &params, std::vector<nlohmann::
     std::string text = changes.back().at("text").get<std::string>();
 
     TppProject *proj = projectFor(uri);
-    if (!proj) { standaloneBuffer_[uri] = text; return; }
+    if (!proj)
+    {
+        // Mirror onDidOpen: if a tpp-config.json now exists in an ancestor dir
+        // (e.g. the user created the config after opening the file), pick it up.
+        fs::path filePath = uriToFsPath(uri);
+        fs::path dir = filePath.parent_path();
+        while (!dir.empty() && dir != dir.parent_path())
+        {
+            fs::path cfg = dir / "tpp-config.json";
+            std::error_code ec;
+            if (fs::exists(cfg, ec) && !ec)
+            {
+                auto project = std::make_unique<TppProject>(cfg);
+                project->setDirty(uri, text);
+                project->recompile();
+                publishDiagnostics(*project, outNotifs);
+                projects_.push_back(std::move(project));
+                return;
+            }
+            dir = dir.parent_path();
+        }
+        standaloneBuffer_[uri] = text;
+        return;
+    }
 
     proj->setDirty(uri, text);
     proj->recompile();

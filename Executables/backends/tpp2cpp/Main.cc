@@ -57,7 +57,8 @@ void printUsage()
                  "  -t, --types: produces a header file with type definitions\n"
                  "  -fun, --functions: produces a header file rendering the template functions as cpp functions\n"
                  "  -impl, --implementation: produces a cpp file with the implementations of the functions declared in the functions header (only needed if -fun/--functions is used)\n"
-                 "  -i <file>, --include <file>: files to include at the top of the generated code (can be specified multiple times)\n";
+                 "  -i <file>, --include <file>: files to include at the top of the generated code (can be specified multiple times)\n"
+                 "  --input <file>: file to read compiler output from (in json format, in the same format as tpp's output) instead of stdin\n";
 }
 
 tpp2cpp::tpp2cpp(int argc, char *argv[])
