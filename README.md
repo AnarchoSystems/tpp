@@ -1,6 +1,6 @@
 # tpp — A Template Language
 
-tpp is a **typed template preprocessor** for structured text generation. You define the shape of your data in a typed schema, write templates that interpolate and iterate over it, and let the compiler verify every field access before any output is produced.
+tpp is a **typed template language** for structured text generation. You define the shape of your data in a typed schema, write templates that interpolate and iterate over it, and let the compiler verify every field access before any output is produced.
 
 The result isn't just a rendered string — it's a **compile-time-verified pipeline**. tpp can turn your templates into typed C++ functions that your own compiler will check for you.
 
