@@ -12,11 +12,11 @@ tpp is built around a **single compiler frontend and multiple independent backen
 
 The compiler (`tpp`) reads your type definitions and template sources, validates them, and emits a **JSON document** describing everything it knows: the compiled types, the compiled template functions (as executable AST nodes), and any registered policies. This JSON document is the stable output contract.
 
-Every backend has an **easy job**: take that detailed compiler output and transform it into something useful. Because the compiler has already done all the hard work — type checking, field validation, policy registration, AST construction — a backend can focus purely on transformation without reimplementing any language logic.
+Every backend has an **easy job**: take that detailed intermediate representation and transform it into something useful. Because the compiler has already done all the hard work — type checking, field validation, policy registration, AST construction — a backend can focus purely on transformation without reimplementing any language logic.
 
 ### Why this matters for C++
 
-The `tpp2cpp` backend generates C++ types and function wrappers from the compiler output. Because the types were already validated and compiled by `tpp`, the generated C++ code:
+The `tpp2cpp` backend generates C++ types and function wrappers from the intermediate representation. Because the types were already validated and compiled by `tpp`, the generated C++ code:
 
 - is guaranteed to be structurally consistent with the template logic
 - produces functions with signatures that match the template parameter lists exactly
@@ -56,7 +56,7 @@ If `folder` is omitted, the current working directory is used.
 3. Type files are added to the compiler first, in config order. Then template files.
 4. Registered `"replacement-policies"` are loaded.
 5. The compiler validates all types, checks template field accesses, and builds the AST.
-6. **On success:** the `CompilerOutput` JSON is written to stdout.
+6. **On success:** the `IR` JSON is written to stdout.
 7. **On failure:** diagnostics are written to stderr in GCC format — compatible with VS Code's problem matcher and most CI log parsers.
 
 ### Output
@@ -68,6 +68,10 @@ tpp ./my-project > my-project.json
 ```
 
 This JSON is the input consumed by all backends (`tpp2cpp`, `render-tpp`, etc.) and by the C++ library.
+
+!!! Note of caution !!!
+
+The intermediate representation is an important part of the language's public interface and should therefore be versioned. This is currently not the case, as this project is in early development. Coming up with a schema to check when the version must be incremented will be addressed, but for now, please do not cosider this a stable contract.
 
 ### Diagnostics
 
@@ -83,7 +87,7 @@ Exit code is `0` on success, non-zero on failure.
 
 ## `render-tpp` — Scripting Backend
 
-`render-tpp` is a minimal rendering backend for scripting and testing. It reads compiler output JSON from stdin, renders a named template with a JSON input, and writes the result to stdout.
+`render-tpp` is a minimal rendering backend for scripting and testing. It reads intermediate representation JSON from stdin, renders a named template with a JSON input, and writes the result to stdout.
 
 ### Synopsis
 
@@ -96,7 +100,7 @@ render-tpp <template-name> <input-json>
 | `<template-name>` | The name of the template function to render (e.g. `main`) |
 | `<input-json>` | The input data as a JSON string |
 
-Compiler output JSON is read from stdin.
+The intermediate representation JSON is read from stdin.
 
 ### Example
 
@@ -110,7 +114,7 @@ This is useful in shell pipelines, test scripts, and CI workflows where you want
 
 ## `tpp2cpp` — C++ Code Generation Backend
 
-`tpp2cpp` reads compiler output JSON and generates C++ source files. It has three modes, each producing one output file.
+`tpp2cpp` reads intermediate representation JSON and generates C++ source files. It has three modes, each producing one output file.
 
 ### Synopsis
 
@@ -118,7 +122,7 @@ This is useful in shell pipelines, test scripts, and CI workflows where you want
 tpp2cpp [options]
 ```
 
-Compiler output JSON is read from stdin by default, or from a file with `--input`.
+The intermediate representation JSON is read from stdin by default, or from a file with `--input`.
 
 ### Options
 
@@ -132,7 +136,7 @@ Compiler output JSON is read from stdin by default, or from a file with `--input
 | `--functions` | `-fun` | Generate a functions header (`_functions.h`) |
 | `--implementation` | `-impl` | Generate a function implementations file (`_implementation.cc`) |
 | `--include <file>` | `-i` | Add an `#include` directive at the top of the generated file (repeatable) |
-| `--input <file>` | | Read compiler output from `<file>` instead of stdin |
+| `--input <file>` | | Read intermediate representation from `<file>` instead of stdin |
 
 Exactly one of `--types`, `--functions`, or `--implementation` must be specified.
 
@@ -174,7 +178,7 @@ namespace myns {
 tpp ./project | tpp2cpp -impl -ns myns -i project_functions.h > project_implementation.cc
 ```
 
-Generates the `.cc` file with the function bodies. At the moment, this just serializes the input parameters and hands them to a `CompilerOutput` rendered into the source. A data structure that makes it possible to render the template with native c++ code is planned for later (this should make it possible to render other languages as well).
+Generates the `.cc` file with the function bodies. At the moment, this just serializes the input parameters and hands them to a `IR` rendered into the source. A data structure that makes it possible to render the template with native c++ code is planned for later (this should make it possible to render other languages as well).
 
 ### Using Generated Code
 
@@ -203,7 +207,7 @@ std::string src = myns::Item::tpp_typedefs();
 | Header | Purpose |
 |---|---|
 | `<tpp/Compiler.h>` | Compile type definitions, templates, and policies |
-| `<tpp/CompilerOutput.h>` | Query and render compiled templates |
+| `<tpp/IR.h>` | Query and render compiled templates |
 | `<tpp/FunctionSymbol.h>` | Render a single named template function |
 | `<tpp/Types.h>` | Type definitions (`StructDef`, `EnumDef`, `TypeRegistry`) |
 | `<tpp/Policy.h>` | Policy data model and registry |
@@ -226,7 +230,7 @@ compiler.add_templates(templateSource, diags);
 std::string policyError;
 compiler.add_policy(policyJson, policyError);
 
-tpp::CompilerOutput output;
+tpp::IR output;
 bool ok = compiler.compile(output);
 ```
 
@@ -274,7 +278,7 @@ std::string out = render(myItem); // throws std::runtime_error on error
 
 ```cpp
 std::vector<tpp::RenderMapping> mappings;
-std::string output = compilerOutput.renderTracked("main", input, mappings);
+std::string output = iRep.renderTracked("main", input, mappings);
 ```
 
 ---

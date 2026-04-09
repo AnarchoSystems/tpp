@@ -1,6 +1,6 @@
 #pragma once
 
-#include <tpp/CompilerOutput.h>
+#include <tpp/IR.h>
 #include <tpp/Policy.h>
 
 namespace tpp
@@ -30,7 +30,7 @@ namespace tpp
         bool add_policy(const nlohmann::json &policyJson, std::string &error) noexcept;
 
         [[nodiscard]]
-        bool compile(CompilerOutput &output) noexcept;
+        bool compile(IR &output) noexcept;
 
         TypeRegistry types;
 

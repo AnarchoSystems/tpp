@@ -1,7 +1,7 @@
 add_library(lib_tpp
     src/TypedefParser.cc
     src/TemplateParser.cc
-    src/CompilerOutput.cc
+    src/IR.cc
     src/Rendering.cc
     src/PolicyParser.cc
 )

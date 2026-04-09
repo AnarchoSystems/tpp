@@ -105,7 +105,7 @@ namespace tpp
         std::map<std::string, Policy> policies_;
     };
 
-    // ── JSON serialization (needed to round-trip through CompilerOutput) ──
+    // ── JSON serialization (needed to round-trip through IR) ──
 
     inline bool operator==(const PolicyLength &a, const PolicyLength &b)
     { return a.min == b.min && a.max == b.max; }

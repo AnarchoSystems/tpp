@@ -57,7 +57,7 @@ When you use the C++ library directly, you get a templated `get_function` that b
 ```cpp
 tpp::Compiler compiler;
 // ...compile...
-tpp::CompilerOutput output;
+tpp::IR output;
 compiler.compile(output);
 
 auto render = output.get_function<Item>("render_item");
@@ -211,7 +211,7 @@ struct Step
 }
 ```
 
-Doc comment text is preserved in the compiler output and attached to generated C++ types.
+Doc comment text is preserved in the intermediate representation and attached to generated C++ types.
 
 ---
 

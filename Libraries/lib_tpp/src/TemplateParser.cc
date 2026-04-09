@@ -1,5 +1,5 @@
 #include <tpp/Compiler.h>
-#include <tpp/CompilerOutput.h>
+#include <tpp/IR.h>
 #include <tpp/TemplateParser.h>
 #include <tpp/TypedefParser.h>
 #include <tpp/Diagnostic.h>
@@ -2006,7 +2006,7 @@ namespace tpp
         pendingSources_.push_back({templateString, &diagnostics, false});
     }
 
-    bool Compiler::compile(CompilerOutput &output) noexcept
+    bool Compiler::compile(IR &output) noexcept
     {
         try
         {

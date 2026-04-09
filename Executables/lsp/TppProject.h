@@ -1,7 +1,7 @@
 #pragma once
 
 #include <tpp/Compiler.h>
-#include <tpp/CompilerOutput.h>
+#include <tpp/IR.h>
 #include <tpp/Diagnostic.h>
 #include <nlohmann/json.hpp>
 #include <string>
@@ -13,7 +13,7 @@
 namespace tpp
 {
     // One TppProject corresponds to one tpp-config.json on disk.
-    // It owns the Compiler, the CompilerOutput, and an in-memory dirty buffer
+    // It owns the Compiler, the IR, and an in-memory dirty buffer
     // for open files that have unsaved changes.
     class TppProject
     {
@@ -38,7 +38,7 @@ namespace tpp
         // Diagnostics produced by the last recompile(), keyed by URI.
         const std::map<std::string, std::vector<Diagnostic>> &diagnostics() const { return diagnostics_; }
 
-        const CompilerOutput &output() const { return output_; }
+        const IR &output() const { return output_; }
         const std::filesystem::path &configPath() const { return configPath_; }
         const std::filesystem::path &root() const { return root_; }
 
@@ -64,7 +64,7 @@ namespace tpp
         std::map<std::string, std::string> dirtyBuffer_; // URI -> text
 
         Compiler compiler_;
-        CompilerOutput output_;
+        IR output_;
         std::map<std::string, std::vector<Diagnostic>> diagnostics_;
 
         std::string readFile(const std::filesystem::path &path) const;

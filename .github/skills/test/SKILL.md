@@ -33,7 +33,7 @@ Only fall back to the terminal (`cd build && make -j4` / `ctest --output-on-fail
 2. Then follow the **Standard Build + Test** procedure above.
 
 ### Build Errors
-1. Read the compiler output carefully — it includes file path, line, and error message.
+1. Read the intermediate representation carefully — it includes file path, line, and error message.
 2. Fix the source file(s) identified in the errors.
 3. Re-run `Build_CMakeTools` to confirm the fix compiles.
 4. Then run `RunCtest_CMakeTools`.

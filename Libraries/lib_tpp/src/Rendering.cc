@@ -1,5 +1,5 @@
 #include <tpp/FunctionSymbol.h>
-#include <tpp/CompilerOutput.h>
+#include <tpp/IR.h>
 #include <tpp/RenderMapping.h>
 #include <nlohmann/json.hpp>
 #include <functional>
@@ -801,7 +801,7 @@ namespace tpp
         return result;
     }
 
-    std::string CompilerOutput::renderTracked(const std::string &functionName,
+    std::string IR::renderTracked(const std::string &functionName,
                                               const nlohmann::json &input,
                                               std::vector<RenderMapping> &mappings) const
     {

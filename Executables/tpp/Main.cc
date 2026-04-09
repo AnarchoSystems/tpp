@@ -12,7 +12,7 @@ using namespace tpp;
 // reads tpp-config.json in that folder which specifies which .tpp files are types and which are templates.
 // finally, compile.
 // if not successful, print diagnostics to stderr in a format that vscode's problem matcher gcc can understand it.
-// if successful, serialize the CompilerOutput to stdout as JSON.
+// if successful, serialize the IR to stdout as JSON.
 // possible flags:
 // -h, --help: print usage info
 // -v, --verbose: this run is not meant to be machine readable, pretty print any output and print what you're doing to stdout
@@ -289,7 +289,7 @@ void tppApp::run()
         }
     }
 
-    CompilerOutput output;
+    IR output;
     bool success = compiler.compile(output);
     if (success)
     {

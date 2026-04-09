@@ -7,7 +7,7 @@
 
 namespace tpp
 {
-    class CompilerOutput
+    class IR
     {
     public:
         [[nodiscard]]
@@ -46,7 +46,7 @@ namespace tpp
                                   const nlohmann::json &input,
                                   std::vector<RenderMapping> &mappings) const;
 
-        bool operator==(const CompilerOutput &other) const
+        bool operator==(const IR &other) const
         {
             return functions == other.functions && types == other.types && policies == other.policies
                    && raw_typedefs == other.raw_typedefs;
@@ -57,6 +57,6 @@ namespace tpp
         PolicyRegistry policies;
         std::string raw_typedefs;
 
-        NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(CompilerOutput, functions, types, policies, raw_typedefs)
+        NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(IR, functions, types, policies, raw_typedefs)
     };
 }

@@ -1,8 +1,8 @@
-#include <tpp/CompilerOutput.h>
+#include <tpp/IR.h>
 #include <iostream>
 
 // usage: render-tpp <template> <input>
-// compiler output is expected to be passed via stdin as json.
+// intermediate representation is expected to be passed via stdin as json.
 
 using namespace tpp;
 
@@ -23,10 +23,10 @@ int main(int argc, char *argv[])
     try
     {
         nlohmann::json json = nlohmann::json::parse(input);
-        CompilerOutput compilerOutput = json.get<CompilerOutput>();
+        IR iRep = json.get<IR>();
         FunctionSymbol functionSymbol;
         std::string error;
-        if (!compilerOutput.get_function(templateName, functionSymbol, error))
+        if (!iRep.get_function(templateName, functionSymbol, error))
         {
             std::cerr << "Error: " << error << std::endl;
             return 1;

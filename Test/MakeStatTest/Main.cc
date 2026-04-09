@@ -212,8 +212,8 @@ int main(int argc, char *argv[])
         }
     }
 
-    tpp::CompilerOutput compilerOutput;
-    if (!compiler.compile(compilerOutput))
+    tpp::IR iRep;
+    if (!compiler.compile(iRep))
     {
         for (const auto &msg : diagnostics)
             for (const auto &d : msg.toGCCDiagnostics())
@@ -223,7 +223,7 @@ int main(int argc, char *argv[])
 
     tpp::FunctionSymbol mainSymbol;
     std::string error;
-    if (!compilerOutput.get_function("main", mainSymbol, error))
+    if (!iRep.get_function("main", mainSymbol, error))
     {
         std::cerr << testDir.string() << ": error: " << error << std::endl;
         return EXIT_FAILURE;
@@ -247,7 +247,7 @@ int main(int argc, char *argv[])
     Defs defs;
     defs.testName = testName;
     defs.expectedOutput = toGoodConstexprString(expectedRaw);
-    defs.compilerOutputJson = toGoodConstexprString(nlohmann::json(compilerOutput).dump());
+    defs.iRepJson = toGoodConstexprString(nlohmann::json(iRep).dump());
 
     const auto &params = mainSymbol.function.params;
     if (params.size() == 1)

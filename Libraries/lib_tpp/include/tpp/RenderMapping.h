@@ -6,7 +6,7 @@
 namespace tpp
 {
     // Maps a source-location range in a template to a character span in the rendered output.
-    // Populated by CompilerOutput::renderTracked() for every ForNode, IfNode, and SwitchNode
+    // Populated by IR::renderTracked() for every ForNode, IfNode, and SwitchNode
     // encountered during rendering.
     struct RenderMapping
     {

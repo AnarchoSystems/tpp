@@ -6,11 +6,11 @@
 
 ### Backend Model
 
-tpp uses a **single compiler frontend / multiple backends** design. The `tpp` CLI compiles everything to a self-contained JSON document (`CompilerOutput`). Backends consume that JSON and have an easy, focused job:
+tpp uses a **single compiler frontend / multiple backends** design. The `tpp` CLI compiles everything to a self-contained JSON document (`IR`). Backends consume that JSON and have an easy, focused job:
 
 | Backend | Binary | Job |
 |---|---|---|
-| C++ code gen | `tpp2cpp` | Emits typed C++ struct/function headers from the compiler output |
+| C++ code gen | `tpp2cpp` | Emits typed C++ struct/function headers from the intermediate representation |
 | Script rendering | `render-tpp` | Renders a named template with a JSON input — for scripting/testing |
 | C++ runtime | `lib_tpp` | Full compiler + renderer as a linkable library |
 | Language server | `tpp-lsp` | Powers VS Code diagnostics and live preview |
@@ -24,11 +24,11 @@ Because the compiler has already done all type-checking, each backend doesn't ne
 | Type parsing | `TypedefParser.cc` | Tokenizes/parses type definitions |
 | Template parsing | `TemplateParser.cc` | Builds the template AST |
 | Rendering | `Rendering.cc` | Executes the AST against a `RenderContext`; handles alignment and policy scopes |
-| Compiler bridge | `CompilerOutput.cc` | Type/function lookup for the renderer |
-| Public API | `Libraries/lib_tpp/include/tpp/` | `Compiler.h`, `CompilerOutput.h`, `Types.h`, `AST.h`, `Policy.h`, `Diagnostic.h`, etc. |
+| Compiler bridge | `IR.cc` | Type/function lookup for the renderer |
+| Public API | `Libraries/lib_tpp/include/tpp/` | `Compiler.h`, `IR.h`, `Types.h`, `AST.h`, `Policy.h`, `Diagnostic.h`, etc. |
 | Internal headers | `tpp/` | `TypedefParser.h`, `TemplateParser.h`, `Tokenizer.h`, `Parser.h` |
 | Compiler CLI | `Executables/tpp/Main.cc` | Command-line entry point; reads tpp-config.json, emits JSON to stdout |
-| tpp2cpp CLI | `Executables/backends/tpp2cpp/Main.cc` | Generates C++ types/functions/impl from compiler output JSON |
+| tpp2cpp CLI | `Executables/backends/tpp2cpp/Main.cc` | Generates C++ types/functions/impl from intermediate representation JSON |
 | render-tpp CLI | `Executables/backends/render-tpp/Main.cc` | Renders a named template with JSON input from stdin |
 | `tpp_add` macro | `cmake/TppHelpers.cmake` | CMake helper: automates three-step tpp2cpp code generation |
 

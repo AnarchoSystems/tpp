@@ -104,7 +104,7 @@ namespace tpp
             catch (...) {}
         }
 
-        CompilerOutput newOutput;
+        IR newOutput;
         bool ok = compiler_.compile(newOutput);
         output_ = std::move(newOutput);
         return ok;

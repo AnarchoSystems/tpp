@@ -1,5 +1,5 @@
 #include "Autocomplete.h"
-#include <tpp/CompilerOutput.h>
+#include <tpp/IR.h>
 #include <tpp/Types.h>
 #include <tpp/AST.h>
 #include <map>

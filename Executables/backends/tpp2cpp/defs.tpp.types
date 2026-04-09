@@ -63,7 +63,7 @@ struct CppFunctionsInput
 {
     includes : list<string>;
     namespaceName : optional<string>;
-    compilerOutputJson : string;
+    iRepJson : string;
     functions : list<CppFunctionDef>;
 }
 

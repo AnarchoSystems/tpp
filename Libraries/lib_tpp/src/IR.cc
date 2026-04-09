@@ -1,4 +1,4 @@
-#include <tpp/CompilerOutput.h>
+#include <tpp/IR.h>
 #include <tpp/FunctionSymbol.h>
 
 namespace tpp
@@ -8,7 +8,7 @@ namespace tpp
     // Function Lookup  (get_function)
     // ═══════════════════════════════════════════════════════════════════
 
-    bool CompilerOutput::get_function(const std::string &functionName,
+    bool IR::get_function(const std::string &functionName,
                                       FunctionSymbol &functionSymbol,
                                       std::string &error) const noexcept
     {

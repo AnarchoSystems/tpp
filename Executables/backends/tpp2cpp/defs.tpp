@@ -191,16 +191,16 @@ template render_cpp_implementation(input: CppFunctionsInput)
 @if input.namespaceName@
 namespace @input.namespaceName@ {
 @end if@
-static const tpp::CompilerOutput& _getCompilerOutput()
+static const tpp::IR& _getIR()
 {
-    static const tpp::CompilerOutput co =
-        nlohmann::json::parse(@input.compilerOutputJson@).get<tpp::CompilerOutput>();
+    static const tpp::IR co =
+        nlohmann::json::parse(@input.iRepJson@).get<tpp::IR>();
     return co;
 }
 @for function in input.functions@
 std::string @function.name@(@for param in function.params | sep=", "@typename tpp::ArgType<@param.type@>::type @param.name@@end for@)
 {
-    const auto& co = _getCompilerOutput();
+    const auto& co = _getIR();
     tpp::FunctionSymbol fs;
     std::string error;
     if (!co.get_function("@function.name@", fs, error)) return {};

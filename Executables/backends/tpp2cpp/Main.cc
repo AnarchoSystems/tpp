@@ -13,9 +13,9 @@
 // -fun, --functions: produces a header file rendering the template functions as cpp functions
 // -impl, --implementation: produces a cpp file with the implementations of the functions declared in the functions header (only needed if -fun/--functions is used)
 // -i <file>, --include <file>: files to include at the top of the generated code (can be specified multiple times)
-// --input <file>: file to read compiler output from (in json format, in the same format as tpp's output) instead of stdin
+// --input <file>: file to read intermediate representation from (in json format, in the same format as tpp's output) instead of stdin
 // This executable renders type definitions and template functions from JSON (in the same format as tpp's output) to C++ code, and prints it to stdout.
-// compiler output is expected to be passed via stdin as json.
+// intermediate representation is expected to be passed via stdin as json.
 
 enum Mode
 {
@@ -32,7 +32,7 @@ struct tpp2cpp
     std::string namespaceName;
     Mode mode = Mode::None;
     std::vector<std::string> includes;
-    tpp::CompilerOutput input;
+    tpp::IR input;
     tpp2cpp(int argc, char *argv[]);
     ~tpp2cpp();
     void run();
@@ -58,7 +58,7 @@ void printUsage()
                  "  -fun, --functions: produces a header file rendering the template functions as cpp functions\n"
                  "  -impl, --implementation: produces a cpp file with the implementations of the functions declared in the functions header (only needed if -fun/--functions is used)\n"
                  "  -i <file>, --include <file>: files to include at the top of the generated code (can be specified multiple times)\n"
-                 "  --input <file>: file to read compiler output from (in json format, in the same format as tpp's output) instead of stdin\n";
+                 "  --input <file>: file to read intermediate representation from (in json format, in the same format as tpp's output) instead of stdin\n";
 }
 
 tpp2cpp::tpp2cpp(int argc, char *argv[])
@@ -168,7 +168,7 @@ tpp2cpp::tpp2cpp(int argc, char *argv[])
     }
     try
     {
-        input = nlohmann::json::parse(inputJson).get<tpp::CompilerOutput>();
+        input = nlohmann::json::parse(inputJson).get<tpp::IR>();
     }
     catch (const std::exception &e)
     {
@@ -197,22 +197,22 @@ void tpp2cpp::log(const std::string &message)
     }
 }
 
-nlohmann::json to_render_cpp_type_input(const tpp::CompilerOutput &compilerOutput,
+nlohmann::json to_render_cpp_type_input(const tpp::IR &iRep,
                                         const std::vector<std::string> &includes,
                                         const std::string &namespaceName);
 
-nlohmann::json to_render_cpp_functions_input(const tpp::CompilerOutput &compilerOutput,
+nlohmann::json to_render_cpp_functions_input(const tpp::IR &iRep,
                                              const std::vector<std::string> &includes,
                                              const std::string &namespaceName);
 
-nlohmann::json to_render_cpp_implementation_input(const tpp::CompilerOutput &compilerOutput,
+nlohmann::json to_render_cpp_implementation_input(const tpp::IR &iRep,
                                                   const std::vector<std::string> &includes,
                                                   const std::string &namespaceName);
 
 void tpp2cpp::run()
 {
     tpp::Compiler compiler;
-    tpp::CompilerOutput compilerOutput;
+    tpp::IR iRep;
 
     std::vector<tpp::DiagnosticLSPMessage> diagnostics;
     diagnostics.reserve(2);
@@ -222,7 +222,7 @@ void tpp2cpp::run()
 
     log("Compiling templates...");
 
-    if (!compiler.compile(compilerOutput))
+    if (!compiler.compile(iRep))
     {
         for (const auto &msg : diagnostics)
         {
@@ -240,7 +240,7 @@ void tpp2cpp::run()
 
     tpp::FunctionSymbol functionSymbol;
     std::string functionName;
-    std::function<nlohmann::json(const tpp::CompilerOutput &, const std::vector<std::string> &)> toInputFunction;
+    std::function<nlohmann::json(const tpp::IR &, const std::vector<std::string> &)> toInputFunction;
 
     switch (mode)
     {
@@ -254,7 +254,7 @@ void tpp2cpp::run()
     {
         functionName = "render_cpp_types";
         auto ns = namespaceName;
-        toInputFunction = [ns](const tpp::CompilerOutput &co, const std::vector<std::string> &inc) {
+        toInputFunction = [ns](const tpp::IR &co, const std::vector<std::string> &inc) {
             return to_render_cpp_type_input(co, inc, ns);
         };
         break;
@@ -263,7 +263,7 @@ void tpp2cpp::run()
     {
         functionName = "render_cpp_functions";
         auto ns = namespaceName;
-        toInputFunction = [ns](const tpp::CompilerOutput &co, const std::vector<std::string> &inc) {
+        toInputFunction = [ns](const tpp::IR &co, const std::vector<std::string> &inc) {
             return to_render_cpp_functions_input(co, inc, ns);
         };
         break;
@@ -272,7 +272,7 @@ void tpp2cpp::run()
     {
         functionName = "render_cpp_implementation";
         auto ns = namespaceName;
-        toInputFunction = [ns](const tpp::CompilerOutput &co, const std::vector<std::string> &inc) {
+        toInputFunction = [ns](const tpp::IR &co, const std::vector<std::string> &inc) {
             return to_render_cpp_implementation_input(co, inc, ns);
         };
         break;
@@ -282,7 +282,7 @@ void tpp2cpp::run()
     std::string renderedOutput;
     std::string error;
 
-    if (!(compilerOutput.get_function(functionName, functionSymbol, error) && functionSymbol.render(toInputFunction(input, includes), renderedOutput, error)))
+    if (!(iRep.get_function(functionName, functionSymbol, error) && functionSymbol.render(toInputFunction(input, includes), renderedOutput, error)))
     {
         std::string errorMessage = "defs.tpp: error: Failed to render output: " + error;
         log(errorMessage);
@@ -324,7 +324,7 @@ static std::string toCppStringLiteral(const std::string &s)
     return result + "\"";
 }
 
-nlohmann::json to_render_cpp_type_input(const tpp::CompilerOutput &compilerOutput,
+nlohmann::json to_render_cpp_type_input(const tpp::IR &iRep,
                                         const std::vector<std::string> &includes,
                                         const std::string &namespaceName)
 {
@@ -335,7 +335,7 @@ nlohmann::json to_render_cpp_type_input(const tpp::CompilerOutput &compilerOutpu
     nlohmann::json typesJson = nlohmann::json::array();
 
     // Emit enums first (often used as field types in structs)
-    for (const auto &e : compilerOutput.types.enums)
+    for (const auto &e : iRep.types.enums)
     {
         nlohmann::json enumJson;
         enumJson["name"] = e.name;
@@ -354,11 +354,11 @@ nlohmann::json to_render_cpp_type_input(const tpp::CompilerOutput &compilerOutpu
             variants.push_back(variantJson);
         }
         enumJson["variants"] = variants;
-        enumJson["definition"] = toCppStringLiteral(compilerOutput.raw_typedefs);
+        enumJson["definition"] = toCppStringLiteral(iRep.raw_typedefs);
         typesJson.push_back({{"Enum", enumJson}});
     }
 
-    for (const auto &s : compilerOutput.types.structs)
+    for (const auto &s : iRep.types.structs)
     {
         nlohmann::json structJson;
         structJson["name"] = s.name;
@@ -398,7 +398,7 @@ nlohmann::json to_render_cpp_type_input(const tpp::CompilerOutput &compilerOutpu
             fields.push_back(field);
         }
         structJson["fields"] = fields;
-        structJson["definition"] = toCppStringLiteral(compilerOutput.raw_typedefs);
+        structJson["definition"] = toCppStringLiteral(iRep.raw_typedefs);
         typesJson.push_back({{"Struct", structJson}});
     }
 
@@ -406,7 +406,7 @@ nlohmann::json to_render_cpp_type_input(const tpp::CompilerOutput &compilerOutpu
     return result;
 }
 
-static nlohmann::json buildFunctionsInput(const tpp::CompilerOutput &compilerOutput,
+static nlohmann::json buildFunctionsInput(const tpp::IR &iRep,
                                           const std::vector<std::string> &includes,
                                           const std::string &namespaceName)
 {
@@ -414,9 +414,9 @@ static nlohmann::json buildFunctionsInput(const tpp::CompilerOutput &compilerOut
     result["includes"] = includes;
     if (!namespaceName.empty())
         result["namespaceName"] = namespaceName;
-    result["compilerOutputJson"] = toCppStringLiteral(nlohmann::json(compilerOutput).dump());
+    result["iRepJson"] = toCppStringLiteral(nlohmann::json(iRep).dump());
     nlohmann::json functions = nlohmann::json::array();
-    for (const auto &f : compilerOutput.functions)
+    for (const auto &f : iRep.functions)
     {
         nlohmann::json func;
         func["name"] = f.name;
@@ -436,16 +436,16 @@ static nlohmann::json buildFunctionsInput(const tpp::CompilerOutput &compilerOut
     return result;
 }
 
-nlohmann::json to_render_cpp_functions_input(const tpp::CompilerOutput &compilerOutput,
+nlohmann::json to_render_cpp_functions_input(const tpp::IR &iRep,
                                              const std::vector<std::string> &includes,
                                              const std::string &namespaceName)
 {
-    return buildFunctionsInput(compilerOutput, includes, namespaceName);
+    return buildFunctionsInput(iRep, includes, namespaceName);
 }
 
-nlohmann::json to_render_cpp_implementation_input(const tpp::CompilerOutput &compilerOutput,
+nlohmann::json to_render_cpp_implementation_input(const tpp::IR &iRep,
                                                   const std::vector<std::string> &includes,
                                                   const std::string &namespaceName)
 {
-    return buildFunctionsInput(compilerOutput, includes, namespaceName);
+    return buildFunctionsInput(iRep, includes, namespaceName);
 }

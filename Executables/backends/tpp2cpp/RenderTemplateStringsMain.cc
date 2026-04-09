@@ -46,7 +46,7 @@ int main()
         compiler.add_types(typesContent, diagnostics.emplace_back(TYPES_TPP).diagnostics);
     auto fileContent = readFile(DEFS_TPP);
     compiler.add_templates(fileContent, diagnostics.emplace_back(DEFS_TPP).diagnostics);
-    tpp::CompilerOutput output;
+    tpp::IR output;
     if (!compiler.compile(output))
     {
         for (const auto &msg : diagnostics)

@@ -33,7 +33,7 @@ protected:
 
 TEST_P(AcceptanceTest, RunTestCase)
 {
-    tpp::CompilerOutput output;
+    tpp::IR output;
     std::string getFunctionError, renderError, renderedOutput;
     tpp::FunctionSymbol functionSymbol;
 
@@ -68,7 +68,7 @@ TEST_P(AcceptanceTest, CompareCompileByCLI)
     auto cliOutput = runCommandDirect({TPP_EXE,
         std::filesystem::absolute("TestCases/" + testCase.name).string()});
 
-    tpp::CompilerOutput expectedOutput;
+    tpp::IR expectedOutput;
     bool expectedSuccess = compiler.compile(expectedOutput);
 
     EXPECT_EQ(cliOutput.success, expectedSuccess) << "Test case: " << testCase.name;
@@ -77,7 +77,7 @@ TEST_P(AcceptanceTest, CompareCompileByCLI)
 
     if (expectedSuccess)
     {
-        tpp::CompilerOutput actualOutput = nlohmann::json::parse(cliOutput.output);
+        tpp::IR actualOutput = nlohmann::json::parse(cliOutput.output);
         EXPECT_EQ(actualOutput, expectedOutput)
             << "Test case: " << testCase.name
             << "\nExpected: " << nlohmann::json(expectedOutput).dump(2)

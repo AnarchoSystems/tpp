@@ -1,5 +1,5 @@
 #include "Preview.h"
-#include <tpp/CompilerOutput.h>
+#include <tpp/IR.h>
 #include <tpp/RenderMapping.h>
 #include <fstream>
 #include <sstream>

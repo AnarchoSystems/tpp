@@ -14,8 +14,8 @@ TEST(static_tests, @defs.testName@_compiled)
 
 TEST(static_tests, @defs.testName@_dynamic_binding)
 {
-    tpp::CompilerOutput compilerOutput = nlohmann::json::parse(@defs.compilerOutputJson@).get<tpp::CompilerOutput>();
-    auto fun = compilerOutput.get_function<@for input in defs.inputs | sep=", "@@input.type@@end for@>("main");
+    tpp::IR iRep = nlohmann::json::parse(@defs.iRepJson@).get<tpp::IR>();
+    auto fun = iRep.get_function<@for input in defs.inputs | sep=", "@@input.type@@end for@>("main");
     
     @for input in defs.inputs | enumerator=idx sep="\n"@
     @input.type@ input@idx@ = nlohmann::json::parse(R"_(@input.value@)_").get<@input.type@>();

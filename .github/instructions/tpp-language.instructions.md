@@ -47,7 +47,7 @@ END
 ```
 
 - Entry point in tests is always `template main(…)`. The runtime exposes all templates.
-- The relevant headers: [`Compiler.h`](../../Libraries/lib_tpp/include/tpp/Compiler.h), [`CompilerOutput.h`](../../Libraries/lib_tpp/include/tpp/CompilerOutput.h), [`FunctionSymbol.h`](../../Libraries/lib_tpp/include/tpp/FunctionSymbol.h).
+- The relevant headers: [`Compiler.h`](../../Libraries/lib_tpp/include/tpp/Compiler.h), [`IR.h`](../../Libraries/lib_tpp/include/tpp/IR.h), [`FunctionSymbol.h`](../../Libraries/lib_tpp/include/tpp/FunctionSymbol.h).
 - A single `.tpp` file may contain multiple `template` declarations.
 - Multiple source files per test are supported — list them in `tpp-config.json`.
 
