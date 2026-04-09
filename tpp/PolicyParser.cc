@@ -140,8 +140,13 @@ namespace tpp
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    // Compiler::add_policy
+    // Compiler::clear_policies / add_policy
     // ═══════════════════════════════════════════════════════════════════
+
+    void Compiler::clear_policies() noexcept
+    {
+        policies_ = PolicyRegistry{};
+    }
 
     bool Compiler::add_policy(const nlohmann::json &policyJson, std::string &error) noexcept
     {

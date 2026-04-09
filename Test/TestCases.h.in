@@ -8,3 +8,8 @@ static const char* const kTppSuccessCases[] = {
 static const char* const kTppFailureCases[] = {
 @TPP_FAILURE_CASE_ENTRIES@    nullptr
 };
+
+// Failure cases that have expected_diagnostics.json (compile-time errors the LSP can observe).
+static const char* const kTppDiagnosticCases[] = {
+@TPP_DIAGNOSTIC_CASE_ENTRIES@    nullptr
+};

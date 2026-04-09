@@ -4,18 +4,10 @@
 		"diagnostics": [
 			{
 				"range": {
-					"start": {"line": 1, "character": 1},
-					"end": {"line": 1, "character": 6}
+					"start": {"line": 1, "character": 26},
+					"end": {"line": 1, "character": 30}
 				},
 				"message": "unknown option 'nope'",
-				"severity": "error"
-			},
-			{
-				"range": {
-					"start": {"line": 1, "character": 35},
-					"end": {"line": 1, "character": 41}
-				},
-				"message": "unknown variable 'item'",
 				"severity": "error"
 			}
 		]

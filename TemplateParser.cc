@@ -220,7 +220,7 @@ namespace tpp
             seen.insert(key);
 
             if (allowedStringKeys.count(key) == 0 && allowedIdentKeys.count(key) == 0)
-                return ParseError{"unknown option '" + key + "'", (int)keyStart, (int)p};
+                return ParseError{"unknown option '" + key + "'", (int)keyStart, (int)(keyStart + key.size())};
 
             std::string value;
             if (allowedStringKeys.count(key) != 0)
@@ -360,9 +360,17 @@ namespace tpp
             }
             if (!optPart.empty())
             {
+                // Compute absolute offset of optPart within directive text t
+                // so error positions are correct relative to the full line.
+                std::string optRaw = t.substr(pipe + 1);
+                size_t lead = 0;
+                while (lead < optRaw.size() && std::isspace(static_cast<unsigned char>(optRaw[lead])))
+                    ++lead;
+                const int optOffset = static_cast<int>(pipe + 1 + lead);
+
                 std::map<std::string, std::string> values;
                 if (auto err = parseDirectiveOptions(optPart, {"sep", "followedBy", "precededBy", "policy"}, {"enumerator"}, values))
-                    return ErrorDirective{err->message, err->start, err->end};
+                    d.parseErrors.emplace_back(err->message, optOffset + err->start, optOffset + err->end);
                 d.sep = values["sep"];
                 d.followedBy = values["followedBy"];
                 d.precededBy = values["precededBy"];
@@ -1403,6 +1411,8 @@ namespace tpp
                 }
                 else if (auto *d = std::get_if<ForDirective>(&seg.info))
                 {
+                    for (const auto &[msg, s, e] : d->parseErrors)
+                        addTemplateDiagnostic(diags, bodyStartLine, li, seg, msg, s, e);
                     if (!validatePathExpressionType(d->collectionText, frames, types, activeNarrowing, activeAbsent, false, exprType, err))
                     {
                         addTemplateDiagnostic(diags, bodyStartLine, li, seg, err);

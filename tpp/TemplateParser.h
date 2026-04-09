@@ -35,6 +35,9 @@ namespace tpp
         std::string precededBy;
         std::string enumerator;
         std::string policy;
+        // Option-parse errors stored here for recovery: body still processes
+        // so that variables bound by the loop remain in scope.
+        std::vector<std::tuple<std::string,int,int>> parseErrors; // {message, start, end}
     };
 
     // @if expr@ / @if not expr@

@@ -73,3 +73,5 @@ tCLIOutput runCommand(const std::string &command);
 
 std::vector<tTestCase> GetTestCases();
 std::vector<tTestCase> GetPositiveTestCases();
+std::vector<tTestCase> GetNegativeTestCases();
+std::vector<tTestCase> GetDiagnosticTestCases();

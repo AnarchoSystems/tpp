@@ -57,6 +57,7 @@ namespace tpp
 
         std::vector<std::filesystem::path> typeFiles_;
         std::vector<std::filesystem::path> templateFiles_;
+        std::vector<std::filesystem::path> policyFiles_;
         std::set<std::string> uris_;
         std::set<std::string> typeUris_;
 

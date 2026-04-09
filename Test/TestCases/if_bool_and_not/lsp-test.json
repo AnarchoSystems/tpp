@@ -1,0 +1,8 @@
+{
+    "folding_ranges": {
+        "file": "template.tpp",
+        "expected": [
+            {"startLine": 0, "endLine": 2}
+        ]
+    }
+}

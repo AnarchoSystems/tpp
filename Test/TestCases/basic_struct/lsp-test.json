@@ -1,0 +1,32 @@
+{
+    "semantic_tokens": {
+        "file": "template.tpp",
+        "expected_tokens": [
+            {"line": 0, "character": 0,  "length": 8, "type": "keyword"},
+            {"line": 0, "character": 9,  "length": 4, "type": "function"},
+            {"line": 0, "character": 14, "length": 3, "type": "parameter"},
+            {"line": 0, "character": 19, "length": 7, "type": "type"},
+            {"line": 3, "character": 4,  "length": 5, "type": "keyword"},
+            {"line": 3, "character": 9,  "length": 5, "type": "variable"},
+            {"line": 5, "character": 4,  "length": 9, "type": "keyword"}
+        ]
+    },
+    "folding_ranges": {
+        "file": "template.tpp",
+        "expected": [
+            {"startLine": 0, "endLine": 7},
+            {"startLine": 3, "endLine": 5}
+        ]
+    },
+    "go_to_definition": [
+        {
+            "name": "TypeDef_ref",
+            "file": "template.tpp",
+            "line": 0,
+            "character": 22,
+            "expected_file": "typedefs.tpp",
+            "expected_line": 7,
+            "expected_character": 7
+        }
+    ]
+}

@@ -1,0 +1,21 @@
+{
+    "semantic_tokens": {
+        "file": "template.tpp",
+        "expected_tokens": [
+            {"line": 0, "character": 0,  "length": 8,  "type": "keyword"},
+            {"line": 0, "character": 9,  "length": 4,  "type": "function"},
+            {"line": 0, "character": 14, "length": 12, "type": "parameter"},
+            {"line": 0, "character": 28, "length": 12, "type": "type"},
+            {"line": 2, "character": 0,  "length": 5,  "type": "keyword"},
+            {"line": 2, "character": 5,  "length": 4,  "type": "variable"},
+            {"line": 4, "character": 0,  "length": 9,  "type": "keyword"}
+        ]
+    },
+    "folding_ranges": {
+        "file": "template.tpp",
+        "expected": [
+            {"startLine": 0, "endLine": 5},
+            {"startLine": 2, "endLine": 4}
+        ]
+    }
+}

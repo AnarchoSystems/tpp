@@ -1,4 +1,5 @@
 #include "LspServer.h"
+#include "LspDefinitions.h"
 #include "SemanticTokens.h"
 #include "FoldingRanges.h"
 #include "JumpToDefinition.h"
@@ -151,10 +152,7 @@ nlohmann::json LspServer::onInitialize(const nlohmann::json &params)
             {"textDocumentSync", 1}, // Full sync
             {"semanticTokensProvider", {
                 {"legend", {
-                    {"tokenTypes", nlohmann::json::array({
-                        "keyword", "type", "variable", "property",
-                        "function", "string", "parameter", "operator"
-                    })},
+                    {"tokenTypes", lsp::tokenTypeLegend()},
                     {"tokenModifiers", nlohmann::json::array()}
                 }},
                 {"full", true}

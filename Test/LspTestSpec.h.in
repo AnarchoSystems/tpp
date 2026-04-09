@@ -1,0 +1,23 @@
+#pragma once
+// Generated at configure time. Test case names only — JSON is loaded at runtime.
+// Do not edit manually.
+
+namespace tpp_test
+{
+
+// Test cases that have a "semantic_tokens" section in their lsp-test.json.
+static const char* const kLspTokenCaseNames[] = {
+@LSP_TOKEN_CASE_NAMES@    nullptr
+};
+
+// Test cases that have a "folding_ranges" section in their lsp-test.json.
+static const char* const kLspFoldingCaseNames[] = {
+@LSP_FOLDING_CASE_NAMES@    nullptr
+};
+
+// Test cases that have a "go_to_definition" array in their lsp-test.json.
+static const char* const kLspDefinitionCaseNames[] = {
+@LSP_DEFINITION_CASE_NAMES@    nullptr
+};
+
+} // namespace tpp_test

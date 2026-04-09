@@ -19,6 +19,7 @@ namespace tpp
     {
         typeFiles_.clear();
         templateFiles_.clear();
+        policyFiles_.clear();
         uris_.clear();
         typeUris_.clear();
 
@@ -44,6 +45,7 @@ namespace tpp
 
         expand("types", typeFiles_);
         expand("templates", templateFiles_);
+        expand("replacement-policies", policyFiles_);
 
         for (const auto &p : typeFiles_)    { uris_.insert(pathToUri(p)); typeUris_.insert(pathToUri(p)); }
         for (const auto &p : templateFiles_) uris_.insert(pathToUri(p));
@@ -55,6 +57,7 @@ namespace tpp
     {
         compiler_.clear_types();
         compiler_.clear_templates();
+        compiler_.clear_policies();
         diagnostics_.clear();
 
         // Process type files
@@ -85,6 +88,20 @@ namespace tpp
 
             auto &diags = diagnostics_[uri];
             compiler_.add_templates(text, diags);
+        }
+
+        // Load replacement policies
+        for (const auto &path : policyFiles_)
+        {
+            std::string text = readFile(path);
+            if (text.empty()) continue;
+            try
+            {
+                nlohmann::json pj = nlohmann::json::parse(text);
+                std::string err;
+                compiler_.add_policy(pj, err); // silently ignore invalid policies
+            }
+            catch (...) {}
         }
 
         CompilerOutput newOutput;

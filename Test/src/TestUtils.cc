@@ -196,6 +196,16 @@ std::vector<tTestCase> GetTestCases()
     return all;
 }
 
+std::vector<tTestCase> GetDiagnosticTestCases()
+{
+    return parseCaseList(kTppDiagnosticCases, false);
+}
+
+std::vector<tTestCase> GetNegativeTestCases()
+{
+    return parseCaseList(kTppFailureCases, false);
+}
+
 std::vector<tTestCase> GetPositiveTestCases()
 {
     return parseCaseList(kTppSuccessCases, true);

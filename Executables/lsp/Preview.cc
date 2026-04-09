@@ -38,21 +38,7 @@ nlohmann::json renderPreview(const nlohmann::json &params, TppProject *project)
     nlohmann::json inputJson;
     if (preview.contains("input"))
     {
-        const auto &inp = preview["input"];
-        if (inp.is_string())
-        {
-            // path relative to the config directory
-            std::filesystem::path inputPath = project->root() / inp.get<std::string>();
-            std::ifstream f(inputPath);
-            if (!f)
-                return {{"error", "Cannot open input file: " + inputPath.string()}};
-            try { f >> inputJson; }
-            catch (const std::exception &e) { return {{"error", std::string("Input JSON parse error: ") + e.what()}}; }
-        }
-        else
-        {
-            inputJson = inp;
-        }
+        inputJson = preview["input"];
     }
     else
     {

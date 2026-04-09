@@ -1,19 +1,19 @@
 #include "SemanticTokens.h"
+#include "LspDefinitions.h"
 #include <tpp/Tokenizer.h>
 #include <tpp/TemplateParser.h>
 #include <vector>
 #include <tuple>
 
-// LSP semantic token types (indices must match the legend in onInitialize):
-//   0=keyword  1=type  2=variable  3=property  4=function  5=string  6=parameter
-static constexpr int TT_KEYWORD   = 0;
-static constexpr int TT_TYPE      = 1;
-static constexpr int TT_VARIABLE  = 2;
-static constexpr int TT_PROPERTY  = 3;
-static constexpr int TT_FUNCTION  = 4;
-[[maybe_unused]] static constexpr int TT_STRING    = 5;
-static constexpr int TT_PARAMETER = 6;
-static constexpr int TT_OPERATOR  = 7;
+// Shorthand aliases for the token type indices (must match lsp::SemanticTokenType order).
+static constexpr int TT_KEYWORD   = lsp::tokenTypeIndex(lsp::SemanticTokenType::keyword);
+static constexpr int TT_TYPE      = lsp::tokenTypeIndex(lsp::SemanticTokenType::type);
+static constexpr int TT_VARIABLE  = lsp::tokenTypeIndex(lsp::SemanticTokenType::variable);
+static constexpr int TT_PROPERTY  = lsp::tokenTypeIndex(lsp::SemanticTokenType::property);
+static constexpr int TT_FUNCTION  = lsp::tokenTypeIndex(lsp::SemanticTokenType::function);
+[[maybe_unused]] static constexpr int TT_STRING    = lsp::tokenTypeIndex(lsp::SemanticTokenType::string_);
+static constexpr int TT_PARAMETER = lsp::tokenTypeIndex(lsp::SemanticTokenType::parameter);
+static constexpr int TT_OPERATOR  = lsp::tokenTypeIndex(lsp::SemanticTokenType::operator_);
 
 namespace tpp
 {

@@ -23,6 +23,8 @@ namespace tpp
         void add_templates(const std::string &templateString,
                            std::vector<Diagnostic> &diagnostics) noexcept;
 
+        void clear_policies() noexcept;
+
         // Load a single policy from its parsed JSON object.
         // Validates structure and checks tag uniqueness. Appends to error on failure.
         bool add_policy(const nlohmann::json &policyJson, std::string &error) noexcept;

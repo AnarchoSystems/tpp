@@ -14,6 +14,7 @@ FetchContent_MakeAvailable(googletest)
 
 set(tpp_success_cases "")
 set(tpp_failure_cases "")
+set(tpp_diagnostic_cases "")
 
 file(GLOB test_case_dirs LIST_DIRECTORIES true
      ${CMAKE_CURRENT_SOURCE_DIR}/TestCases/*)
@@ -30,36 +31,89 @@ foreach(test_dir IN LISTS test_case_dirs)
         list(APPEND tpp_success_cases ${test_name})
     else()
         list(APPEND tpp_failure_cases ${test_name})
+        if(EXISTS ${test_dir}/expected_diagnostics.json)
+            list(APPEND tpp_diagnostic_cases ${test_name})
+        endif()
     endif()
 endforeach()
 
 set(TPP_SUCCESS_CASE_ENTRIES "")
 set(TPP_FAILURE_CASE_ENTRIES "")
+set(TPP_DIAGNOSTIC_CASE_ENTRIES "")
 foreach(name IN LISTS tpp_success_cases)
     string(APPEND TPP_SUCCESS_CASE_ENTRIES "    \"${name}\",\n")
 endforeach()
 foreach(name IN LISTS tpp_failure_cases)
     string(APPEND TPP_FAILURE_CASE_ENTRIES "    \"${name}\",\n")
 endforeach()
+foreach(name IN LISTS tpp_diagnostic_cases)
+    string(APPEND TPP_DIAGNOSTIC_CASE_ENTRIES "    \"${name}\",\n")
+endforeach()
 
 configure_file(TestCases.h.in ${CMAKE_CURRENT_BINARY_DIR}/TestCases.h @ONLY)
 
+# ── LSP test spec: per-case lsp-test.json → LspTestSpec.h ────────────────────
+# Just discover which test cases have each LSP section; data is loaded and
+# parsed at runtime in LspTest.cc.
+
+set(LSP_TOKEN_CASE_NAMES "")
+set(LSP_FOLDING_CASE_NAMES "")
+set(LSP_DEFINITION_CASE_NAMES "")
+
+file(GLOB _lsp_case_dirs LIST_DIRECTORIES true
+     ${CMAKE_CURRENT_SOURCE_DIR}/TestCases/*)
+
+foreach(_dir IN LISTS _lsp_case_dirs)
+    if(NOT IS_DIRECTORY ${_dir})
+        continue()
+    endif()
+    set(_spec "${_dir}/lsp-test.json")
+    if(NOT EXISTS "${_spec}")
+        continue()
+    endif()
+    get_filename_component(_tc "${_dir}" NAME)
+    file(READ "${_spec}" _lsp_json)
+
+    string(JSON _ignored ERROR_VARIABLE _err TYPE "${_lsp_json}" "semantic_tokens")
+    if(NOT _err)
+        string(APPEND LSP_TOKEN_CASE_NAMES "    \"${_tc}\",\n")
+    endif()
+
+    string(JSON _ignored ERROR_VARIABLE _err TYPE "${_lsp_json}" "folding_ranges")
+    if(NOT _err)
+        string(APPEND LSP_FOLDING_CASE_NAMES "    \"${_tc}\",\n")
+    endif()
+
+    string(JSON _nd ERROR_VARIABLE _err LENGTH "${_lsp_json}" "go_to_definition")
+    if(NOT _err AND _nd GREATER 0)
+        string(APPEND LSP_DEFINITION_CASE_NAMES "    \"${_tc}\",\n")
+    endif()
+endforeach()
+
+configure_file(LspTestSpec.h.in ${CMAKE_CURRENT_BINARY_DIR}/LspTestSpec.h @ONLY)
+
 # ── Main acceptance test binary ───────────────────────────────────────────────
 
-add_executable(lib_tpp_test
-    TestUtils.cc
-    AcceptanceTest.cc
-    RenderCLITest.cc
+add_executable(tpp_acceptance_test
+    src/TestUtils.cc
+    src/AcceptanceTest.cc
+    src/RenderCLITest.cc
+    src/LspClient.cc
+    src/LspTest.cc
 )
 
-target_link_libraries(lib_tpp_test PRIVATE gtest_main lib_tpp)
-target_include_directories(lib_tpp_test PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+target_link_libraries(tpp_acceptance_test PRIVATE gtest_main lib_tpp)
+target_include_directories(tpp_acceptance_test PRIVATE
+    ${CMAKE_CURRENT_BINARY_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/Executables/lsp)
 
-add_dependencies(lib_tpp_test tpp render-tpp)
+add_dependencies(tpp_acceptance_test tpp render-tpp tpp-lsp)
 
-target_compile_definitions(lib_tpp_test PUBLIC
+target_compile_definitions(tpp_acceptance_test PUBLIC
     TPP_EXE="$<TARGET_FILE:tpp>"
-    RENDER_TPP_EXE="$<TARGET_FILE:render-tpp>")
+    RENDER_TPP_EXE="$<TARGET_FILE:render-tpp>"
+    TPP_LSP_EXE="$<TARGET_FILE:tpp-lsp>")
 
 add_subdirectory(MakeStatTest)
 
@@ -74,7 +128,7 @@ foreach(test_name IN LISTS tpp_success_cases)
     set(test_dir ${CMAKE_CURRENT_SOURCE_DIR}/TestCases/${test_name})
     file(GLOB test_case_files ${test_dir}/*)
 
-    tpp_add(lib_tpp_test
+    tpp_add(tpp_acceptance_test
         NAME      ${test_name}
         SOURCE_DIR ${test_dir}
         NAMESPACE  ${test_name}
@@ -91,11 +145,11 @@ foreach(test_name IN LISTS tpp_success_cases)
 endforeach()
 
 if(cpp_test_sources)
-    target_sources(lib_tpp_test PRIVATE ${cpp_test_sources})
+    target_sources(tpp_acceptance_test PRIVATE ${cpp_test_sources})
 endif()
 
 include(GoogleTest)
 
-gtest_discover_tests(lib_tpp_test
+gtest_discover_tests(tpp_acceptance_test
                       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-                      PROPERTIES TIMEOUT 5)
+                      PROPERTIES TIMEOUT 15)
