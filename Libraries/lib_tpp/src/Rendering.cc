@@ -447,6 +447,8 @@ namespace tpp
                 }
             } else if constexpr (std::is_same_v<T, AlignmentCellNode>) {
                 // No output — only meaningful when iterated via renderNodesCells
+            } else if constexpr (std::is_same_v<T, CommentNode>) {
+                // Template comment — produces no output
             } else if constexpr (std::is_same_v<T, std::shared_ptr<ForNode>>) {
                 auto collection = ctx.resolve(arg->collectionExpr);
                 if (collection.is_array()) {

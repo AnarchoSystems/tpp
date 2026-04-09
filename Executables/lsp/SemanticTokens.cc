@@ -15,6 +15,7 @@ static constexpr int TT_FUNCTION  = lsp::tokenTypeIndex(lsp::SemanticTokenType::
 static constexpr int TT_PARAMETER = lsp::tokenTypeIndex(lsp::SemanticTokenType::parameter);
 static constexpr int TT_OPERATOR  = lsp::tokenTypeIndex(lsp::SemanticTokenType::operator_);
 static constexpr int TT_ENUM_MEMBER = lsp::tokenTypeIndex(lsp::SemanticTokenType::enumMember);
+static constexpr int TT_COMMENT   = lsp::tokenTypeIndex(lsp::SemanticTokenType::comment);
 
 namespace tpp
 {
@@ -139,6 +140,12 @@ static void walkNode(std::vector<RawToken> &out, const ASTNode &node)
         if constexpr (std::is_same_v<T, AlignmentCellNode>)
         {
             emitRange(out, arg.sourceRange, TT_OPERATOR);
+        }
+        else if constexpr (std::is_same_v<T, CommentNode>)
+        {
+            // Highlight every line of the block (opening, body, closing) as a comment
+            for (int ln = arg.startRange.start.line; ln <= arg.endRange.end.line; ++ln)
+                out.push_back({ln, 0, 9999, TT_COMMENT, 0});
         }
         else if constexpr (std::is_same_v<T, InterpolationNode>)
         {
@@ -451,6 +458,26 @@ static void emitTypeTokens(std::vector<RawToken> &out, const std::string &src,
         case TokKind::LAngle: case TokKind::RAngle:
             type = TT_OPERATOR;
             break;
+        case TokKind::Comment:
+        case TokKind::DocComment:
+        {
+            // Emit one TT_COMMENT token per source line (semantic tokens are single-line)
+            int curLine = tok.line;
+            int curCol  = tok.col;
+            std::string remaining = tok.text;
+            while (!remaining.empty())
+            {
+                size_t nl = remaining.find('\n');
+                std::string lineText = (nl == std::string::npos) ? remaining : remaining.substr(0, nl);
+                if (!lineText.empty())
+                    out.push_back({curLine, curCol, (int)lineText.size(), TT_COMMENT, 0});
+                if (nl == std::string::npos) break;
+                remaining = remaining.substr(nl + 1);
+                ++curLine;
+                curCol = 0;
+            }
+            break;
+        }
         case TokKind::Ident:
             if (expectDeclName)
             {
@@ -495,10 +522,11 @@ static nlohmann::json tokensForTemplate(const std::string &src)
 {
     std::vector<RawToken> out;
     size_t pos = 0;
+    int curLine = 0;
 
     while (pos < src.size())
     {
-        // Skip non-template-header lines
+        // Skip non-template-header lines, emitting comment tokens as we go
         while (pos < src.size())
         {
             size_t nl = src.find('\n', pos);
@@ -506,12 +534,45 @@ static nlohmann::json tokensForTemplate(const std::string &src)
             std::string_view line(src.data() + pos, lineEnd - pos);
             while (!line.empty() && (line.back() == '\r' || line.back() == ' ' || line.back() == '\t'))
                 line.remove_suffix(1);
+
             if (line.size() >= 9 && line.substr(0, 9) == "template ")
                 break;
-            pos = (nl == std::string::npos) ? src.size() : nl + 1;
+
+            if (line.size() >= 2 && line[0] == '/' && line[1] == '/')
+            {
+                // Line comment (// or ///)
+                out.push_back({curLine, 0, (int)line.size(), TT_COMMENT, 0});
+                pos = (nl == std::string::npos) ? src.size() : nl + 1;
+                if (nl != std::string::npos) ++curLine;
+            }
+            else if (line.size() >= 2 && line[0] == '/' && line[1] == '*')
+            {
+                // Block comment (/* */ or /** */)
+                size_t closePos = src.find("*/", pos + 2);
+                size_t blockEnd = (closePos != std::string::npos) ? closePos + 2 : src.size();
+                size_t bp = pos;
+                int bl = curLine;
+                while (bp < blockEnd)
+                {
+                    size_t bnl = src.find('\n', bp);
+                    bool hasNl = (bnl != std::string::npos && bnl < blockEnd);
+                    size_t blineEnd = hasNl ? bnl : blockEnd;
+                    int blineLen = (int)(blineEnd - bp);
+                    if (blineLen > 0) out.push_back({bl, 0, blineLen, TT_COMMENT, 0});
+                    if (hasNl) { bp = bnl + 1; ++bl; } else break;
+                }
+                curLine = bl;
+                pos = blockEnd;
+            }
+            else
+            {
+                pos = (nl == std::string::npos) ? src.size() : nl + 1;
+                if (nl != std::string::npos) ++curLine;
+            }
         }
         if (pos >= src.size()) break;
 
+        size_t templateLinePos = pos;
         TemplateFunction func;
         size_t bodyStartLine = 0;
         std::string bodyText;
@@ -519,6 +580,9 @@ static nlohmann::json tokensForTemplate(const std::string &src)
         if (!parseOneTemplate(src, pos, func, &bodyStartLine, &bodyText,
                               nullptr, nullptr, nullptr, &headerText))
             break;
+        // Keep curLine in sync with pos after parseOneTemplate consumed the template
+        for (size_t i = templateLinePos; i < pos; ++i)
+            if (src[i] == '\n') ++curLine;
 
         // Header tokens (line from sourceRange)
         emitTemplateHeader(out, func, headerText, func.sourceRange.start.line);

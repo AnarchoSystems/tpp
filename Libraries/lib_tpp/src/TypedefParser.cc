@@ -43,6 +43,40 @@ namespace tpp
             }
             int sline = line, scol = col;
             char c = src[i];
+            // ── Comment handling ──────────────────────────────────────────────
+            if (c == '/' && i + 1 < src.size() && (src[i + 1] == '/' || src[i + 1] == '*'))
+            {
+                if (src[i + 1] == '/')
+                {
+                    // Line comment: // or ///
+                    bool isDoc = i + 2 < src.size() && src[i + 2] == '/';
+                    std::string commentText;
+                    while (i < src.size() && src[i] != '\n')
+                    { commentText += src[i]; advance(); }
+                    TokKind kind = isDoc ? TokKind::DocComment : TokKind::Comment;
+                    tokens.push_back({kind, commentText, sline, scol});
+                }
+                else // src[i+1] == '*'
+                {
+                    // Block comment: /* or /**
+                    bool isDoc = i + 2 < src.size() && src[i + 2] == '*';
+                    std::string commentText;
+                    while (i < src.size())
+                    {
+                        if (src[i] == '*' && i + 1 < src.size() && src[i + 1] == '/')
+                        {
+                            commentText += src[i]; advance();
+                            commentText += src[i]; advance();
+                            break;
+                        }
+                        commentText += src[i];
+                        advance();
+                    }
+                    TokKind kind = isDoc ? TokKind::DocComment : TokKind::Comment;
+                    tokens.push_back({kind, commentText, sline, scol});
+                }
+                continue;
+            }
             if (c == '{')
             {
                 tokens.push_back({TokKind::LBrace, "{", sline, scol});
@@ -129,7 +163,48 @@ namespace tpp
         return tokens;
     }
 
-    const Token &TypedefParser::cur() const { return tokens[pos]; }
+    const Token &TypedefParser::cur()
+    {
+        // Transparently skip Comment and DocComment tokens.
+        // DocComment text is accumulated into pendingDoc; a plain Comment resets it.
+        while (pos < tokens.size() &&
+               (tokens[pos].kind == TokKind::Comment ||
+                tokens[pos].kind == TokKind::DocComment))
+        {
+            if (tokens[pos].kind == TokKind::DocComment)
+            {
+                // Strip the /// or /** */ markers and accumulate
+                std::string raw = tokens[pos].text;
+                std::string text;
+                if (raw.size() >= 3 && raw[0] == '/' && raw[1] == '/' && raw[2] == '/')
+                {
+                    // /// line comment: strip "///" and optional leading space
+                    text = raw.substr(3);
+                    if (!text.empty() && text[0] == ' ') text = text.substr(1);
+                }
+                else if (raw.size() >= 3 && raw[0] == '/' && raw[1] == '*' && raw[2] == '*')
+                {
+                    // /** block doc comment: strip /** and */
+                    text = raw.substr(3);
+                    if (text.size() >= 2 && text[text.size()-2] == '*' && text.back() == '/')
+                        text.resize(text.size() - 2);
+                    // Strip leading/trailing whitespace
+                    size_t a = text.find_first_not_of(" \t\r\n");
+                    size_t b = text.find_last_not_of(" \t\r\n");
+                    text = (a == std::string::npos) ? "" : text.substr(a, b - a + 1);
+                }
+                if (!pendingDoc.empty()) pendingDoc += "\n";
+                pendingDoc += text;
+            }
+            else
+            {
+                // Plain // or /* */ resets any accumulated doc
+                pendingDoc.clear();
+            }
+            ++pos;
+        }
+        return tokens[pos];
+    }
 
     static const char *tokKindName(TokKind k)
     {
@@ -169,6 +244,10 @@ namespace tpp
             return "'bool'";
         case TokKind::Ident:
             return "identifier";
+        case TokKind::Comment:
+            return "comment";
+        case TokKind::DocComment:
+            return "doc comment";
         case TokKind::Eof:
             return "end of file";
         }
@@ -194,7 +273,7 @@ namespace tpp
         }
         return tokens[pos++];
     }
-    bool TypedefParser::at(TokKind k) const { return cur().kind == k; }
+    bool TypedefParser::at(TokKind k) { return cur().kind == k; }
 
     TypeRef TypedefParser::parseTypeRef()
     {
@@ -236,16 +315,19 @@ namespace tpp
 
     void TypedefParser::parseStruct()
     {
+        std::string typeDoc = takeDoc(); // grab doc accumulated before 'struct'
         eat(TokKind::Struct);
         auto &nameTok = cur();
         eat(TokKind::Ident);
         StructDef sd;
         sd.name = nameTok.text;
+        sd.doc  = typeDoc;
         sd.sourceRange = {{nameTok.line, nameTok.col},
                           {nameTok.line, nameTok.col + (int)nameTok.text.size()}};
         eat(TokKind::LBrace);
         while (!at(TokKind::RBrace) && !at(TokKind::Eof) && ok)
         {
+            std::string fieldDoc = takeDoc(); // grab doc before field name
             auto &fnameTok = cur();
             eat(TokKind::Ident);
             if (!ok)
@@ -260,6 +342,7 @@ namespace tpp
             FieldDef fd;
             fd.name = fnameTok.text;
             fd.type = type;
+            fd.doc  = fieldDoc;
             fd.sourceRange = {{fnameTok.line, fnameTok.col},
                               {fnameTok.line, fnameTok.col + (int)fnameTok.text.size()}};
             sd.fields.push_back(std::move(fd));
@@ -286,22 +369,26 @@ namespace tpp
 
     void TypedefParser::parseEnum()
     {
+        std::string typeDoc = takeDoc(); // grab doc accumulated before 'enum'
         eat(TokKind::Enum);
         auto &nameTok = cur();
         eat(TokKind::Ident);
         EnumDef ed;
         ed.name = nameTok.text;
+        ed.doc  = typeDoc;
         ed.sourceRange = {{nameTok.line, nameTok.col},
                           {nameTok.line, nameTok.col + (int)nameTok.text.size()}};
         eat(TokKind::LBrace);
         while (!at(TokKind::RBrace) && !at(TokKind::Eof) && ok)
         {
+            std::string variantDoc = takeDoc(); // grab doc before variant tag
             auto &tagTok = cur();
             eat(TokKind::Ident);
             if (!ok)
                 break;
             VariantDef vd;
             vd.tag = tagTok.text;
+            vd.doc = variantDoc;
             vd.sourceRange = {{tagTok.line, tagTok.col},
                               {tagTok.line, tagTok.col + (int)tagTok.text.size()}};
             if (at(TokKind::LParen))
@@ -340,8 +427,16 @@ namespace tpp
     {
         // Walk tokens again to find ident tokens used as type refs and validate them
         size_t p = 0;
+        // Skip any Comment/DocComment tokens at the current position.
+        auto skipComments = [&]()
+        {
+            while (p < tokens.size() &&
+                   (tokens[p].kind == TokKind::Comment || tokens[p].kind == TokKind::DocComment))
+                ++p;
+        };
         auto skip = [&]()
-        { ++p; };
+        { ++p; skipComments(); };
+        skipComments(); // skip any leading comments before first token
         bool allOk = true;
 
         std::function<bool()> validateTypeFromTokens = [&]() -> bool

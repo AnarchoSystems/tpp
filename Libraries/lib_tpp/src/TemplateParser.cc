@@ -327,6 +327,11 @@ namespace tpp
         if (t == "&")
             return AlignmentCellDirective{};
 
+        if (t == "comment")
+            return CommentDirective{};
+        if (t == "end comment")
+            return EndCommentDirective{};
+
         if (t == "else")
             return ElseDirective{};
         if (t == "end if")
@@ -727,6 +732,26 @@ namespace tpp
                     sub.push_back(std::move(cell));
                     ++pos;
                 }
+                else if (std::holds_alternative<CommentDirective>(s.info))
+                {
+                    // @comment@ ... @end comment@: consume until EndCommentDirective, emit a CommentNode
+                    CommentNode cn;
+                    cn.startRange = makeRange(lineIndex, s);
+                    ++pos;
+                    // Consume all segments until @end comment@
+                    while (pos < segs.size())
+                    {
+                        const auto &cs = segs[pos];
+                        if (cs.isDirective && std::holds_alternative<EndCommentDirective>(cs.info))
+                        {
+                            cn.endRange = makeRange(lineIndex, cs);
+                            ++pos;
+                            break;
+                        }
+                        ++pos;
+                    }
+                    sub.push_back(std::move(cn));
+                }
                 else if (std::holds_alternative<EndForDirective>(s.info))
                 {
                     lastTerminatorRange = makeRange(lineIndex, s);
@@ -870,6 +895,25 @@ namespace tpp
                         cell.sourceRange = makeRange((int)pos, seg);
                         nodes.push_back(std::move(cell));
                         ++pos;
+                    }
+                    else if (std::holds_alternative<CommentDirective>(seg.info))
+                    {
+                        // @comment@ on its own block line: consume lines until @end comment@
+                        CommentNode cn;
+                        cn.startRange = makeRange((int)pos, seg);
+                        ++pos;
+                        while (pos < lines.size())
+                        {
+                            bool done = false;
+                            for (const auto &s2 : lines[pos].segments)
+                            {
+                                if (s2.isDirective && std::holds_alternative<EndCommentDirective>(s2.info))
+                                { cn.endRange = makeRange((int)pos, s2); ++pos; done = true; break; }
+                            }
+                            if (done) break;
+                            ++pos;
+                        }
+                        nodes.push_back(std::move(cn));
                     }
                     else if (std::holds_alternative<EndForDirective>(seg.info))
                     {
@@ -1528,6 +1572,11 @@ namespace tpp
                         }
                     }
                 }
+                else if (std::holds_alternative<CommentDirective>(seg.info) ||
+                         std::holds_alternative<EndCommentDirective>(seg.info))
+                {
+                    // Template comments are always valid; nothing to validate
+                }
                 else if (auto *d = std::get_if<IfDirective>(&seg.info))
                 {
                     if (!validatePathExpressionType(d->condText, frames, types, activeNarrowing, activeAbsent, true, exprType, err))
@@ -2034,6 +2083,7 @@ namespace tpp
 
                     // ── Process template source ───────────────────────────
                     size_t pos = 0;
+                    std::string pendingDoc;
                     while (pos < src.content.size())
                     {
                         while (pos < src.content.size() &&
@@ -2043,6 +2093,77 @@ namespace tpp
                         }
                         if (pos >= src.content.size())
                             break;
+
+                        // Determine current line bounds and trimmed content
+                        size_t lineStart = pos;
+                        size_t lineEnd = src.content.find('\n', pos);
+                        if (lineEnd == std::string::npos) lineEnd = src.content.size();
+                        std::string lineText = trim(src.content.substr(lineStart, lineEnd - lineStart));
+
+                        // /// doc line comment — accumulate
+                        if (lineText.size() >= 3 && lineText[0] == '/' && lineText[1] == '/' && lineText[2] == '/')
+                        {
+                            std::string text = trim(lineText.substr(3));
+                            if (!pendingDoc.empty()) pendingDoc += '\n';
+                            pendingDoc += text;
+                            pos = (lineEnd < src.content.size()) ? lineEnd + 1 : lineEnd;
+                            continue;
+                        }
+
+                        // // non-doc line comment — clear pending doc
+                        if (lineText.size() >= 2 && lineText[0] == '/' && lineText[1] == '/')
+                        {
+                            pendingDoc.clear();
+                            pos = (lineEnd < src.content.size()) ? lineEnd + 1 : lineEnd;
+                            continue;
+                        }
+
+                        // /** ... */ doc block comment — extract content, accumulate
+                        if (lineText.size() >= 3 && lineText[0] == '/' && lineText[1] == '*' && lineText[2] == '*')
+                        {
+                            size_t closePos = src.content.find("*/", pos + 3);
+                            std::string inner = src.content.substr(pos + 3,
+                                closePos != std::string::npos ? closePos - pos - 3 : src.content.size() - pos - 3);
+                            std::string doc;
+                            std::istringstream iss(inner);
+                            std::string iline;
+                            while (std::getline(iss, iline))
+                            {
+                                std::string t = trim(iline);
+                                if (t.empty()) continue;
+                                if (t[0] == '*') t = trim(t.substr(1));
+                                if (!doc.empty()) doc += '\n';
+                                doc += t;
+                            }
+                            pendingDoc = std::move(doc);
+                            pos = (closePos != std::string::npos) ? closePos + 2 : src.content.size();
+                            continue;
+                        }
+
+                        // /* ... */ non-doc block comment — clear pending doc
+                        if (lineText.size() >= 2 && lineText[0] == '/' && lineText[1] == '*')
+                        {
+                            pendingDoc.clear();
+                            size_t closePos = src.content.find("*/", pos + 2);
+                            pos = (closePos != std::string::npos) ? closePos + 2 : src.content.size();
+                            continue;
+                        }
+
+                        // Anything that doesn't start with "template " is unexpected
+                        if (!startsWith(lineText, "template "))
+                        {
+                            int lineNum = (int)std::count(src.content.begin(),
+                                                          src.content.begin() + (std::ptrdiff_t)lineStart,
+                                                          '\n');
+                            Diagnostic d;
+                            d.range = {{lineNum, 0}, {lineNum, (int)lineText.size()}};
+                            d.message = "unexpected content outside template: '" + lineText + "'";
+                            d.severity = DiagnosticSeverity::Error;
+                            src.diagnostics->push_back(std::move(d));
+                            pendingDoc.clear();
+                            pos = (lineEnd < src.content.size()) ? lineEnd + 1 : lineEnd;
+                            continue;
+                        }
 
                         TemplateFunction func;
                         size_t bodyStartLine = 0;
@@ -2054,6 +2175,8 @@ namespace tpp
                         {
                             break; // error diagnostic already added (or end of input)
                         }
+                        func.doc = std::move(pendingDoc);
+                        pendingDoc.clear();
 
                         // Check for duplicate: same name AND same parameter types
                         bool isDuplicate = false;

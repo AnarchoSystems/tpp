@@ -5,6 +5,7 @@ struct CppFieldDef
     isOptional : bool;
     innerType : optional<string>;
     recursiveInnerType : optional<string>;
+    doc : optional<string>;
 }
 
 struct CppStructDef
@@ -12,6 +13,7 @@ struct CppStructDef
     name : string;
     fields : list<CppFieldDef>;
     definition : string;
+    doc : optional<string>;
 }
 
 struct CppVariantDef
@@ -20,6 +22,7 @@ struct CppVariantDef
     payloadType : optional<string>;
     isRecursivePayload : bool;
     index : int;
+    doc : optional<string>;
 }
 
 struct CppEnumDef
@@ -27,6 +30,7 @@ struct CppEnumDef
     name : string;
     variants : list<CppVariantDef>;
     definition : string;
+    doc : optional<string>;
 }
 
 enum CppTypeDef
@@ -45,6 +49,7 @@ struct CppFunctionDef
 {
     name : string;
     params : list<CppParamDef>;
+    doc : optional<string>;
 }
 
 struct CppTypesInput

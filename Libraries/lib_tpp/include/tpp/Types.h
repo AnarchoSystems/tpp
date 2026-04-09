@@ -36,6 +36,7 @@ namespace tpp
         TypeRef type;
         bool recursive = false;
         Range sourceRange{};
+        std::string doc; // doc comment text attached to this field (/// or /** */)
     };
 
     struct StructDef
@@ -43,6 +44,7 @@ namespace tpp
         std::string name;
         std::vector<FieldDef> fields;
         Range sourceRange{};
+        std::string doc; // doc comment text attached to this struct (/// or /** */)
     };
 
     struct VariantDef
@@ -51,6 +53,7 @@ namespace tpp
         std::optional<TypeRef> payload;
         bool recursive = false;
         Range sourceRange{};
+        std::string doc; // doc comment text attached to this variant tag (/// or /** */)
     };
 
     struct EnumDef
@@ -58,6 +61,7 @@ namespace tpp
         std::string name;
         std::vector<VariantDef> variants;
         Range sourceRange{};
+        std::string doc; // doc comment text attached to this enum (/// or /** */)
     };
 
     // ── Type registry ──
@@ -176,20 +180,26 @@ namespace tpp
         to_json(typeJson, f.type);
         j = {{"name", f.name}, {"type", typeJson}};
         if (f.recursive) j["recursive"] = true;
+        if (!f.doc.empty()) j["doc"] = f.doc;
     }
     inline void from_json(const nlohmann::json &j, FieldDef &f)
     {
         j.at("name").get_to(f.name);
         f.type = j.at("type").get<TypeRef>();
         f.recursive = j.value("recursive", false);
+        f.doc = j.value("doc", std::string{});
     }
 
     inline void to_json(nlohmann::json &j, const StructDef &s)
-    { j = {{"name", s.name}, {"fields", s.fields}}; }
+    {
+        j = {{"name", s.name}, {"fields", s.fields}};
+        if (!s.doc.empty()) j["doc"] = s.doc;
+    }
     inline void from_json(const nlohmann::json &j, StructDef &s)
     {
         j.at("name").get_to(s.name);
         s.fields = j.at("fields").get<std::vector<FieldDef>>();
+        s.doc = j.value("doc", std::string{});
     }
 
     inline void to_json(nlohmann::json &j, const VariantDef &v)
@@ -202,6 +212,7 @@ namespace tpp
             j["payload"] = payloadJson;
         }
         if (v.recursive) j["recursive"] = true;
+        if (!v.doc.empty()) j["doc"] = v.doc;
     }
     inline void from_json(const nlohmann::json &j, VariantDef &v)
     {
@@ -211,14 +222,19 @@ namespace tpp
         else
             v.payload = std::nullopt;
         v.recursive = j.value("recursive", false);
+        v.doc = j.value("doc", std::string{});
     }
 
     inline void to_json(nlohmann::json &j, const EnumDef &e)
-    { j = {{"name", e.name}, {"variants", e.variants}}; }
+    {
+        j = {{"name", e.name}, {"variants", e.variants}};
+        if (!e.doc.empty()) j["doc"] = e.doc;
+    }
     inline void from_json(const nlohmann::json &j, EnumDef &e)
     {
         j.at("name").get_to(e.name);
         e.variants = j.at("variants").get<std::vector<VariantDef>>();
+        e.doc = j.value("doc", std::string{});
     }
 
     inline void to_json(nlohmann::json &j, const TypeRegistry &r)

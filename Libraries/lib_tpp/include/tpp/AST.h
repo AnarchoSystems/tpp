@@ -21,6 +21,7 @@ namespace tpp
 
     struct TextNode            { std::string text; };
     struct AlignmentCellNode  { Range sourceRange; };
+    struct CommentNode        { Range startRange; Range endRange; }; // @comment@...@end comment@
     struct InterpolationNode { Expression expr; std::string policy; Range sourceRange{}; };
     struct ForNode;
     struct IfNode;
@@ -30,6 +31,7 @@ namespace tpp
 
     using ASTNode = std::variant<TextNode,
                                  AlignmentCellNode,
+                                 CommentNode,
                                  InterpolationNode,
                                  std::shared_ptr<ForNode>,
                                  std::shared_ptr<IfNode>,
@@ -124,6 +126,7 @@ namespace tpp
         std::vector<ParamDef> params;
         std::vector<ASTNode> body;
         std::string policy;
+        std::string doc;
         Range sourceRange{};
     };
 
@@ -155,6 +158,8 @@ namespace tpp
 
     // AlignmentCellNode is a pure delimiter marker — two markers are always equal.
     inline bool operator==(const AlignmentCellNode &, const AlignmentCellNode &) { return true; }
+    // CommentNode carries only LSP range info — always semantically equal.
+    inline bool operator==(const CommentNode &, const CommentNode &) { return true; }
 
     inline bool operator==(const TextNode &a, const TextNode &b)
     { return a.text == b.text; }
@@ -323,6 +328,10 @@ namespace tpp
             {
                 j = {{"kind", "alignCell"}};
             }
+            else if constexpr (std::is_same_v<T, CommentNode>)
+            {
+                j = {{"kind", "comment"}};
+            }
         }, n);
     }
     inline void from_json(const nlohmann::json &j, ASTNode &n)
@@ -403,6 +412,10 @@ namespace tpp
         {
             n = AlignmentCellNode{};
         }
+        else if (kind == "comment")
+        {
+            n = CommentNode{};
+        }
     }
 
     inline void to_json(nlohmann::json &j, const ParamDef &p)
@@ -423,6 +436,7 @@ namespace tpp
         nlohmann::json bodyJson = nlohmann::json::array();
         for (const auto &n : f.body) { nlohmann::json nj; to_json(nj, n); bodyJson.push_back(nj); }
         j = {{"name", f.name}, {"params", paramsJson}, {"body", bodyJson}, {"policy", f.policy}};
+        if (!f.doc.empty()) j["doc"] = f.doc;
     }
     inline void from_json(const nlohmann::json &j, TemplateFunction &f)
     {
@@ -430,6 +444,7 @@ namespace tpp
         f.params = j.at("params").get<std::vector<ParamDef>>();
         f.body   = j.at("body").get<std::vector<ASTNode>>();
         if (j.contains("policy")) j.at("policy").get_to(f.policy);
+        if (j.contains("doc")) j.at("doc").get_to(f.doc);
     }
 
 }

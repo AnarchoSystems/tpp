@@ -19,7 +19,13 @@ static void collectFoldNode(std::vector<nlohmann::json> &out, const ASTNode &nod
     {
         using T = std::decay_t<decltype(arg)>;
 
-        if constexpr (std::is_same_v<T, std::shared_ptr<ForNode>>)
+        if constexpr (std::is_same_v<T, CommentNode>)
+        {
+            if (arg.endRange.start.line > arg.startRange.start.line)
+                out.push_back(makeRange(arg.startRange.start.line,
+                                        arg.endRange.start.line, "comment"));
+        }
+        else if constexpr (std::is_same_v<T, std::shared_ptr<ForNode>>)
         {
             if (arg->sourceRange.start.line >= 0 &&
                 arg->endRange.start.line > arg->sourceRange.start.line)
@@ -114,10 +120,11 @@ static nlohmann::json foldsForTemplate(const std::string &src, const TppProject 
 {
     std::vector<nlohmann::json> folds;
     size_t pos = 0;
+    int curLine = 0;
 
     while (pos < src.size())
     {
-        // Skip to next "template " header line
+        // Skip to next "template " header line, collecting block comment folds en route
         while (pos < src.size())
         {
             size_t nl = src.find('\n', pos);
@@ -127,7 +134,23 @@ static nlohmann::json foldsForTemplate(const std::string &src, const TppProject 
                 line.remove_suffix(1);
             if (line.size() >= 9 && line.substr(0, 9) == "template ")
                 break;
+
+            if (line.size() >= 2 && line[0] == '/' && line[1] == '*')
+            {
+                int startLine = curLine;
+                size_t closePos = src.find("*/", pos + 2);
+                size_t blockEnd = (closePos != std::string::npos) ? closePos + 2 : src.size();
+                // Count lines inside the block
+                for (size_t i = pos; i < blockEnd; ++i)
+                    if (src[i] == '\n') ++curLine;
+                if (curLine > startLine)
+                    folds.push_back(makeRange(startLine, curLine, "comment"));
+                pos = blockEnd;
+                continue;
+            }
+
             pos = (nl == std::string::npos) ? src.size() : nl + 1;
+            if (nl != std::string::npos) ++curLine;
         }
         if (pos >= src.size()) break;
 

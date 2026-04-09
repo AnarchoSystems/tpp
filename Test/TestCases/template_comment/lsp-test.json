@@ -1,0 +1,32 @@
+{
+    "semantic_tokens": {
+        "file": "template.tpp",
+        "expected_tokens": [
+            {"line": 0,  "character": 0, "length": 15, "type": "comment"},
+            {"line": 2,  "character": 0, "length":  3, "type": "comment"},
+            {"line": 3,  "character": 0, "length": 16, "type": "comment"},
+            {"line": 4,  "character": 0, "length":  3, "type": "comment"},
+            {"line": 5,  "character": 0, "length":  8, "type": "keyword"},
+            {"line": 5,  "character": 9, "length":  3, "type": "function"},
+            {"line": 7,  "character": 0, "length":  3, "type": "keyword"},
+            {"line": 9,  "character": 0, "length": 22, "type": "comment"},
+            {"line": 10, "character": 0, "length":  8, "type": "keyword"},
+            {"line": 10, "character": 9, "length":  4, "type": "function"},
+            {"line": 12, "character": 0, "length": 9999, "type": "comment"},
+            {"line": 13, "character": 0, "length": 9999, "type": "comment"},
+            {"line": 14, "character": 0, "length": 9999, "type": "comment"},
+            {"line": 15, "character": 0, "length": 9999, "type": "comment"},
+            {"line": 17, "character": 0, "length":  3, "type": "keyword"},
+            {"line": 19, "character": 0, "length": 19, "type": "comment"}
+        ]
+    },
+    "folding_ranges": {
+        "file": "template.tpp",
+        "expected": [
+            {"startLine": 2,  "endLine": 4,  "kind": "comment"},
+            {"startLine": 5,  "endLine": 7},
+            {"startLine": 10, "endLine": 17},
+            {"startLine": 12, "endLine": 15}
+        ]
+    }
+}

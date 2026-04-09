@@ -21,10 +21,17 @@ namespace tpp
         TypeRegistry &reg;
         std::vector<Diagnostic> &diags;
         bool ok = true;
+        std::string pendingDoc; // accumulated doc comment text waiting to be attached
 
-        const Token &cur() const;
+        // Returns the current token, transparently skipping Comment/DocComment tokens.
+        // DocComment text is accumulated into pendingDoc; Comment resets it.
+        const Token &cur();
         const Token &eat(TokKind k);
-        bool at(TokKind k) const;
+        bool at(TokKind k);
+
+        // Returns and clears pendingDoc (call after the first at()/eat() that
+        // advances past doc comments preceding a declaration).
+        std::string takeDoc() { auto d = std::move(pendingDoc); pendingDoc.clear(); return d; }
 
         TypeRef parseTypeRef();
         void parseStruct();

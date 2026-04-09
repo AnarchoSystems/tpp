@@ -23,7 +23,7 @@ template<typename _TppT>
 inline nlohmann::json _tpp_j(const _TppT& v) { return nlohmann::json(v); }
 template<typename _TppT>
 inline nlohmann::json _tpp_j(const std::unique_ptr<_TppT>& v) { return v ? nlohmann::json(*v) : nlohmann::json(); }
-// Forward declarations
+
 @for typeDef in input.types@
 @switch typeDef@
 @case Struct(s)@
@@ -34,13 +34,19 @@ struct @e.name@;
 @end case@
 @end switch@
 @end for@
-// Type definitions
+
 @for typeDef in input.types@
 @switch typeDef@
 @case Struct(s)@
+@if s.doc@
+/// @s.doc@
+@end if@
 struct @s.name@
 {
     @for field in s.fields@
+    @if field.doc@
+    /// @field.doc@
+    @end if@
     @field.type@ @field.name@;
     @end for@
     static std::string tpp_typedefs() noexcept
@@ -50,8 +56,14 @@ struct @s.name@
 };
 @end case@
 @case Enum(e)@
+@if e.doc@
+/// @e.doc@
+@end if@
 @for variant in e.variants@
 @if not variant.payloadType@
+@if variant.doc@
+/// @variant.doc@
+@end if@
 struct @e.name@_@variant.tag@
 {
     friend void to_json(nlohmann::json& j, const @e.name@_@variant.tag@&) { j = nlohmann::json::object(); }
@@ -71,7 +83,7 @@ struct @e.name@
 @end case@
 @end switch@
 @end for@
-// Serialization — forward declarations
+
 @for typeDef in input.types@
 @switch typeDef@
 @case Struct(s)@
@@ -84,7 +96,7 @@ inline void to_json(nlohmann::json& j, const @e.name@& v);
 @end case@
 @end switch@
 @end for@
-// Serialization — definitions
+
 @for typeDef in input.types@
 @switch typeDef@
 @case Struct(s)@
@@ -160,6 +172,9 @@ template render_cpp_functions(input: CppFunctionsInput)
 namespace @input.namespaceName@ {
 @end if@
 @for function in input.functions@
+@if function.doc@
+/// @function.doc@
+@end if@
 std::string @function.name@(@for param in function.params | sep=", "@typename tpp::ArgType<@param.type@>::type @param.name@@end for@);
 @end for@
 @if input.namespaceName@

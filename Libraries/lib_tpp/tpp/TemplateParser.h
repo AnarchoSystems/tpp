@@ -62,6 +62,10 @@ namespace tpp
     // Alignment cell marker: @&@
     struct AlignmentCellDirective {};
 
+    // Template comments: @comment@ ... @end comment@ — content is discarded
+    struct CommentDirective    {};
+    struct EndCommentDirective {};
+
     // Control-flow terminators — carry no data
     struct ElseDirective      {};
     struct EndIfDirective     {};
@@ -79,6 +83,8 @@ namespace tpp
         CaseDirective,
         RenderDirective,
         AlignmentCellDirective,
+        CommentDirective,
+        EndCommentDirective,
         ElseDirective,
         EndIfDirective,
         EndForDirective,

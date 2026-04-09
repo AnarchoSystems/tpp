@@ -26,6 +26,8 @@ namespace tpp
         KwInt,
         KwBool,
         Ident,
+        Comment,    // // or /* */ — ignored by parser, used for LSP highlighting
+        DocComment, // /// or /** */ — ignored by parser, attached as doc to next declaration
         Eof
     };
 

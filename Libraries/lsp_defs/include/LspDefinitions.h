@@ -31,7 +31,8 @@ namespace lsp
     X(string_,      string,         5)      SEP     \
     X(parameter,    parameter,      6)      SEP     \
     X(operator_,    operator,       7)      SEP     \
-    X(enumMember,   enumMember,     8)
+    X(enumMember,   enumMember,     8)      SEP     \
+    X(comment,      comment,        9)
 
     // clang-format on
 

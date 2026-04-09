@@ -339,6 +339,7 @@ nlohmann::json to_render_cpp_type_input(const tpp::CompilerOutput &compilerOutpu
     {
         nlohmann::json enumJson;
         enumJson["name"] = e.name;
+        if (!e.doc.empty()) enumJson["doc"] = e.doc;
         nlohmann::json variants = nlohmann::json::array();
         int variantIndex = 0;
         for (const auto &v : e.variants)
@@ -349,6 +350,7 @@ nlohmann::json to_render_cpp_type_input(const tpp::CompilerOutput &compilerOutpu
             variantJson["isRecursivePayload"] = v.recursive && v.payload.has_value();
             if (v.payload.has_value())
                 variantJson["payloadType"] = typeRefToCppString(*v.payload);
+            if (!v.doc.empty()) variantJson["doc"] = v.doc;
             variants.push_back(variantJson);
         }
         enumJson["variants"] = variants;
@@ -360,6 +362,7 @@ nlohmann::json to_render_cpp_type_input(const tpp::CompilerOutput &compilerOutpu
     {
         nlohmann::json structJson;
         structJson["name"] = s.name;
+        if (!s.doc.empty()) structJson["doc"] = s.doc;
         nlohmann::json fields = nlohmann::json::array();
         for (const auto &f : s.fields)
         {
@@ -367,6 +370,7 @@ nlohmann::json to_render_cpp_type_input(const tpp::CompilerOutput &compilerOutpu
             bool isOpt = std::holds_alternative<std::shared_ptr<tpp::OptionalType>>(f.type);
             field["name"] = f.name;
             field["isOptional"] = isOpt;
+            if (!f.doc.empty()) field["doc"] = f.doc;
             if (f.recursive)
             {
                 std::string innerT;
@@ -416,6 +420,7 @@ static nlohmann::json buildFunctionsInput(const tpp::CompilerOutput &compilerOut
     {
         nlohmann::json func;
         func["name"] = f.name;
+        if (!f.doc.empty()) func["doc"] = f.doc;
         nlohmann::json params = nlohmann::json::array();
         for (const auto &p : f.params)
         {
