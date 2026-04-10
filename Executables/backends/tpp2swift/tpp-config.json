@@ -1,0 +1,8 @@
+{
+    "templates": [
+        "defs.tpp"
+    ],
+    "types": [
+        "defs.tpp.types"
+    ]
+}
