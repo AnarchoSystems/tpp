@@ -1,4 +1,7 @@
 add_subdirectory(tpp)
 add_subdirectory(backends/render-tpp)
+add_subdirectory(backends/codegen)
 add_subdirectory(backends/tpp2cpp)
+add_subdirectory(backends/tpp2java)
+add_subdirectory(backends/tpp2swift)
 add_subdirectory(lsp)

@@ -1,0 +1,59 @@
+/// Type definitions for Java code generation templates.
+/// These types describe the context that tpp2java builds from the
+/// tpp intermediate representation.
+
+enum TypeKind
+{
+    Str,
+    Int,
+    Bool,
+    Named(string),
+    List(TypeKind),
+    Optional(TypeKind)
+}
+
+struct FieldInfo
+{
+    name : string;
+    type : TypeKind;
+    recursive : bool;
+}
+
+struct StructInfo
+{
+    name : string;
+    fields : list<FieldInfo>;
+}
+
+struct VariantInfo
+{
+    tag : string;
+    payload : optional<TypeKind>;
+    recursive : bool;
+}
+
+struct EnumInfo
+{
+    name : string;
+    variants : list<VariantInfo>;
+    hasRecursiveVariants : bool;
+}
+
+struct ParamInfo
+{
+    name : string;
+    type : TypeKind;
+}
+
+struct FunctionInfo
+{
+    name : string;
+    params : list<ParamInfo>;
+}
+
+struct JavaCodegenInput
+{
+    structs : list<StructInfo>;
+    enums : list<EnumInfo>;
+    functions : list<FunctionInfo>;
+}
