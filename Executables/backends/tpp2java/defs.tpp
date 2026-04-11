@@ -267,10 +267,10 @@ END
 
 template emit_emit_expr(e: EmitExprData)
 @if e.staticPolicyId@
-{ String _pv = @java_expr_to_str(e.expr)@; _pv = _tppPolicy_@e.staticPolicyId@.apply(_pv); _tppAppendValue(@e.sb@, _pv); }
+{ String _pv = @java_expr_to_str(e.expr)@; _pv = TppPolicy.@e.staticPolicyId@.apply(_pv); _tppAppendValue(@e.sb@, _pv); }
 @else@
 @if e.useRuntimePolicy@
-{ String _pv = @java_expr_to_str(e.expr)@; if (!_policy.isEmpty()) _pv = _tppApplyPolicy(_policy, _pv); _tppAppendValue(@e.sb@, _pv); }
+{ String _pv = @java_expr_to_str(e.expr)@; _pv = _policy.apply(_pv); _tppAppendValue(@e.sb@, _pv); }
 @else@
 _tppAppendValue(@e.sb@, @java_expr_to_str(e.expr)@);
 @end if@
@@ -609,40 +609,33 @@ static class TppPolicy {
         }
         return v;
     }
-}
 @for pol in ctx.policies@
 
-static final TppPolicy _tppPolicy_@pol.identifier@ = new TppPolicy(@pol.tagLit@);
-static {
-    @if pol.hasLength@
-    _tppPolicy_@pol.identifier@.minLength = @pol.minVal@;
-    _tppPolicy_@pol.identifier@.maxLength = @pol.maxVal@;
-    @end if@
-    @if pol.hasRejectIf@
-    { TppPolicy.RejectRule rr = new TppPolicy.RejectRule(); rr.pattern = java.util.regex.Pattern.compile(@pol.rejectIfRegexLit@); rr.message = @pol.rejectMsgLit@; _tppPolicy_@pol.identifier@.rejectIf = rr; }
-    @end if@
-    @if pol.hasRequire@
-    @for r in pol.require@
-    { TppPolicy.RequireStep rs = new TppPolicy.RequireStep(); rs.pattern = java.util.regex.Pattern.compile(@r.regexLit@); @if r.hasReplace@rs.replace = @r.replaceLit@; @end if@_tppPolicy_@pol.identifier@.require.add(rs); }
-    @end for@
-    @end if@
-    @if pol.hasReplacements@
-    _tppPolicy_@pol.identifier@.replacements = new String[][]{@for r in pol.replacements | sep=", "@{@r.findLit@, @r.replaceLit@}@end for@};
-    @end if@
-    @if pol.hasOutputFilter@
-    _tppPolicy_@pol.identifier@.outputFilter = new java.util.regex.Pattern[]{@for f in pol.outputFilter | sep=", "@java.util.regex.Pattern.compile(@f.regexLit@)@end for@};
-    @end if@
-}
+    static final TppPolicy @pol.identifier@ = new TppPolicy(@pol.tagLit@);
+    static {
+        @if pol.hasLength@
+        @pol.identifier@.minLength = @pol.minVal@;
+        @pol.identifier@.maxLength = @pol.maxVal@;
+        @end if@
+        @if pol.hasRejectIf@
+        { TppPolicy.RejectRule rr = new TppPolicy.RejectRule(); rr.pattern = java.util.regex.Pattern.compile(@pol.rejectIfRegexLit@); rr.message = @pol.rejectMsgLit@; @pol.identifier@.rejectIf = rr; }
+        @end if@
+        @if pol.hasRequire@
+        @for r in pol.require@
+        { TppPolicy.RequireStep rs = new TppPolicy.RequireStep(); rs.pattern = java.util.regex.Pattern.compile(@r.regexLit@); @if r.hasReplace@rs.replace = @r.replaceLit@; @end if@@pol.identifier@.require.add(rs); }
+        @end for@
+        @end if@
+        @if pol.hasReplacements@
+        @pol.identifier@.replacements = new String[][]{@for r in pol.replacements | sep=", "@{@r.findLit@, @r.replaceLit@}@end for@};
+        @end if@
+        @if pol.hasOutputFilter@
+        @pol.identifier@.outputFilter = new java.util.regex.Pattern[]{@for f in pol.outputFilter | sep=", "@java.util.regex.Pattern.compile(@f.regexLit@)@end for@};
+        @end if@
+    }
 @end for@
-@if ctx.needsApplyDispatch@
 
-static String _tppApplyPolicy(String tag, String value) throws Exception {
-    @for pol in ctx.policies@
-    if (tag.equals(@pol.tagLit@)) return _tppPolicy_@pol.identifier@.apply(value);
-    @end for@
-    return value;
+    static final TppPolicy pure = new TppPolicy("");
 }
-@end if@
 END
 
 // ── Runtime helpers (shared across generated files) ──────────────────────────
@@ -725,9 +718,9 @@ class @if ctx.namespaceName@@ctx.namespaceName@@else@Functions@end if@@if ctx.ex
 @for fn in ctx.functions@
 
 @if ctx.hasPolicies@
-    static String @ctx.functionPrefix@@fn.name@(@fn.paramsStr@) { try { return @ctx.functionPrefix@@fn.name@(@fn.argsPassStr@); } catch (Exception e) { throw new RuntimeException(e); } }
+    static String @ctx.functionPrefix@@fn.name@(@fn.paramsStr@) throws Exception { return @ctx.functionPrefix@@fn.name@(@fn.argsPassStr@); }
 
-    static String @ctx.functionPrefix@@fn.name@(@fn.paramsStrWithPolicy@) throws Exception {
+    private static String @ctx.functionPrefix@@fn.name@(@fn.paramsStrWithPolicy@) throws Exception {
 @else@
     static String @ctx.functionPrefix@@fn.name@(@fn.paramsStr@) {
 @end if@

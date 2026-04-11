@@ -263,10 +263,10 @@ END
 
 template emit_emit_expr(e: EmitExprData)
 @if e.staticPolicyId@
-{ std::string _pv = @cpp_expr_to_str(e.expr)@; _pv = _tppPolicy_@e.staticPolicyId@.apply(_pv); _tppAppendValue(@e.sb@, _pv); }
+{ std::string _pv = @cpp_expr_to_str(e.expr)@; _pv = TppPolicy::@e.staticPolicyId@.apply(_pv); _tppAppendValue(@e.sb@, _pv); }
 @else@
 @if e.useRuntimePolicy@
-{ std::string _pv = @cpp_expr_to_str(e.expr)@; if (!_policy.empty()) _pv = _tppApplyPolicy(_policy, _pv); _tppAppendValue(@e.sb@, _pv); }
+{ std::string _pv = @cpp_expr_to_str(e.expr)@; _pv = _policy.apply(_pv); _tppAppendValue(@e.sb@, _pv); }
 @else@
 _tppAppendValue(@e.sb@, @cpp_expr_to_str(e.expr)@);
 @end if@
@@ -572,8 +572,12 @@ END
 
 // ── Policy helpers ───────────────────────────────────────────────────────────
 
-template emit_policy_instance(pol: PolicyInfo)
-static const TppPolicy _tppPolicy_@pol.identifier@ = [] {
+template emit_policy_instance_decl(pol: PolicyInfo)
+static const TppPolicy @pol.identifier@;
+END
+
+template emit_policy_instance_def(pol: PolicyInfo)
+inline const TppPolicy TppPolicy::@pol.identifier@ = [] {
     TppPolicy p;
     p.tag = @pol.tagLit@;
     @if pol.hasLength@
@@ -632,20 +636,17 @@ struct TppPolicy {
         }
         return v;
     }
+@for pol in ctx.policies@
+    @emit_policy_instance_decl(pol)@
+@end for@
+    static const TppPolicy pure;
 };
 @for pol in ctx.policies@
 
-@emit_policy_instance(pol)@
+@emit_policy_instance_def(pol)@
 @end for@
-@if ctx.needsApplyDispatch@
 
-[[maybe_unused]] static std::string _tppApplyPolicy(const std::string& tag, const std::string& value) {
-    @for pol in ctx.policies@
-    if (tag == @pol.tagLit@) return _tppPolicy_@pol.identifier@.apply(value);
-    @end for@
-    return value;
-}
-@end if@
+inline const TppPolicy TppPolicy::pure{};
 END
 
 // ── Runtime helpers (shared across generated files) ──────────────────────────
@@ -787,8 +788,7 @@ namespace @ctx.namespaceName@ {
 @if ctx.hasPolicies@
 
 @ctx.staticModifier@std::string @ctx.functionPrefix@@fn.name@(@fn.paramsStr@) {
-    try { return @ctx.functionPrefix@@fn.name@(@fn.argsPassStr@); }
-    catch (const std::exception& e) { throw; }
+    return @ctx.functionPrefix@@fn.name@(@fn.argsPassStr@);
 }
 @end if@
 @end for@

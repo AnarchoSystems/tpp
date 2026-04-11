@@ -119,6 +119,8 @@ static nlohmann::json buildFunctionsContext(
     cfg.nullLiteral = "null";
     cfg.functionPrefix = functionPrefix;
     cfg.callNeedsTry = false;  // Java: checked exceptions propagate without 'try'
+    cfg.policyQualifier = "TppPolicy.";
+    cfg.purePolicy = "TppPolicy.pure";
     cfg.makeSpecSetupLines = [](int s, int numCols, const std::string &spec) {
         nlohmann::json lines = nlohmann::json::array();
         if (spec.empty()) return lines;
@@ -155,9 +157,9 @@ static nlohmann::json buildFunctionsContext(
         if (hasPol)
         {
             if (!paramsStrWithPolicy.empty()) paramsStrWithPolicy += ", ";
-            paramsStrWithPolicy += "String _policy";
+            paramsStrWithPolicy += "TppPolicy _policy";
             if (!argsPassStr.empty()) argsPassStr += ", ";
-            argsPassStr += "\"\"";
+            argsPassStr += "TppPolicy.pure";
         }
 
         int scope = 0;
@@ -174,15 +176,9 @@ static nlohmann::json buildFunctionsContext(
         });
     }
 
-    bool needsDispatch = false;
-    if (hasPol)
-        for (const auto &f : functions)
-            if (codegen::bodyHasRuntimePolicy(f["body"])) { needsDispatch = true; break; }
-
     nlohmann::json result = {
         {"functions", functions},
         {"hasPolicies", hasPol},
-        {"needsApplyDispatch", needsDispatch},
         {"policies", hasPol ? codegen::buildPolicyContext(ir, "null") : nlohmann::json::array()},
         {"functionPrefix", functionPrefix},
         {"staticModifier", "static "}  // Java always uses static methods

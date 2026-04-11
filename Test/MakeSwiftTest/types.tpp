@@ -12,4 +12,5 @@ struct SwiftTestDef
     params : list<SwiftTestParam>;
     expectedOutputLiteral : string;
     callArgs : string;
+    hasPolicies : bool;
 }

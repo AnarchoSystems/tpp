@@ -522,6 +522,8 @@ static nlohmann::json buildFunctionsContext(
     cfg.nullLiteral = "";  // Use truthiness checks (works for both optional and unique_ptr)
     cfg.functionPrefix = functionPrefix;
     cfg.callNeedsTry = false;
+    cfg.policyQualifier = "TppPolicy::";
+    cfg.purePolicy = "TppPolicy::pure";
     cfg.transformCallArg = [&fieldMeta](const std::string &p, const tpp::TypeRef &) -> std::string {
         auto dot = p.rfind('.');
         if (dot == std::string::npos) return p;
@@ -569,9 +571,9 @@ static nlohmann::json buildFunctionsContext(
         if (hasPol)
         {
             if (!paramsStrWithPolicy.empty()) paramsStrWithPolicy += ", ";
-            paramsStrWithPolicy += "const std::string& _policy";
+            paramsStrWithPolicy += "const TppPolicy& _policy";
             if (!argsPassStr.empty()) argsPassStr += ", ";
-            argsPassStr += "\"\"";
+            argsPassStr += "TppPolicy::pure";
         }
 
         int scope = 0;
@@ -588,15 +590,9 @@ static nlohmann::json buildFunctionsContext(
         });
     }
 
-    bool needsDispatch = false;
-    if (hasPol)
-        for (const auto &f : functions)
-            if (codegen::bodyHasRuntimePolicy(f["body"])) { needsDispatch = true; break; }
-
     nlohmann::json result = {
         {"functions", functions},
         {"hasPolicies", hasPol},
-        {"needsApplyDispatch", needsDispatch},
         {"policies", hasPol ? codegen::buildPolicyContext(ir, "std::nullopt") : nlohmann::json::array()},
         {"functionPrefix", functionPrefix},
         {"includes", includes},

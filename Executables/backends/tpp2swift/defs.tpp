@@ -128,10 +128,10 @@ END
 
 template emit_emit_expr(e: EmitExprData)
 @if e.staticPolicyId@
-do { var _pv = @swift_expr_to_str(e.expr)@; _pv = try _tppPolicy_@e.staticPolicyId@.apply(_pv); _tppAppendValue(&@e.sb@, _pv) }
+do { var _pv = @swift_expr_to_str(e.expr)@; _pv = try TppPolicy.@e.staticPolicyId@.apply(_pv); _tppAppendValue(&@e.sb@, _pv) }
 @else@
 @if e.useRuntimePolicy@
-do { var _pv = @swift_expr_to_str(e.expr)@; if !_policy.isEmpty { _pv = try _tppApplyPolicy(_policy, _pv) }; _tppAppendValue(&@e.sb@, _pv) }
+do { var _pv = @swift_expr_to_str(e.expr)@; _pv = try _policy.apply(_pv); _tppAppendValue(&@e.sb@, _pv) }
 @else@
 _tppAppendValue(&@e.sb@, @swift_expr_to_str(e.expr)@)
 @end if@
@@ -455,6 +455,29 @@ struct TppPolicy {
     var require: [RequireStep] = []
     var replacements: [(String, String)] = []
     var outputFilter: [Regex<AnyRegexOutput>] = []
+    static let pure = TppPolicy(tag: "")
+    @for pol in ctx.policies@
+    static let @pol.identifier@: TppPolicy = {
+        var p = TppPolicy(tag: @pol.tagLit@)
+        @if pol.hasLength@
+        p.minLength = @pol.minVal@
+        p.maxLength = @pol.maxVal@
+        @end if@
+        @if pol.hasRejectIf@
+        p.rejectIf = TppPolicy.RejectRule(pattern: try! Regex(@pol.rejectIfRegexLit@), message: @pol.rejectMsgLit@)
+        @end if@
+        @if pol.hasRequire@
+        p.require = [@for r in pol.require | sep=", "@TppPolicy.RequireStep(pattern: try! Regex(@r.regexLit@), replace: @if r.hasReplace@@r.replaceLit@@else@nil@end if@)@end for@]
+        @end if@
+        @if pol.hasReplacements@
+        p.replacements = [@for r in pol.replacements | sep=", "@(@r.findLit@, @r.replaceLit@)@end for@]
+        @end if@
+        @if pol.hasOutputFilter@
+        p.outputFilter = [@for f in pol.outputFilter | sep=", "@try! Regex(@f.regexLit@)@end for@]
+        @end if@
+        return p
+    }()
+    @end for@
     static func _literalReplace(_ s: String, _ find: String, _ repl: String) -> String {
         guard !find.isEmpty else { return s }
         var result = ""
@@ -510,38 +533,6 @@ struct TppPolicy {
         return v
     }
 }
-@for pol in ctx.policies@
-
-@ctx.staticModifier@let _tppPolicy_@pol.identifier@: TppPolicy = {
-    var p = TppPolicy(tag: @pol.tagLit@)
-    @if pol.hasLength@
-    p.minLength = @pol.minVal@
-    p.maxLength = @pol.maxVal@
-    @end if@
-    @if pol.hasRejectIf@
-    p.rejectIf = TppPolicy.RejectRule(pattern: try! Regex(@pol.rejectIfRegexLit@), message: @pol.rejectMsgLit@)
-    @end if@
-    @if pol.hasRequire@
-    p.require = [@for r in pol.require | sep=", "@TppPolicy.RequireStep(pattern: try! Regex(@r.regexLit@), replace: @if r.hasReplace@@r.replaceLit@@else@nil@end if@)@end for@]
-    @end if@
-    @if pol.hasReplacements@
-    p.replacements = [@for r in pol.replacements | sep=", "@(@r.findLit@, @r.replaceLit@)@end for@]
-    @end if@
-    @if pol.hasOutputFilter@
-    p.outputFilter = [@for f in pol.outputFilter | sep=", "@try! Regex(@f.regexLit@)@end for@]
-    @end if@
-    return p
-}()
-@end for@
-@if ctx.needsApplyDispatch@
-
-@ctx.staticModifier@func _tppApplyPolicy(_ tag: String, _ value: String) throws -> String {
-    @for pol in ctx.policies@
-    if tag == @pol.tagLit@ { return try _tppPolicy_@pol.identifier@.apply(value) }
-    @end for@
-    return value
-}
-@end if@
 END
 
 // ── Runtime helpers (shared across generated files) ──────────────────────────
@@ -662,9 +653,9 @@ enum @ctx.namespaceName@ {
 @for fn in ctx.functions@
 
 @if ctx.hasPolicies@
-@ctx.staticModifier@func @ctx.functionPrefix@@fn.name@(@fn.paramsStr@) -> String { return try! @ctx.functionPrefix@@fn.name@(@fn.argsPassStr@) }
+@ctx.staticModifier@func @ctx.functionPrefix@@fn.name@(@fn.paramsStr@) throws -> String { return try @ctx.functionPrefix@@fn.name@(@fn.argsPassStr@) }
 
-@ctx.staticModifier@func @ctx.functionPrefix@@fn.name@(@fn.paramsStrWithPolicy@) throws -> String {
+fileprivate @ctx.staticModifier@func @ctx.functionPrefix@@fn.name@(@fn.paramsStrWithPolicy@) throws -> String {
 @else@
 @ctx.staticModifier@func @ctx.functionPrefix@@fn.name@(@fn.paramsStr@) -> String {
 @end if@

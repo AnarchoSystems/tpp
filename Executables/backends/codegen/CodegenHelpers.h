@@ -326,6 +326,13 @@ struct ConvertConfig
     /// Generate alignment spec setup lines (language-specific syntax).
     std::function<nlohmann::json(int scopeId, int numCols, const std::string &alignSpec)>
         makeSpecSetupLines = [](int, int, const std::string &) { return nlohmann::json::array(); };
+
+    /// Qualifier prefix for accessing named policy static members
+    /// (e.g. "TppPolicy." for Swift/Java, "TppPolicy::" for C++).
+    std::string policyQualifier = "TppPolicy.";
+
+    /// The expression used for the "pure" (identity/no-op) policy object.
+    std::string purePolicy = "TppPolicy.pure";
 };
 
 /// Build the condition expression string for an IfInstr.
@@ -571,9 +578,9 @@ inline nlohmann::json convertInstruction(
             {
                 if (!argsStr.empty()) argsStr += ", ";
                 if (!activePolicy.empty() && activePolicy != "none")
-                    argsStr += stringLiteral(activePolicy);
+                    argsStr += cfg.policyQualifier + sanitizeIdentifier(activePolicy);
                 else if (activePolicy == "none")
-                    argsStr += "\"\"";
+                    argsStr += cfg.purePolicy;
                 else
                     argsStr += "_policy";
             }
@@ -660,9 +667,9 @@ inline nlohmann::json convertInstruction(
             {
                 std::string pol = arg->policy.empty() ? activePolicy : arg->policy;
                 if (!pol.empty() && pol != "none")
-                    rvia["policyArg"] = stringLiteral(pol);
+                    rvia["policyArg"] = cfg.policyQualifier + sanitizeIdentifier(pol);
                 else if (pol == "none")
-                    rvia["policyArg"] = "\"\"";
+                    rvia["policyArg"] = cfg.purePolicy;
                 else
                     rvia["policyArg"] = "_policy";
             }

@@ -260,6 +260,7 @@ int main(int argc, char *argv[])
         }
     }
     defs.callArgs = callArgs;
+    defs.hasPolicies = !ir.policies.all().empty();
 
     std::cout << render_test(defs);
     return EXIT_SUCCESS;

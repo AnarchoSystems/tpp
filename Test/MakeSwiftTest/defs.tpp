@@ -7,7 +7,11 @@ let expected = @defs.expectedOutputLiteral@
 @for p in defs.params@
 @p.parseLine@
 @end for@
+@if defs.hasPolicies@
+let actual = try render_main(@defs.callArgs@)
+@else@
 let actual = render_main(@defs.callArgs@)
+@end if@
 
 if expected != actual {
     fputs("EXPECTED:\n", stderr)

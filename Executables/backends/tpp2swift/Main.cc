@@ -147,6 +147,8 @@ static nlohmann::json buildFunctionsContext(
     cfg.nullLiteral = "nil";
     cfg.functionPrefix = functionPrefix;
     cfg.callNeedsTry = hasPol;  // Only need try when functions throw (policies present)
+    cfg.policyQualifier = ".";   // Swift shorthand — type inferred in call-arg position
+    cfg.purePolicy = ".pure";
     cfg.transformPath = [&fieldMeta](const std::string &p, const tpp::TypeRef &t) {
         return swiftExprPath(p, t, fieldMeta);
     };
@@ -188,9 +190,9 @@ static nlohmann::json buildFunctionsContext(
         if (hasPol)
         {
             if (!paramsStrWithPolicy.empty()) paramsStrWithPolicy += ", ";
-            paramsStrWithPolicy += "_ _policy: String";
+            paramsStrWithPolicy += "_ _policy: TppPolicy";
             if (!argsPassStr.empty()) argsPassStr += ", ";
-            argsPassStr += "\"\"";
+            argsPassStr += ".pure";
         }
 
         int scope = 0;
@@ -207,15 +209,9 @@ static nlohmann::json buildFunctionsContext(
         });
     }
 
-    bool needsDispatch = false;
-    if (hasPol)
-        for (const auto &f : functions)
-            if (codegen::bodyHasRuntimePolicy(f["body"])) { needsDispatch = true; break; }
-
     nlohmann::json result = {
         {"functions", functions},
         {"hasPolicies", hasPol},
-        {"needsApplyDispatch", needsDispatch},
         {"policies", hasPol ? codegen::buildPolicyContext(ir, "nil") : nlohmann::json::array()},
         {"functionPrefix", functionPrefix},
         {"staticModifier", namespaceName.empty() ? "" : "static "}

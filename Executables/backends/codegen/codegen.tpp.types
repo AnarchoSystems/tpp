@@ -209,7 +209,6 @@ struct RenderFunctionsInput
 {
     functions : list<RenderFunctionDef>;
     hasPolicies : bool;
-    needsApplyDispatch : bool;
     policies : list<PolicyInfo>;
     functionPrefix : string;
     namespaceName : optional<string>;
