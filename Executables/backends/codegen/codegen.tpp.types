@@ -193,6 +193,71 @@ struct PolicyInfo
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Codegen input types — shared type-generation data across all backends
+// ═══════════════════════════════════════════════════════════════════════════════
+
+struct FieldInfo
+{
+    name : string;
+    type : TypeKind;
+    recursive : bool;
+    isOptional : bool;
+    recursiveOptional : bool;
+    innerType : TypeKind;
+    doc : optional<string>;
+}
+
+struct StructInfo
+{
+    name : string;
+    fields : list<FieldInfo>;
+    doc : optional<string>;
+}
+
+struct VariantInfo
+{
+    tag : string;
+    payload : optional<TypeKind>;
+    recursive : bool;
+    index : int;
+    doc : optional<string>;
+}
+
+struct EnumInfo
+{
+    name : string;
+    variants : list<VariantInfo>;
+    hasRecursiveVariants : bool;
+    doc : optional<string>;
+}
+
+struct ParamInfo
+{
+    name : string;
+    type : TypeKind;
+}
+
+struct FunctionInfo
+{
+    name : string;
+    params : list<ParamInfo>;
+    doc : optional<string>;
+}
+
+struct CodegenInput
+{
+    structs : list<StructInfo>;
+    enums : list<EnumInfo>;
+    functions : list<FunctionInfo>;
+    hasRecursiveTypes : bool;
+    rawTypedefs : string;
+    iRepJson : string;
+    functionPrefix : string;
+    includes : list<string>;
+    namespaceName : optional<string>;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Function rendering context (shared across all backends)
 // ═══════════════════════════════════════════════════════════════════════════════
 

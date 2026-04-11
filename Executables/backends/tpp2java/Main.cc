@@ -16,62 +16,10 @@
 #include <sstream>
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Build JavaCodegenInput context from IR
+// Build CodegenInput context from IR (delegates to shared builder)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-static nlohmann::json buildCodegenInput(const tpp::IR &ir)
-{
-    nlohmann::json structs = nlohmann::json::array();
-    for (const auto &s : ir.types.structs)
-    {
-        nlohmann::json fields = nlohmann::json::array();
-        for (const auto &f : s.fields)
-        {
-            fields.push_back({
-                {"name", f.name},
-                {"type", codegen::typeRefToContext(f.type)},
-                {"recursive", f.recursive}
-            });
-        }
-        structs.push_back({{"name", s.name}, {"fields", fields}});
-    }
-
-    nlohmann::json enums = nlohmann::json::array();
-    for (const auto &e : ir.types.enums)
-    {
-        nlohmann::json variants = nlohmann::json::array();
-        bool hasRecursive = false;
-        for (const auto &v : e.variants)
-        {
-            nlohmann::json variant = {{"tag", v.tag}, {"recursive", v.recursive}};
-            if (v.payload.has_value())
-                variant["payload"] = codegen::typeRefToContext(*v.payload);
-            variants.push_back(variant);
-            if (v.recursive) hasRecursive = true;
-        }
-        enums.push_back({
-            {"name", e.name},
-            {"variants", variants},
-            {"hasRecursiveVariants", hasRecursive}
-        });
-    }
-
-    nlohmann::json functions = nlohmann::json::array();
-    for (const auto &fn : ir.functions)
-    {
-        nlohmann::json params = nlohmann::json::array();
-        for (const auto &p : fn.params)
-        {
-            params.push_back({
-                {"name", p.name},
-                {"type", codegen::typeRefToContext(p.type)}
-            });
-        }
-        functions.push_back({{"name", fn.name}, {"params", params}});
-    }
-
-    return {{"structs", structs}, {"enums", enums}, {"functions", functions}};
-}
+// Uses codegen::buildCodegenInput() from CodegenHelpers.h
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Build RenderFunctionsInput context from instruction IR
@@ -260,7 +208,7 @@ int main(int argc, char *argv[])
     std::string functionPrefix = namespaceName.empty() ? "render_" : "";
 
     // Build codegen context
-    nlohmann::json ctx = buildCodegenInput(ir);
+    nlohmann::json ctx = codegen::buildCodegenInput(ir);
 
     // Compile embedded templates
     tpp::Compiler compiler;

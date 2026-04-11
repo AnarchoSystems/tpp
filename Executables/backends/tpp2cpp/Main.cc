@@ -381,81 +381,11 @@ nlohmann::json to_render_cpp_type_input(const tpp::IR &iRep,
                                         const std::vector<std::string> &includes,
                                         const std::string &namespaceName)
 {
-    nlohmann::json result;
+    nlohmann::json result = codegen::buildCodegenInput(iRep);
     result["includes"] = includes;
     if (!namespaceName.empty())
         result["namespaceName"] = namespaceName;
-    nlohmann::json typesJson = nlohmann::json::array();
-
-    // Emit enums first (often used as field types in structs)
-    for (const auto &e : iRep.types.enums)
-    {
-        nlohmann::json enumJson;
-        enumJson["name"] = e.name;
-        if (!e.doc.empty()) enumJson["doc"] = e.doc;
-        nlohmann::json variants = nlohmann::json::array();
-        int variantIndex = 0;
-        for (const auto &v : e.variants)
-        {
-            nlohmann::json variantJson;
-            variantJson["tag"] = v.tag;
-            variantJson["index"] = variantIndex++;
-            variantJson["isRecursivePayload"] = v.recursive && v.payload.has_value();
-            if (v.payload.has_value())
-                variantJson["payloadType"] = typeRefToCppString(*v.payload);
-            if (!v.doc.empty()) variantJson["doc"] = v.doc;
-            variants.push_back(variantJson);
-        }
-        enumJson["variants"] = variants;
-        enumJson["definition"] = toCppStringLiteral(iRep.raw_typedefs);
-        typesJson.push_back({{"Enum", enumJson}});
-    }
-
-    for (const auto &s : iRep.types.structs)
-    {
-        nlohmann::json structJson;
-        structJson["name"] = s.name;
-        if (!s.doc.empty()) structJson["doc"] = s.doc;
-        nlohmann::json fields = nlohmann::json::array();
-        for (const auto &f : s.fields)
-        {
-            nlohmann::json field;
-            bool isOpt = std::holds_alternative<std::shared_ptr<tpp::OptionalType>>(f.type);
-            field["name"] = f.name;
-            field["isOptional"] = isOpt;
-            if (!f.doc.empty()) field["doc"] = f.doc;
-            if (f.recursive)
-            {
-                std::string innerT;
-                if (isOpt)
-                {
-                    auto *ot = std::get_if<std::shared_ptr<tpp::OptionalType>>(&f.type);
-                    innerT = typeRefToCppString((*ot)->innerType);
-                }
-                else
-                {
-                    innerT = typeRefToCppString(f.type);
-                }
-                field["type"] = "std::unique_ptr<" + innerT + ">";
-                field["recursiveInnerType"] = innerT;
-            }
-            else
-            {
-                field["type"] = typeRefToCppString(f.type);
-                if (isOpt)
-                {
-                    auto *ot = std::get_if<std::shared_ptr<tpp::OptionalType>>(&f.type);
-                    field["innerType"] = typeRefToCppString((*ot)->innerType);
-                }
-            }
-            fields.push_back(field);
-        }
-        structJson["fields"] = fields;
-        structJson["definition"] = toCppStringLiteral(iRep.raw_typedefs);
-        typesJson.push_back({{"Struct", structJson}});
-    }
-
-    result["types"] = typesJson;
+    result["rawTypedefs"] = toCppStringLiteral(iRep.raw_typedefs);
     return result;
 }
 
@@ -463,30 +393,12 @@ static nlohmann::json buildFunctionsInput(const tpp::IR &iRep,
                                           const std::vector<std::string> &includes,
                                           const std::string &namespaceName)
 {
-    nlohmann::json result;
+    nlohmann::json result = codegen::buildCodegenInput(iRep);
     result["includes"] = includes;
     if (!namespaceName.empty())
         result["namespaceName"] = namespaceName;
     result["iRepJson"] = toCppStringLiteral(nlohmann::json(iRep).dump());
     result["functionPrefix"] = "";
-    nlohmann::json functions = nlohmann::json::array();
-    for (const auto &f : iRep.functions)
-    {
-        nlohmann::json func;
-        func["name"] = f.name;
-        if (!f.doc.empty()) func["doc"] = f.doc;
-        nlohmann::json params = nlohmann::json::array();
-        for (const auto &p : f.params)
-        {
-            nlohmann::json param;
-            param["name"] = p.name;
-            param["type"] = typeRefToCppString(p.type);
-            params.push_back(param);
-        }
-        func["params"] = params;
-        functions.push_back(func);
-    }
-    result["functions"] = functions;
     return result;
 }
 

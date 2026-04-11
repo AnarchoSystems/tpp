@@ -692,6 +692,107 @@ inline std::string sanitizeIdentifier(const std::string &tag)
     return id;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Build CodegenInput — shared across all backends
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Build the shared CodegenInput JSON from the IR.
+/// Populates structs, enums, functions, and hasRecursiveTypes.
+/// Backend-specific fields (rawTypedefs, iRepJson, functionPrefix, includes,
+/// namespaceName) are set to defaults and should be overridden by callers.
+inline nlohmann::json buildCodegenInput(const tpp::IR &ir)
+{
+    // ── Structs ──
+    nlohmann::json structs = nlohmann::json::array();
+    bool hasRecursiveTypes = false;
+    for (const auto &s : ir.types.structs)
+    {
+        nlohmann::json fields = nlohmann::json::array();
+        for (const auto &f : s.fields)
+        {
+            bool isOpt = std::holds_alternative<std::shared_ptr<tpp::OptionalType>>(f.type);
+            nlohmann::json innerTypeCtx = typeRefToContext(f.type);
+            if (isOpt)
+            {
+                auto &opt = std::get<std::shared_ptr<tpp::OptionalType>>(f.type);
+                innerTypeCtx = typeRefToContext(opt->innerType);
+            }
+
+            nlohmann::json field = {
+                {"name", f.name},
+                {"type", typeRefToContext(f.type)},
+                {"recursive", f.recursive},
+                {"isOptional", isOpt},
+                {"recursiveOptional", f.recursive && isOpt},
+                {"innerType", innerTypeCtx}
+            };
+            if (!f.doc.empty()) field["doc"] = f.doc;
+            fields.push_back(field);
+            if (f.recursive) hasRecursiveTypes = true;
+        }
+        nlohmann::json structInfo = {{"name", s.name}, {"fields", fields}};
+        if (!s.doc.empty()) structInfo["doc"] = s.doc;
+        structs.push_back(structInfo);
+    }
+
+    // ── Enums ──
+    nlohmann::json enums = nlohmann::json::array();
+    for (const auto &e : ir.types.enums)
+    {
+        nlohmann::json variants = nlohmann::json::array();
+        bool hasRecursive = false;
+        int variantIndex = 0;
+        for (const auto &v : e.variants)
+        {
+            nlohmann::json variant = {
+                {"tag", v.tag},
+                {"recursive", v.recursive},
+                {"index", variantIndex++}
+            };
+            if (v.payload.has_value())
+                variant["payload"] = typeRefToContext(*v.payload);
+            if (!v.doc.empty()) variant["doc"] = v.doc;
+            variants.push_back(variant);
+            if (v.recursive) hasRecursive = true;
+        }
+        nlohmann::json enumInfo = {
+            {"name", e.name},
+            {"variants", variants},
+            {"hasRecursiveVariants", hasRecursive}
+        };
+        if (!e.doc.empty()) enumInfo["doc"] = e.doc;
+        enums.push_back(enumInfo);
+    }
+
+    // ── Functions ──
+    nlohmann::json functions = nlohmann::json::array();
+    for (const auto &fn : ir.functions)
+    {
+        nlohmann::json params = nlohmann::json::array();
+        for (const auto &p : fn.params)
+        {
+            params.push_back({
+                {"name", p.name},
+                {"type", typeRefToContext(p.type)}
+            });
+        }
+        nlohmann::json funcInfo = {{"name", fn.name}, {"params", params}};
+        if (!fn.doc.empty()) funcInfo["doc"] = fn.doc;
+        functions.push_back(funcInfo);
+    }
+
+    return {
+        {"structs", structs},
+        {"enums", enums},
+        {"functions", functions},
+        {"hasRecursiveTypes", hasRecursiveTypes},
+        {"rawTypedefs", ""},
+        {"iRepJson", ""},
+        {"functionPrefix", ""},
+        {"includes", nlohmann::json::array()}
+    };
+}
+
 /// Build the policy context JSON array.
 inline nlohmann::json buildPolicyContext(const tpp::IR &ir, const std::string &nullLiteral)
 {
