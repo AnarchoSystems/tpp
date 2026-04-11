@@ -3,7 +3,6 @@
         "defs.tpp"
     ],
     "types": [
-        "../codegen/codegen.tpp.types",
-        "defs.tpp.types"
+        "../codegen/codegen.tpp.types"
     ]
 }

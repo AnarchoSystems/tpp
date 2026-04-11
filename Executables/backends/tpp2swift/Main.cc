@@ -25,52 +25,6 @@
 // Build RenderFunctionsInput context from instruction IR
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// ── Type name helpers (for function parameter signatures) ────────────────────
-
-static std::string swiftType(const tpp::TypeRef &t)
-{
-    if (std::holds_alternative<tpp::StringType>(t)) return "String";
-    if (std::holds_alternative<tpp::IntType>(t))    return "Int";
-    if (std::holds_alternative<tpp::BoolType>(t))   return "Bool";
-    if (auto *n = std::get_if<tpp::NamedType>(&t))  return n->name;
-    if (auto *l = std::get_if<std::shared_ptr<tpp::ListType>>(&t))
-        return "[" + swiftType((*l)->elementType) + "]";
-    if (auto *o = std::get_if<std::shared_ptr<tpp::OptionalType>>(&t))
-        return swiftType((*o)->innerType) + "?";
-    return "Any";
-}
-
-// ── Field metadata for recursive/optional field path adjustments ─────────────
-
-struct FieldMeta { bool recursive; bool optional; };
-
-static std::map<std::string, FieldMeta> buildFieldMeta(const tpp::IR &ir)
-{
-    std::map<std::string, FieldMeta> result;
-    for (const auto &s : ir.types.structs)
-        for (const auto &f : s.fields)
-            result[f.name] = {
-                f.recursive,
-                std::holds_alternative<std::shared_ptr<tpp::OptionalType>>(f.type)
-            };
-    return result;
-}
-
-static std::string swiftExprPath(
-    const std::string &path,
-    const tpp::TypeRef &resolvedType,
-    const std::map<std::string, FieldMeta> &fieldMeta)
-{
-    auto dot = path.rfind('.');
-    if (dot == std::string::npos) return path;
-    std::string fieldName = path.substr(dot + 1);
-    auto it = fieldMeta.find(fieldName);
-    if (it == fieldMeta.end() || !it->second.recursive) return path;
-    if (it->second.optional)
-        return path + "!.value";
-    return path + ".value";
-}
-
 // ── Build the complete RenderFunctionsInput context ──────────────────────────
 
 static nlohmann::json buildFunctionsContext(
@@ -78,58 +32,21 @@ static nlohmann::json buildFunctionsContext(
     const std::string &namespaceName)
 {
     bool hasPol = !ir.policies.all().empty();
-    auto fieldMeta = buildFieldMeta(ir);
 
     codegen::ConvertConfig cfg;
-    cfg.nullLiteral = "nil";
     cfg.functionPrefix = functionPrefix;
     cfg.callNeedsTry = hasPol;  // Only need try when functions throw (policies present)
-    cfg.policyQualifier = ".";   // Swift shorthand — type inferred in call-arg position
-    cfg.purePolicy = ".pure";
-    cfg.transformPath = [&fieldMeta](const std::string &p, const tpp::TypeRef &t) {
-        return swiftExprPath(p, t, fieldMeta);
-    };
-    cfg.makeSpecSetupLines = [](int s, int numCols, const std::string &spec) {
-        nlohmann::json lines = nlohmann::json::array();
-        if (spec.empty()) return lines;
-        if (spec.size() == 1)
-        {
-            lines.push_back(
-                "_spec" + std::to_string(s)
-                + " = [Character](repeating: \""
-                + std::string(1, spec[0])
-                + "\", count: " + std::to_string(numCols) + ")");
-        }
-        else
-        {
-            for (size_t ci = 0; ci < spec.size() && ci < (size_t)numCols; ++ci)
-                lines.push_back(
-                    "_spec" + std::to_string(s) + "["
-                    + std::to_string(ci) + "] = \""
-                    + std::string(1, spec[ci]) + "\"");
-        }
-        return lines;
-    };
 
     nlohmann::json functions = nlohmann::json::array();
     for (const auto &fn : ir.instructionFunctions)
     {
-        std::string paramsStr;
-        std::string argsPassStr;
+        nlohmann::json params = nlohmann::json::array();
         for (size_t i = 0; i < fn.params.size(); ++i)
         {
-            if (i > 0) { paramsStr += ", "; argsPassStr += ", "; }
-            paramsStr += "_ " + fn.params[i].name + ": " + swiftType(fn.params[i].type);
-            argsPassStr += fn.params[i].name;
-        }
-
-        std::string paramsStrWithPolicy = paramsStr;
-        if (hasPol)
-        {
-            if (!paramsStrWithPolicy.empty()) paramsStrWithPolicy += ", ";
-            paramsStrWithPolicy += "_ _policy: TppPolicy";
-            if (!argsPassStr.empty()) argsPassStr += ", ";
-            argsPassStr += ".pure";
+            params.push_back({
+                {"name", fn.params[i].name},
+                {"type", codegen::typeRefToContext(fn.params[i].type)}
+            });
         }
 
         int scope = 0;
@@ -139,9 +56,7 @@ static nlohmann::json buildFunctionsContext(
 
         functions.push_back({
             {"name", fn.name},
-            {"paramsStr", paramsStr},
-            {"paramsStrWithPolicy", paramsStrWithPolicy},
-            {"argsPassStr", argsPassStr},
+            {"params", params},
             {"body", body}
         });
     }

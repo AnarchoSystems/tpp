@@ -20,6 +20,8 @@ struct ExprInfo
 {
     path : string;
     type : TypeKind;
+    isRecursive : bool;
+    isOptional : bool;
 }
 
 struct EmitData
@@ -65,7 +67,8 @@ struct ForData
     alignSpec : string;
     cells : list<AlignCellInfo>;
     numCols : int;
-    specSetupLines : list<string>;
+    alignSpecChars : list<string>;
+    singleAlignChar : bool;
 }
 
 struct CaseData
@@ -84,7 +87,9 @@ struct CaseData
 
 struct IfData
 {
-    condExprStr : string;
+    condPath : string;
+    condIsBool : bool;
+    isNegated : bool;
     thenBody : list<Instruction>;
     elseBody : list<Instruction>;
     hasElse : bool;
@@ -105,10 +110,25 @@ struct SwitchData
     sb : string;
 }
 
+struct CallArgInfo
+{
+    path : string;
+    isRecursive : bool;
+    isOptional : bool;
+}
+
+enum PolicyRef
+{
+    Named(string),
+    Pure,
+    Runtime
+}
+
 struct CallData
 {
     functionName : string;
-    argsStr : string;
+    args : list<CallArgInfo>;
+    policyArg : optional<PolicyRef>;
     sb : string;
     needsTry : bool;
 }
@@ -136,7 +156,7 @@ struct RenderViaData
     sb : string;
     isSingleOverload : bool;
     overloads : list<RenderViaOverload>;
-    policyArg : optional<string>;
+    policyArg : optional<PolicyRef>;
     needsTry : bool;
 }
 
@@ -264,9 +284,7 @@ struct CodegenInput
 struct RenderFunctionDef
 {
     name : string;
-    paramsStr : string;
-    paramsStrWithPolicy : string;
-    argsPassStr : string;
+    params : list<ParamInfo>;
     body : list<Instruction>;
 }
 

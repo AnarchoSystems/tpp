@@ -262,7 +262,19 @@ _tppAppendValue(@e.sb@, @cpp_expr_to_str(e.expr)@);
 END
 
 template emit_call(c: CallData)
-@c.sb@ += @c.functionName@(@c.argsStr@);
+@if c.policyArg@
+@c.sb@ += @c.functionName@(@for arg in c.args | sep=", " followedBy=", "@@cpp_call_arg(arg)@@end for@@cpp_policy_ref(c.policyArg)@);
+@else@
+@c.sb@ += @c.functionName@(@for arg in c.args | sep=", "@@cpp_call_arg(arg)@@end for@);
+@end if@
+END
+
+template cpp_call_arg(arg: CallArgInfo)
+@if arg.isRecursive@*@arg.path@@else@@if arg.isOptional@*@arg.path@@else@@arg.path@@end if@@end if@
+END
+
+template cpp_policy_ref(ref: PolicyRef)
+@switch ref@@case Named(tag)@TppPolicy::@tag@@end case@@case Pure@TppPolicy::pure@end case@@case Runtime@_policy@end case@@end switch@
 END
 
 // ── Recursive instruction dispatcher (block-style switch — avoids bug) ───────
@@ -410,9 +422,15 @@ for (size_t _i@f.scopeId@ = 0; _i@f.scopeId@ < @f.collPath@.size(); _i@f.scopeId
 std::vector<int> _cw@f.scopeId@(@f.numCols@, 0);
 for (auto& _r : _rows@f.scopeId@) for (int _c = 0; _c < (int)_r.size(); _c++) _cw@f.scopeId@[_c] = std::max(_cw@f.scopeId@[_c], (int)_r[_c].size());
 std::vector<char> _spec@f.scopeId@(@f.numCols@, 'l');
-@for line in f.specSetupLines@
-@line@
+@if f.singleAlignChar@
+@for ch in f.alignSpecChars@
+std::fill(_spec@f.scopeId@.begin(), _spec@f.scopeId@.end(), '@ch@');
 @end for@
+@else@
+@for ch in f.alignSpecChars | enumerator=ci@
+_spec@f.scopeId@[@ci@] = '@ch@';
+@end for@
+@end if@
 for (size_t _i@f.scopeId@ = 0; _i@f.scopeId@ < _rows@f.scopeId@.size(); _i@f.scopeId@++) {
     auto& _r = _rows@f.scopeId@[_i@f.scopeId@];
     std::string _line@f.scopeId@;
@@ -453,7 +471,11 @@ template emit_if(i: IfData)
 END
 
 template emit_if_inline(i: IfData)
-if (@i.condExprStr@) {
+@if i.isNegated@
+if (!@i.condPath@) {
+@else@
+if (@i.condPath@) {
+@end if@
     @for instr in i.thenBody@
     @emit_instr(instr)@
     @end for@
@@ -467,7 +489,11 @@ if (@i.condExprStr@) {
 END
 
 template emit_if_block(i: IfData)
-if (@i.condExprStr@) {
+@if i.isNegated@
+if (!@i.condPath@) {
+@else@
+if (@i.condPath@) {
+@end if@
     std::string _blk@i.thenScopeId@;
     @for instr in i.thenBody@
     @emit_instr(instr)@
@@ -526,7 +552,11 @@ std::visit([&](const auto& _sv) {
 @for ovl in r.overloads@
 @if ovl.payloadType@
     if constexpr (std::is_same_v<std::decay_t<decltype(_sv)>, @cpp_type(ovl.payloadType)@>) {
-        _res@r.scopeId@ = @r.functionName@(_sv@if r.policyArg@, @r.policyArg@@end if@);
+@if r.policyArg@
+        _res@r.scopeId@ = @r.functionName@(_sv, @cpp_policy_ref(r.policyArg)@);
+@else@
+        _res@r.scopeId@ = @r.functionName@(_sv);
+@end if@
     }
 @end if@
 @end for@
@@ -537,7 +567,11 @@ template emit_render_via(r: RenderViaData)
 for (size_t _i@r.scopeId@ = 0; _i@r.scopeId@ < @r.collPath@.size(); _i@r.scopeId@++) {
     const auto& _item@r.scopeId@ = @r.collPath@[_i@r.scopeId@];
     @if r.isSingleOverload@
-    std::string _res@r.scopeId@ = @r.functionName@(_item@r.scopeId@@if r.policyArg@, @r.policyArg@@end if@);
+@if r.policyArg@
+    std::string _res@r.scopeId@ = @r.functionName@(_item@r.scopeId@, @cpp_policy_ref(r.policyArg)@);
+@else@
+    std::string _res@r.scopeId@ = @r.functionName@(_item@r.scopeId@);
+@end if@
     @else@
     @emit_render_via_dispatch(r)@
     @end if@
@@ -752,18 +786,18 @@ namespace @ctx.namespaceName@ {
 @end if@
 @for fn in ctx.functions@
 @if ctx.hasPolicies@
-@ctx.staticModifier@std::string @ctx.functionPrefix@@fn.name@(@fn.paramsStrWithPolicy@);
-@ctx.staticModifier@std::string @ctx.functionPrefix@@fn.name@(@fn.paramsStr@);
+@ctx.staticModifier@std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", " followedBy=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@const TppPolicy& _policy);
+@ctx.staticModifier@std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@);
 @else@
-@ctx.staticModifier@std::string @ctx.functionPrefix@@fn.name@(@fn.paramsStr@);
+@ctx.staticModifier@std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@);
 @end if@
 @end for@
 @for fn in ctx.functions@
 
 @if ctx.hasPolicies@
-@ctx.staticModifier@std::string @ctx.functionPrefix@@fn.name@(@fn.paramsStrWithPolicy@) {
+@ctx.staticModifier@std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", " followedBy=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@const TppPolicy& _policy) {
 @else@
-@ctx.staticModifier@std::string @ctx.functionPrefix@@fn.name@(@fn.paramsStr@) {
+@ctx.staticModifier@std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@) {
 @end if@
     std::string _sb;
     @for instr in fn.body@
@@ -775,8 +809,8 @@ namespace @ctx.namespaceName@ {
 }
 @if ctx.hasPolicies@
 
-@ctx.staticModifier@std::string @ctx.functionPrefix@@fn.name@(@fn.paramsStr@) {
-    return @ctx.functionPrefix@@fn.name@(@fn.argsPassStr@);
+@ctx.staticModifier@std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@) {
+    return @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", " followedBy=", "@@param.name@@end for@TppPolicy::pure);
 }
 @end if@
 @end for@

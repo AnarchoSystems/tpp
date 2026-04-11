@@ -278,7 +278,15 @@ _tppAppendValue(@e.sb@, @java_expr_to_str(e.expr)@);
 END
 
 template emit_call(c: CallData)
-@c.sb@.append(@c.functionName@(@c.argsStr@));
+@if c.policyArg@
+@c.sb@.append(@c.functionName@(@for arg in c.args | sep=", " followedBy=", "@@arg.path@@end for@@java_policy_ref(c.policyArg)@));
+@else@
+@c.sb@.append(@c.functionName@(@for arg in c.args | sep=", "@@arg.path@@end for@));
+@end if@
+END
+
+template java_policy_ref(ref: PolicyRef)
+@switch ref@@case Named(tag)@TppPolicy.@tag@@end case@@case Pure@TppPolicy.pure@end case@@case Runtime@_policy@end case@@end switch@
 END
 
 // ── Recursive instruction dispatcher (block-style switch — avoids bug) ───────
@@ -424,9 +432,15 @@ int[] _cw@f.scopeId@ = new int[@f.numCols@];
 for (String[] _r : _rows@f.scopeId@) for (int _c = 0; _c < _r.length; _c++) _cw@f.scopeId@[_c] = Math.max(_cw@f.scopeId@[_c], _r[_c].length());
 char[] _spec@f.scopeId@ = new char[@f.numCols@];
 java.util.Arrays.fill(_spec@f.scopeId@, 'l');
-@for line in f.specSetupLines@
-@line@
+@if f.singleAlignChar@
+@for ch in f.alignSpecChars@
+java.util.Arrays.fill(_spec@f.scopeId@, '@ch@');
 @end for@
+@else@
+@for ch in f.alignSpecChars | enumerator=ci@
+_spec@f.scopeId@[@ci@] = '@ch@';
+@end for@
+@end if@
 for (int _i@f.scopeId@ = 0; _i@f.scopeId@ < _rows@f.scopeId@.size(); _i@f.scopeId@++) {
     String[] _r = _rows@f.scopeId@.get(_i@f.scopeId@);
     StringBuilder _line@f.scopeId@ = new StringBuilder();
@@ -467,7 +481,19 @@ template emit_if(i: IfData)
 END
 
 template emit_if_inline(i: IfData)
-if (@i.condExprStr@) {
+@if i.condIsBool@
+@if i.isNegated@
+if (!@i.condPath@) {
+@else@
+if (@i.condPath@) {
+@end if@
+@else@
+@if i.isNegated@
+if (@i.condPath@ == null) {
+@else@
+if (@i.condPath@ != null) {
+@end if@
+@end if@
     @for instr in i.thenBody@
     @emit_instr(instr)@
     @end for@
@@ -481,7 +507,19 @@ if (@i.condExprStr@) {
 END
 
 template emit_if_block(i: IfData)
-if (@i.condExprStr@) {
+@if i.condIsBool@
+@if i.isNegated@
+if (!@i.condPath@) {
+@else@
+if (@i.condPath@) {
+@end if@
+@else@
+@if i.isNegated@
+if (@i.condPath@ == null) {
+@else@
+if (@i.condPath@ != null) {
+@end if@
+@end if@
     StringBuilder _blk@i.thenScopeId@ = new StringBuilder();
     @for instr in i.thenBody@
     @emit_instr(instr)@
@@ -535,11 +573,21 @@ template emit_render_via_dispatch(r: RenderViaData)
 String _res@r.scopeId@ = "";
 @for ovl in r.overloads@
 @if ovl.isFirst@
+@if r.policyArg@
 if (_item@r.scopeId@._tag.equals(@ovl.tagLit@)) {
-    _res@r.scopeId@ = @r.functionName@(_item@r.scopeId@.get@ovl.tag@()@if r.policyArg@, @r.policyArg@@end if@);
+    _res@r.scopeId@ = @r.functionName@(_item@r.scopeId@.get@ovl.tag@(), @java_policy_ref(r.policyArg)@);
+@else@
+if (_item@r.scopeId@._tag.equals(@ovl.tagLit@)) {
+    _res@r.scopeId@ = @r.functionName@(_item@r.scopeId@.get@ovl.tag@());
+@end if@
+@else@
+@if r.policyArg@
+} else if (_item@r.scopeId@._tag.equals(@ovl.tagLit@)) {
+    _res@r.scopeId@ = @r.functionName@(_item@r.scopeId@.get@ovl.tag@(), @java_policy_ref(r.policyArg)@);
 @else@
 } else if (_item@r.scopeId@._tag.equals(@ovl.tagLit@)) {
-    _res@r.scopeId@ = @r.functionName@(_item@r.scopeId@.get@ovl.tag@()@if r.policyArg@, @r.policyArg@@end if@);
+    _res@r.scopeId@ = @r.functionName@(_item@r.scopeId@.get@ovl.tag@());
+@end if@
 @end if@
 @end for@
 }
@@ -549,7 +597,11 @@ template emit_render_via(r: RenderViaData)
 for (int _i@r.scopeId@ = 0; _i@r.scopeId@ < @r.collPath@.size(); _i@r.scopeId@++) {
     @java_type(r.elemType)@ _item@r.scopeId@ = @r.collPath@.get(_i@r.scopeId@);
     @if r.isSingleOverload@
-    String _res@r.scopeId@ = @r.functionName@(_item@r.scopeId@@if r.policyArg@, @r.policyArg@@end if@);
+@if r.policyArg@
+    String _res@r.scopeId@ = @r.functionName@(_item@r.scopeId@, @java_policy_ref(r.policyArg)@);
+@else@
+    String _res@r.scopeId@ = @r.functionName@(_item@r.scopeId@);
+@end if@
     @else@
     @emit_render_via_dispatch(r)@
     @end if@
@@ -718,11 +770,11 @@ class @if ctx.namespaceName@@ctx.namespaceName@@else@Functions@end if@@if ctx.ex
 @for fn in ctx.functions@
 
 @if ctx.hasPolicies@
-    static String @ctx.functionPrefix@@fn.name@(@fn.paramsStr@) throws Exception { return @ctx.functionPrefix@@fn.name@(@fn.argsPassStr@); }
+    static String @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@@java_type(param.type)@ @param.name@@end for@) throws Exception { return @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", " followedBy=", "@@param.name@@end for@TppPolicy.pure); }
 
-    private static String @ctx.functionPrefix@@fn.name@(@fn.paramsStrWithPolicy@) throws Exception {
+    private static String @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", " followedBy=", "@@java_type(param.type)@ @param.name@@end for@TppPolicy _policy) throws Exception {
 @else@
-    static String @ctx.functionPrefix@@fn.name@(@fn.paramsStr@) {
+    static String @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@@java_type(param.type)@ @param.name@@end for@) {
 @end if@
         StringBuilder _sb = new StringBuilder();
         @for instr in fn.body@

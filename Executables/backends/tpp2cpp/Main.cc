@@ -349,20 +349,6 @@ void tpp2cpp::run()
     std::cout << renderedOutput << std::endl;
 }
 
-static std::string typeRefToCppString(const tpp::TypeRef &t)
-{
-    if (std::holds_alternative<tpp::StringType>(t)) return "std::string";
-    if (std::holds_alternative<tpp::IntType>(t)) return "int";
-    if (std::holds_alternative<tpp::BoolType>(t)) return "bool";
-    if (auto *lt = std::get_if<std::shared_ptr<tpp::ListType>>(&t))
-        return "std::vector<" + typeRefToCppString((*lt)->elementType) + ">";
-    if (auto *ot = std::get_if<std::shared_ptr<tpp::OptionalType>>(&t))
-        return "std::optional<" + typeRefToCppString((*ot)->innerType) + ">";
-    if (auto *nt = std::get_if<tpp::NamedType>(&t))
-        return nt->name;
-    return "";
-}
-
 static std::string toCppStringLiteral(const std::string &s)
 {
     std::string result = "\"";
@@ -420,72 +406,20 @@ static nlohmann::json buildFunctionsContext(
 {
     bool hasPol = !ir.policies.all().empty();
 
-    // Build field metadata for recursive/optional path adjustments
-    struct FieldMeta { bool recursive; bool optional; };
-    std::map<std::string, FieldMeta> fieldMeta;
-    for (const auto &s : ir.types.structs)
-        for (const auto &f : s.fields)
-            fieldMeta[f.name] = {
-                f.recursive,
-                std::holds_alternative<std::shared_ptr<tpp::OptionalType>>(f.type)
-            };
-
     codegen::ConvertConfig cfg;
-    cfg.nullLiteral = "";  // Use truthiness checks (works for both optional and unique_ptr)
     cfg.functionPrefix = functionPrefix;
     cfg.callNeedsTry = false;
-    cfg.policyQualifier = "TppPolicy::";
-    cfg.purePolicy = "TppPolicy::pure";
-    cfg.transformCallArg = [&fieldMeta](const std::string &p, const tpp::TypeRef &) -> std::string {
-        auto dot = p.rfind('.');
-        if (dot == std::string::npos) return p;
-        std::string fieldName = p.substr(dot + 1);
-        auto it = fieldMeta.find(fieldName);
-        if (it == fieldMeta.end()) return p;
-        if (it->second.recursive || it->second.optional)
-            return "*" + p;
-        return p;
-    };
-    cfg.makeSpecSetupLines = [](int s, int numCols, const std::string &spec) {
-        nlohmann::json lines = nlohmann::json::array();
-        if (spec.empty()) return lines;
-        if (spec.size() == 1)
-        {
-            lines.push_back(
-                "std::fill(_spec" + std::to_string(s)
-                + ".begin(), _spec" + std::to_string(s)
-                + ".end(), '" + std::string(1, spec[0]) + "');");
-        }
-        else
-        {
-            for (size_t ci = 0; ci < spec.size() && ci < (size_t)numCols; ++ci)
-                lines.push_back(
-                    "_spec" + std::to_string(s) + "["
-                    + std::to_string(ci) + "] = '"
-                    + std::string(1, spec[ci]) + "';");
-        }
-        return lines;
-    };
 
     nlohmann::json functions = nlohmann::json::array();
     for (const auto &fn : ir.instructionFunctions)
     {
-        std::string paramsStr;
-        std::string argsPassStr;
+        nlohmann::json params = nlohmann::json::array();
         for (size_t i = 0; i < fn.params.size(); ++i)
         {
-            if (i > 0) { paramsStr += ", "; argsPassStr += ", "; }
-            paramsStr += "typename tpp::ArgType<" + typeRefToCppString(fn.params[i].type) + ">::type " + fn.params[i].name;
-            argsPassStr += fn.params[i].name;
-        }
-
-        std::string paramsStrWithPolicy = paramsStr;
-        if (hasPol)
-        {
-            if (!paramsStrWithPolicy.empty()) paramsStrWithPolicy += ", ";
-            paramsStrWithPolicy += "const TppPolicy& _policy";
-            if (!argsPassStr.empty()) argsPassStr += ", ";
-            argsPassStr += "TppPolicy::pure";
+            params.push_back({
+                {"name", fn.params[i].name},
+                {"type", codegen::typeRefToContext(fn.params[i].type)}
+            });
         }
 
         int scope = 0;
@@ -495,9 +429,7 @@ static nlohmann::json buildFunctionsContext(
 
         functions.push_back({
             {"name", fn.name},
-            {"paramsStr", paramsStr},
-            {"paramsStrWithPolicy", paramsStrWithPolicy},
-            {"argsPassStr", argsPassStr},
+            {"params", params},
             {"body", body}
         });
     }

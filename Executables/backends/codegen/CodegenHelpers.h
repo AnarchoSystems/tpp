@@ -9,7 +9,6 @@
 #include <nlohmann/json.hpp>
 #include <filesystem>
 #include <fstream>
-#include <functional>
 #include <iostream>
 #include <algorithm>
 #include <sstream>
@@ -302,49 +301,38 @@ inline bool bodyHasRuntimePolicy(const nlohmann::json &body)
 /// Configuration for language-specific aspects of instruction conversion.
 struct ConvertConfig
 {
-    /// Null literal for the target language ("nil" for Swift, "null" for Java).
-    std::string nullLiteral = "null";
-
     /// Prefix for function names in generated code (e.g. "render_" or "").
     std::string functionPrefix = "render_";
 
     /// Whether policy-using call sites need `try` (Swift only).
     bool callNeedsTry = false;
-
-    /// Transform an expression path for language-specific needs
-    /// (e.g., Swift Box<T> unwrapping appends ".value").
-    /// Default: identity.
-    std::function<std::string(const std::string &path, const tpp::TypeRef &type)>
-        transformPath = [](const std::string &p, const tpp::TypeRef &) { return p; };
-
-    /// Transform a call argument path. Used for dereferencing optional/recursive
-    /// fields when passing them as function arguments (e.g., C++ *node.next).
-    /// Default: falls back to transformPath.
-    std::function<std::string(const std::string &path, const tpp::TypeRef &type)>
-        transformCallArg;
-
-    /// Generate alignment spec setup lines (language-specific syntax).
-    std::function<nlohmann::json(int scopeId, int numCols, const std::string &alignSpec)>
-        makeSpecSetupLines = [](int, int, const std::string &) { return nlohmann::json::array(); };
-
-    /// Qualifier prefix for accessing named policy static members
-    /// (e.g. "TppPolicy." for Swift/Java, "TppPolicy::" for C++).
-    std::string policyQualifier = "TppPolicy.";
-
-    /// The expression used for the "pure" (identity/no-op) policy object.
-    std::string purePolicy = "TppPolicy.pure";
 };
 
-/// Build the condition expression string for an IfInstr.
-inline std::string condExpr(const tpp::IfInstr &n, const std::string &nullLiteral)
+/// Look up whether a field (by last dot-segment of path) is recursive/optional.
+struct FieldLookup { bool recursive = false; bool optional = false; };
+inline FieldLookup lookupField(const std::string &path, const tpp::IR &ir)
 {
-    const auto &t = n.condExpr.resolvedType;
-    const std::string &p = n.condExpr.path;
-    if (std::holds_alternative<tpp::BoolType>(t))
-        return n.negated ? ("!" + p) : p;
-    if (nullLiteral.empty())
-        return n.negated ? ("!" + p) : p;
-    return n.negated ? (p + " == " + nullLiteral) : (p + " != " + nullLiteral);
+    auto dot = path.rfind('.');
+    if (dot == std::string::npos) return {};
+    std::string fieldName = path.substr(dot + 1);
+    for (const auto &s : ir.types.structs)
+        for (const auto &f : s.fields)
+            if (f.name == fieldName)
+                return {f.recursive,
+                        std::holds_alternative<std::shared_ptr<tpp::OptionalType>>(f.type)};
+    return {};
+}
+
+/// Build a PolicyRef JSON from the active policy state.
+inline nlohmann::json makePolicyRef(
+    const std::string &activePolicy, const tpp::IR &ir)
+{
+    if (ir.policies.all().empty()) return nullptr;
+    if (!activePolicy.empty() && activePolicy != "none")
+        return {{"Named", sanitizeIdentifier(activePolicy)}};
+    if (activePolicy == "none")
+        return {{"Pure", true}};
+    return {{"Runtime", true}};
 }
 
 /// Recursively convert an Instruction to template context JSON.
@@ -367,10 +355,12 @@ inline nlohmann::json convertInstruction(
         else if constexpr (std::is_same_v<T, tpp::EmitExprInstr>)
         {
             std::string effPol = arg.policy.empty() ? activePolicy : arg.policy;
-            std::string exprPath = cfg.transformPath(arg.expr.path, arg.expr.resolvedType);
+            auto fl = lookupField(arg.expr.path, ir);
             nlohmann::json emitJson = {
-                {"expr", {{"path", exprPath},
-                          {"type", typeRefToContext(arg.expr.resolvedType)}}},
+                {"expr", {{"path", arg.expr.path},
+                          {"type", typeRefToContext(arg.expr.resolvedType)},
+                          {"isRecursive", fl.recursive},
+                          {"isOptional", fl.optional}}},
                 {"sb", sb},
                 {"useRuntimePolicy", false}
             };
@@ -402,7 +392,8 @@ inline nlohmann::json convertInstruction(
 
             nlohmann::json cellsJson = nlohmann::json::array();
             int numCols = 0;
-            nlohmann::json specSetupLines = nlohmann::json::array();
+            nlohmann::json alignSpecChars = nlohmann::json::array();
+            bool singleAlignChar = false;
             nlohmann::json bodyJson = nlohmann::json::array();
 
             if (hasAlign)
@@ -418,7 +409,9 @@ inline nlohmann::json convertInstruction(
                         cellBody.push_back(convertInstruction(bi, cellSb, pol, scope, ir, cfg));
                     cellsJson.push_back({{"cellIndex", ci}, {"body", cellBody}});
                 }
-                specSetupLines = cfg.makeSpecSetupLines(s, numCols, arg->alignSpec);
+                for (char c : arg->alignSpec)
+                    alignSpecChars.push_back(std::string(1, c));
+                singleAlignChar = arg->alignSpec.size() == 1;
             }
             else
             {
@@ -452,12 +445,13 @@ inline nlohmann::json convertInstruction(
                 {"alignSpec", arg->alignSpec},
                 {"cells", cellsJson},
                 {"numCols", numCols},
-                {"specSetupLines", specSetupLines}
+                {"alignSpecChars", alignSpecChars},
+                {"singleAlignChar", singleAlignChar}
             }}};
         }
         else if constexpr (std::is_same_v<T, std::shared_ptr<tpp::IfInstr>>)
         {
-            std::string condStr = condExpr(*arg, cfg.nullLiteral);
+            bool condIsBool = std::holds_alternative<tpp::BoolType>(arg->condExpr.resolvedType);
             int thenScopeId = 0, elseScopeId = 0;
             std::string thenSb = sb, elseSb = sb;
             if (arg->isBlock)
@@ -478,7 +472,9 @@ inline nlohmann::json convertInstruction(
                 elseBody.push_back(convertInstruction(ei, elseSb, activePolicy, scope, ir, cfg));
 
             return {{"If", {
-                {"condExprStr", condStr},
+                {"condPath", arg->condExpr.path},
+                {"condIsBool", condIsBool},
+                {"isNegated", arg->negated},
                 {"thenBody", thenBody},
                 {"elseBody", elseBody},
                 {"hasElse", !arg->elseBody.empty()},
@@ -566,30 +562,26 @@ inline nlohmann::json convertInstruction(
         }
         else if constexpr (std::is_same_v<T, std::shared_ptr<tpp::CallInstr>>)
         {
-            auto callTransform = cfg.transformCallArg ? cfg.transformCallArg : cfg.transformPath;
-            std::string argsStr;
+            nlohmann::json argsJson = nlohmann::json::array();
             for (size_t i = 0; i < arg->arguments.size(); ++i)
             {
-                if (i > 0) argsStr += ", ";
-                argsStr += callTransform(arg->arguments[i].path,
-                                         arg->arguments[i].resolvedType);
+                auto fl = lookupField(arg->arguments[i].path, ir);
+                argsJson.push_back({
+                    {"path", arg->arguments[i].path},
+                    {"isRecursive", fl.recursive},
+                    {"isOptional", fl.optional}
+                });
             }
-            if (!ir.policies.all().empty())
-            {
-                if (!argsStr.empty()) argsStr += ", ";
-                if (!activePolicy.empty() && activePolicy != "none")
-                    argsStr += cfg.policyQualifier + sanitizeIdentifier(activePolicy);
-                else if (activePolicy == "none")
-                    argsStr += cfg.purePolicy;
-                else
-                    argsStr += "_policy";
-            }
-            return {{"Call", {
+            nlohmann::json polRef = makePolicyRef(activePolicy, ir);
+            nlohmann::json callJson = {
                 {"functionName", cfg.functionPrefix + arg->functionName},
-                {"argsStr", argsStr},
+                {"args", argsJson},
                 {"sb", sb},
                 {"needsTry", cfg.callNeedsTry && !ir.policies.all().empty()}
-            }}};
+            };
+            if (!polRef.is_null())
+                callJson["policyArg"] = polRef;
+            return {{"Call", callJson}};
         }
         else if constexpr (std::is_same_v<T, std::shared_ptr<tpp::RenderViaInstr>>)
         {
@@ -663,15 +655,11 @@ inline nlohmann::json convertInstruction(
                 {"needsTry", cfg.callNeedsTry && !ir.policies.all().empty()}
             };
 
-            if (!ir.policies.all().empty())
             {
-                std::string pol = arg->policy.empty() ? activePolicy : arg->policy;
-                if (!pol.empty() && pol != "none")
-                    rvia["policyArg"] = cfg.policyQualifier + sanitizeIdentifier(pol);
-                else if (pol == "none")
-                    rvia["policyArg"] = cfg.purePolicy;
-                else
-                    rvia["policyArg"] = "_policy";
+                nlohmann::json polRef = makePolicyRef(
+                    arg->policy.empty() ? activePolicy : arg->policy, ir);
+                if (!polRef.is_null())
+                    rvia["policyArg"] = polRef;
             }
 
             return {{"RenderVia", rvia}};

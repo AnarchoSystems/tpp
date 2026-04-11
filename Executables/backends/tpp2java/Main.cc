@@ -25,36 +25,6 @@
 // Build RenderFunctionsInput context from instruction IR
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// ── Type name helpers (for function parameter signatures) ────────────────────
-
-static std::string javaBoxedType(const tpp::TypeRef &t);
-
-static std::string javaType(const tpp::TypeRef &t)
-{
-    if (std::holds_alternative<tpp::StringType>(t)) return "String";
-    if (std::holds_alternative<tpp::IntType>(t))    return "int";
-    if (std::holds_alternative<tpp::BoolType>(t))   return "boolean";
-    if (auto *n = std::get_if<tpp::NamedType>(&t))  return n->name;
-    if (auto *l = std::get_if<std::shared_ptr<tpp::ListType>>(&t))
-        return "java.util.List<" + javaBoxedType((*l)->elementType) + ">";
-    if (auto *o = std::get_if<std::shared_ptr<tpp::OptionalType>>(&t))
-        return javaBoxedType((*o)->innerType);
-    return "Object";
-}
-
-static std::string javaBoxedType(const tpp::TypeRef &t)
-{
-    if (std::holds_alternative<tpp::StringType>(t)) return "String";
-    if (std::holds_alternative<tpp::IntType>(t))    return "Integer";
-    if (std::holds_alternative<tpp::BoolType>(t))   return "Boolean";
-    if (auto *n = std::get_if<tpp::NamedType>(&t))  return n->name;
-    if (auto *l = std::get_if<std::shared_ptr<tpp::ListType>>(&t))
-        return "java.util.List<" + javaBoxedType((*l)->elementType) + ">";
-    if (auto *o = std::get_if<std::shared_ptr<tpp::OptionalType>>(&t))
-        return javaBoxedType((*o)->innerType);
-    return "Object";
-}
-
 // ── Build the complete RenderFunctionsInput context ──────────────────────────
 
 static nlohmann::json buildFunctionsContext(
@@ -64,50 +34,19 @@ static nlohmann::json buildFunctionsContext(
     bool hasPol = !ir.policies.all().empty();
 
     codegen::ConvertConfig cfg;
-    cfg.nullLiteral = "null";
     cfg.functionPrefix = functionPrefix;
     cfg.callNeedsTry = false;  // Java: checked exceptions propagate without 'try'
-    cfg.policyQualifier = "TppPolicy.";
-    cfg.purePolicy = "TppPolicy.pure";
-    cfg.makeSpecSetupLines = [](int s, int numCols, const std::string &spec) {
-        nlohmann::json lines = nlohmann::json::array();
-        if (spec.empty()) return lines;
-        if (spec.size() == 1)
-        {
-            lines.push_back(
-                "java.util.Arrays.fill(_spec" + std::to_string(s)
-                + ", '" + std::string(1, spec[0]) + "');");
-        }
-        else
-        {
-            for (size_t ci = 0; ci < spec.size() && ci < (size_t)numCols; ++ci)
-                lines.push_back(
-                    "_spec" + std::to_string(s) + "["
-                    + std::to_string(ci) + "] = '"
-                    + std::string(1, spec[ci]) + "';");
-        }
-        return lines;
-    };
 
     nlohmann::json functions = nlohmann::json::array();
     for (const auto &fn : ir.instructionFunctions)
     {
-        std::string paramsStr;
-        std::string argsPassStr;
+        nlohmann::json params = nlohmann::json::array();
         for (size_t i = 0; i < fn.params.size(); ++i)
         {
-            if (i > 0) { paramsStr += ", "; argsPassStr += ", "; }
-            paramsStr += javaType(fn.params[i].type) + " " + fn.params[i].name;
-            argsPassStr += fn.params[i].name;
-        }
-
-        std::string paramsStrWithPolicy = paramsStr;
-        if (hasPol)
-        {
-            if (!paramsStrWithPolicy.empty()) paramsStrWithPolicy += ", ";
-            paramsStrWithPolicy += "TppPolicy _policy";
-            if (!argsPassStr.empty()) argsPassStr += ", ";
-            argsPassStr += "TppPolicy.pure";
+            params.push_back({
+                {"name", fn.params[i].name},
+                {"type", codegen::typeRefToContext(fn.params[i].type)}
+            });
         }
 
         int scope = 0;
@@ -117,9 +56,7 @@ static nlohmann::json buildFunctionsContext(
 
         functions.push_back({
             {"name", fn.name},
-            {"paramsStr", paramsStr},
-            {"paramsStrWithPolicy", paramsStrWithPolicy},
-            {"argsPassStr", argsPassStr},
+            {"params", params},
             {"body", body}
         });
     }

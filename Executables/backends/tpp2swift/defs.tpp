@@ -116,8 +116,12 @@ template swift_optional_to_str(path: string, inner: TypeKind)
 @switch inner@@case Str@(@path@ ?? "")@end case@@case Int@(@path@ != nil ? String(@path@!) : "")@end case@@case Bool@(@path@ != nil ? String(@path@!) : "")@end case@@case Named(n)@(@path@ != nil ? String(describing: @path@!) : "")@end case@@case List(e)@(@path@ != nil ? String(describing: @path@!) : "")@end case@@case Optional(i)@(@path@ != nil ? String(describing: @path@!) : "")@end case@@end switch@
 END
 
+template swift_expr_path(expr: ExprInfo)
+@if expr.isRecursive@@if expr.isOptional@@expr.path@!.value@else@@expr.path@.value@end if@@else@@expr.path@@end if@
+END
+
 template swift_expr_to_str(expr: ExprInfo)
-@switch expr.type@@case Str@@expr.path@@end case@@case Int@String(@expr.path@)@end case@@case Bool@String(@expr.path@)@end case@@case Named(n)@String(describing: @expr.path@)@end case@@case List(e)@String(describing: @expr.path@)@end case@@case Optional(inner)@@swift_optional_to_str(expr.path, inner)@@end case@@end switch@
+@switch expr.type@@case Str@@swift_expr_path(expr)@@end case@@case Int@String(@swift_expr_path(expr)@)@end case@@case Bool@String(@swift_expr_path(expr)@)@end case@@case Named(n)@String(describing: @swift_expr_path(expr)@)@end case@@case List(e)@String(describing: @swift_expr_path(expr)@)@end case@@case Optional(inner)@@swift_optional_to_str(expr.path, inner)@@end case@@end switch@
 END
 
 // ── Leaf instruction templates ───────────────────────────────────────────────
@@ -140,10 +144,26 @@ END
 
 template emit_call(c: CallData)
 @if c.needsTry@
-@c.sb@ += try @c.functionName@(@c.argsStr@)
+@if c.policyArg@
+@c.sb@ += try @c.functionName@(@for arg in c.args | sep=", " followedBy=", "@@swift_call_arg(arg)@@end for@@swift_policy_ref(c.policyArg)@)
 @else@
-@c.sb@ += @c.functionName@(@c.argsStr@)
+@c.sb@ += try @c.functionName@(@for arg in c.args | sep=", "@@swift_call_arg(arg)@@end for@)
 @end if@
+@else@
+@if c.policyArg@
+@c.sb@ += @c.functionName@(@for arg in c.args | sep=", " followedBy=", "@@swift_call_arg(arg)@@end for@@swift_policy_ref(c.policyArg)@)
+@else@
+@c.sb@ += @c.functionName@(@for arg in c.args | sep=", "@@swift_call_arg(arg)@@end for@)
+@end if@
+@end if@
+END
+
+template swift_call_arg(arg: CallArgInfo)
+@if arg.isRecursive@@if arg.isOptional@@arg.path@!.value@else@@arg.path@.value@end if@@else@@arg.path@@end if@
+END
+
+template swift_policy_ref(ref: PolicyRef)
+@switch ref@@case Named(tag)@.@tag@@end case@@case Pure@.pure@end case@@case Runtime@_policy@end case@@end switch@
 END
 
 // ── Recursive instruction dispatcher (block-style switch — avoids bug) ───────
@@ -288,9 +308,15 @@ for _i@f.scopeId@ in 0..<@f.collPath@.count {
 var _cw@f.scopeId@ = [Int](repeating: 0, count: @f.numCols@)
 for _r in _rows@f.scopeId@ { for _c in 0..<_r.count { _cw@f.scopeId@[_c] = max(_cw@f.scopeId@[_c], _r[_c].count) } }
 var _spec@f.scopeId@ = [Character](repeating: "l", count: @f.numCols@)
-@for line in f.specSetupLines@
-@line@
+@if f.singleAlignChar@
+@for ch in f.alignSpecChars@
+_spec@f.scopeId@ = [Character](repeating: "@ch@", count: @f.numCols@)
 @end for@
+@else@
+@for ch in f.alignSpecChars | enumerator=ci@
+_spec@f.scopeId@[@ci@] = "@ch@"
+@end for@
+@end if@
 for _i@f.scopeId@ in 0..<_rows@f.scopeId@.count {
     let _r = _rows@f.scopeId@[_i@f.scopeId@]
     var _line@f.scopeId@ = ""
@@ -331,7 +357,19 @@ template emit_if(i: IfData)
 END
 
 template emit_if_inline(i: IfData)
-if @i.condExprStr@ {
+@if i.condIsBool@
+@if i.isNegated@
+if !@i.condPath@ {
+@else@
+if @i.condPath@ {
+@end if@
+@else@
+@if i.isNegated@
+if @i.condPath@ == nil {
+@else@
+if @i.condPath@ != nil {
+@end if@
+@end if@
     @for instr in i.thenBody@
     @emit_instr(instr)@
     @end for@
@@ -345,7 +383,19 @@ if @i.condExprStr@ {
 END
 
 template emit_if_block(i: IfData)
-if @i.condExprStr@ {
+@if i.condIsBool@
+@if i.isNegated@
+if !@i.condPath@ {
+@else@
+if @i.condPath@ {
+@end if@
+@else@
+@if i.isNegated@
+if @i.condPath@ == nil {
+@else@
+if @i.condPath@ != nil {
+@end if@
+@end if@
     var _blk@i.thenScopeId@ = ""
     @for instr in i.thenBody@
     @emit_instr(instr)@
@@ -404,9 +454,17 @@ switch _item@r.scopeId@ {
 @for ovl in r.overloads@
 case .@ovl.tag@(let _payload):
 @if r.needsTry@
-    _res@r.scopeId@ = try @r.functionName@(_payload@if r.policyArg@, @r.policyArg@@end if@)
+@if r.policyArg@
+    _res@r.scopeId@ = try @r.functionName@(_payload, @swift_policy_ref(r.policyArg)@)
 @else@
-    _res@r.scopeId@ = @r.functionName@(_payload@if r.policyArg@, @r.policyArg@@end if@)
+    _res@r.scopeId@ = try @r.functionName@(_payload)
+@end if@
+@else@
+@if r.policyArg@
+    _res@r.scopeId@ = @r.functionName@(_payload, @swift_policy_ref(r.policyArg)@)
+@else@
+    _res@r.scopeId@ = @r.functionName@(_payload)
+@end if@
 @end if@
 @end for@
 default: break
@@ -417,11 +475,19 @@ template emit_render_via(r: RenderViaData)
 for _i@r.scopeId@ in 0..<@r.collPath@.count {
     let _item@r.scopeId@ = @r.collPath@[_i@r.scopeId@]
     @if r.isSingleOverload@
-    @if r.needsTry@
-    let _res@r.scopeId@ = try @r.functionName@(_item@r.scopeId@@if r.policyArg@, @r.policyArg@@end if@)
-    @else@
-    let _res@r.scopeId@ = @r.functionName@(_item@r.scopeId@@if r.policyArg@, @r.policyArg@@end if@)
-    @end if@
+@if r.needsTry@
+@if r.policyArg@
+    let _res@r.scopeId@ = try @r.functionName@(_item@r.scopeId@, @swift_policy_ref(r.policyArg)@)
+@else@
+    let _res@r.scopeId@ = try @r.functionName@(_item@r.scopeId@)
+@end if@
+@else@
+@if r.policyArg@
+    let _res@r.scopeId@ = @r.functionName@(_item@r.scopeId@, @swift_policy_ref(r.policyArg)@)
+@else@
+    let _res@r.scopeId@ = @r.functionName@(_item@r.scopeId@)
+@end if@
+@end if@
     @else@
     @emit_render_via_dispatch(r)@
     @end if@
@@ -653,11 +719,11 @@ enum @ctx.namespaceName@ {
 @for fn in ctx.functions@
 
 @if ctx.hasPolicies@
-@ctx.staticModifier@func @ctx.functionPrefix@@fn.name@(@fn.paramsStr@) throws -> String { return try @ctx.functionPrefix@@fn.name@(@fn.argsPassStr@) }
+@ctx.staticModifier@func @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@_ @param.name@: @swift_type(param.type)@@end for@) throws -> String { return try @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", " followedBy=", "@@param.name@@end for@.pure) }
 
-fileprivate @ctx.staticModifier@func @ctx.functionPrefix@@fn.name@(@fn.paramsStrWithPolicy@) throws -> String {
+fileprivate @ctx.staticModifier@func @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", " followedBy=", "@_ @param.name@: @swift_type(param.type)@@end for@_ _policy: TppPolicy) throws -> String {
 @else@
-@ctx.staticModifier@func @ctx.functionPrefix@@fn.name@(@fn.paramsStr@) -> String {
+@ctx.staticModifier@func @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@_ @param.name@: @swift_type(param.type)@@end for@) -> String {
 @end if@
     var _sb = ""
     @for instr in fn.body@
