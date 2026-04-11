@@ -1,22 +1,13 @@
-/// Type definitions for Swift code generation templates.
-/// These types describe the context that tpp2swift builds from the
-/// tpp intermediate representation.
-
-enum TypeKind
-{
-    Str,
-    Int,
-    Bool,
-    Named(string),
-    List(TypeKind),
-    Optional(TypeKind)
-}
+/// Swift-specific type definitions for type generation.
+/// Instruction IR types and policy types are in the shared codegen.tpp.types.
 
 struct FieldInfo
 {
     name : string;
     type : TypeKind;
     recursive : bool;
+    recursiveOptional : bool;
+    innerType : TypeKind;
 }
 
 struct StructInfo

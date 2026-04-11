@@ -1,7 +1,10 @@
 #include <tpp/Compiler.h>
+#include <tpp/Instruction.h>
+#include <CodegenHelpers.h>
 #include "defs.h"
 #include <fstream>
 #include <iostream>
+#include <map>
 
 // usage: tpp2cpp [options]
 // options:
@@ -22,7 +25,8 @@ enum Mode
     None,
     Types,
     Functions,
-    Implementation
+    Implementation,
+    Runtime
 };
 
 struct tpp2cpp
@@ -31,6 +35,7 @@ struct tpp2cpp
     std::ofstream logFile;
     std::string namespaceName;
     Mode mode = Mode::None;
+    bool externalRuntime = false;
     std::vector<std::string> includes;
     tpp::IR input;
     tpp2cpp(int argc, char *argv[]);
@@ -126,6 +131,19 @@ tpp2cpp::tpp2cpp(int argc, char *argv[])
             }
             mode = Mode::Implementation;
         }
+        else if (arg == "-runtime" || arg == "--runtime")
+        {
+            if (mode != Mode::None)
+            {
+                std::cerr << "Only one of -t/--types, -fun/--functions, -impl/--implementation and -runtime can be specified\n";
+                exit(EXIT_FAILURE);
+            }
+            mode = Mode::Runtime;
+        }
+        else if (arg == "--extern-runtime")
+        {
+            externalRuntime = true;
+        }
         else if (arg == "-i" || arg == "--include")
         {
             if (i + 1 >= argc)
@@ -205,9 +223,10 @@ nlohmann::json to_render_cpp_functions_input(const tpp::IR &iRep,
                                              const std::vector<std::string> &includes,
                                              const std::string &namespaceName);
 
-nlohmann::json to_render_cpp_implementation_input(const tpp::IR &iRep,
-                                                  const std::vector<std::string> &includes,
-                                                  const std::string &namespaceName);
+static nlohmann::json buildFunctionsContext(
+    const tpp::IR &ir, const std::string &functionPrefix,
+    const std::vector<std::string> &includes,
+    const std::string &namespaceName);
 
 void tpp2cpp::run()
 {
@@ -270,12 +289,46 @@ void tpp2cpp::run()
     }
     case Mode::Implementation:
     {
-        functionName = "render_cpp_implementation";
-        auto ns = namespaceName;
-        toInputFunction = [ns](const tpp::IR &co, const std::vector<std::string> &inc) {
-            return to_render_cpp_implementation_input(co, inc, ns);
-        };
-        break;
+        // Native instruction IR rendering — render directly without interpreter
+        std::string functionPrefix = namespaceName.empty() ? "" : "";
+        nlohmann::json ctx = buildFunctionsContext(input, functionPrefix, includes, namespaceName);
+        if (externalRuntime)
+            ctx["externalRuntime"] = true;
+
+        std::string implFunctionName = "render_cpp_native_implementation";
+        tpp::FunctionSymbol implFn;
+        std::string implError;
+        std::string implOutput;
+        if (!(iRep.get_function(implFunctionName, implFn, implError) && implFn.render(ctx, implOutput, implError)))
+        {
+            std::string errorMessage = "defs.tpp: error: Failed to render output: " + implError;
+            log(errorMessage);
+            if (!verbose) std::cerr << errorMessage << std::endl;
+            exit(EXIT_FAILURE);
+        }
+        std::cout << codegen::reindent(implOutput) << std::endl;
+        return;
+    }
+    case Mode::Runtime:
+    {
+        // Generate standalone runtime header with helper functions and policy definitions
+        std::string functionPrefix = namespaceName.empty() ? "" : "";
+        nlohmann::json ctx = buildFunctionsContext(input, functionPrefix, includes, namespaceName);
+        ctx["externalRuntime"] = false;
+
+        std::string rtFunctionName = "render_cpp_runtime";
+        tpp::FunctionSymbol rtFn;
+        std::string rtError;
+        std::string rtOutput;
+        if (!(iRep.get_function(rtFunctionName, rtFn, rtError) && rtFn.render(ctx, rtOutput, rtError)))
+        {
+            std::string errorMessage = "defs.tpp: error: Failed to render runtime: " + rtError;
+            log(errorMessage);
+            if (!verbose) std::cerr << errorMessage << std::endl;
+            exit(EXIT_FAILURE);
+        }
+        std::cout << codegen::reindent(rtOutput) << std::endl;
+        return;
     }
     }
 
@@ -415,6 +468,7 @@ static nlohmann::json buildFunctionsInput(const tpp::IR &iRep,
     if (!namespaceName.empty())
         result["namespaceName"] = namespaceName;
     result["iRepJson"] = toCppStringLiteral(nlohmann::json(iRep).dump());
+    result["functionPrefix"] = "";
     nlohmann::json functions = nlohmann::json::array();
     for (const auto &f : iRep.functions)
     {
@@ -443,9 +497,112 @@ nlohmann::json to_render_cpp_functions_input(const tpp::IR &iRep,
     return buildFunctionsInput(iRep, includes, namespaceName);
 }
 
-nlohmann::json to_render_cpp_implementation_input(const tpp::IR &iRep,
-                                                  const std::vector<std::string> &includes,
-                                                  const std::string &namespaceName)
+// ═══════════════════════════════════════════════════════════════════════════════
+// Build RenderFunctionsInput context from instruction IR (native rendering)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+static nlohmann::json buildFunctionsContext(
+    const tpp::IR &ir, const std::string &functionPrefix,
+    const std::vector<std::string> &includes,
+    const std::string &namespaceName)
 {
-    return buildFunctionsInput(iRep, includes, namespaceName);
+    bool hasPol = !ir.policies.all().empty();
+
+    // Build field metadata for recursive/optional path adjustments
+    struct FieldMeta { bool recursive; bool optional; };
+    std::map<std::string, FieldMeta> fieldMeta;
+    for (const auto &s : ir.types.structs)
+        for (const auto &f : s.fields)
+            fieldMeta[f.name] = {
+                f.recursive,
+                std::holds_alternative<std::shared_ptr<tpp::OptionalType>>(f.type)
+            };
+
+    codegen::ConvertConfig cfg;
+    cfg.nullLiteral = "";  // Use truthiness checks (works for both optional and unique_ptr)
+    cfg.functionPrefix = functionPrefix;
+    cfg.callNeedsTry = false;
+    cfg.transformCallArg = [&fieldMeta](const std::string &p, const tpp::TypeRef &) -> std::string {
+        auto dot = p.rfind('.');
+        if (dot == std::string::npos) return p;
+        std::string fieldName = p.substr(dot + 1);
+        auto it = fieldMeta.find(fieldName);
+        if (it == fieldMeta.end()) return p;
+        if (it->second.recursive || it->second.optional)
+            return "*" + p;
+        return p;
+    };
+    cfg.makeSpecSetupLines = [](int s, int numCols, const std::string &spec) {
+        nlohmann::json lines = nlohmann::json::array();
+        if (spec.empty()) return lines;
+        if (spec.size() == 1)
+        {
+            lines.push_back(
+                "std::fill(_spec" + std::to_string(s)
+                + ".begin(), _spec" + std::to_string(s)
+                + ".end(), '" + std::string(1, spec[0]) + "');");
+        }
+        else
+        {
+            for (size_t ci = 0; ci < spec.size() && ci < (size_t)numCols; ++ci)
+                lines.push_back(
+                    "_spec" + std::to_string(s) + "["
+                    + std::to_string(ci) + "] = '"
+                    + std::string(1, spec[ci]) + "';");
+        }
+        return lines;
+    };
+
+    nlohmann::json functions = nlohmann::json::array();
+    for (const auto &fn : ir.instructionFunctions)
+    {
+        std::string paramsStr;
+        std::string argsPassStr;
+        for (size_t i = 0; i < fn.params.size(); ++i)
+        {
+            if (i > 0) { paramsStr += ", "; argsPassStr += ", "; }
+            paramsStr += "typename tpp::ArgType<" + typeRefToCppString(fn.params[i].type) + ">::type " + fn.params[i].name;
+            argsPassStr += fn.params[i].name;
+        }
+
+        std::string paramsStrWithPolicy = paramsStr;
+        if (hasPol)
+        {
+            if (!paramsStrWithPolicy.empty()) paramsStrWithPolicy += ", ";
+            paramsStrWithPolicy += "const std::string& _policy";
+            if (!argsPassStr.empty()) argsPassStr += ", ";
+            argsPassStr += "\"\"";
+        }
+
+        int scope = 0;
+        nlohmann::json body = nlohmann::json::array();
+        for (const auto &instr : fn.body)
+            body.push_back(codegen::convertInstruction(instr, "_sb", fn.policy, scope, ir, cfg));
+
+        functions.push_back({
+            {"name", fn.name},
+            {"paramsStr", paramsStr},
+            {"paramsStrWithPolicy", paramsStrWithPolicy},
+            {"argsPassStr", argsPassStr},
+            {"body", body}
+        });
+    }
+
+    bool needsDispatch = false;
+    if (hasPol)
+        for (const auto &f : functions)
+            if (codegen::bodyHasRuntimePolicy(f["body"])) { needsDispatch = true; break; }
+
+    nlohmann::json result = {
+        {"functions", functions},
+        {"hasPolicies", hasPol},
+        {"needsApplyDispatch", needsDispatch},
+        {"policies", hasPol ? codegen::buildPolicyContext(ir, "std::nullopt") : nlohmann::json::array()},
+        {"functionPrefix", functionPrefix},
+        {"includes", includes},
+        {"staticModifier", ""}
+    };
+    if (!namespaceName.empty())
+        result["namespaceName"] = namespaceName;
+    return result;
 }

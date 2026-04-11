@@ -1,5 +1,6 @@
 #include <tpp/Compiler.h>
 #include <tpp/IR.h>
+#include <tpp/Lowering.h>
 #include <tpp/TemplateParser.h>
 #include <tpp/TypedefParser.h>
 #include <tpp/Diagnostic.h>
@@ -2221,6 +2222,12 @@ namespace tpp
             output.functions = std::move(pendingFunctions);
             output.types = types;
             output.policies = policies_;
+
+            // Lower AST to instruction IR for code-generation backends
+            std::string lowerError;
+            lowerToInstructions(output.functions, output.types,
+                                output.instructionFunctions, lowerError);
+
             return true;
         }
         catch (...)

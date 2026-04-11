@@ -4,6 +4,7 @@ add_library(lib_tpp
     src/IR.cc
     src/Rendering.cc
     src/PolicyParser.cc
+    src/Lowering.cc
 )
 
 target_link_libraries(lib_tpp PUBLIC nlohmann_json)

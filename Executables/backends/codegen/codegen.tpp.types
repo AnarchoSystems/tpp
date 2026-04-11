@@ -1,0 +1,219 @@
+/// Shared type definitions for all tpp code generation backends.
+/// Contains instruction IR types and policy types used identically
+/// by tpp2swift, tpp2java, and any future backend.
+
+enum TypeKind
+{
+    Str,
+    Int,
+    Bool,
+    Named(string),
+    List(TypeKind),
+    Optional(TypeKind)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Instruction IR types — for rendering function generation
+// ═══════════════════════════════════════════════════════════════════════════════
+
+struct ExprInfo
+{
+    path : string;
+    type : TypeKind;
+}
+
+struct EmitData
+{
+    textLit : string;
+    sb : string;
+}
+
+struct EmitExprData
+{
+    expr : ExprInfo;
+    sb : string;
+    staticPolicyLit : optional<string>;
+    staticPolicyId : optional<string>;
+    useRuntimePolicy : bool;
+}
+
+struct AlignCellInfo
+{
+    cellIndex : int;
+    body : list<Instruction>;
+}
+
+struct ForData
+{
+    scopeId : int;
+    collPath : string;
+    elemType : TypeKind;
+    varName : string;
+    hasEnum : bool;
+    enumeratorName : string;
+    body : list<Instruction>;
+    hasSep : bool;
+    sepLit : string;
+    hasFollowed : bool;
+    followedByLit : string;
+    hasPreceded : bool;
+    precededByLit : string;
+    isBlock : bool;
+    insertCol : int;
+    sb : string;
+    hasAlign : bool;
+    alignSpec : string;
+    cells : list<AlignCellInfo>;
+    numCols : int;
+    specSetupLines : list<string>;
+}
+
+struct CaseData
+{
+    tag : string;
+    tagLit : string;
+    bindingName : string;
+    hasBinding : bool;
+    payloadType : optional<TypeKind>;
+    body : list<Instruction>;
+    scopeId : int;
+    isFirst : bool;
+    variantIndex : int;
+    isRecursivePayload : bool;
+}
+
+struct IfData
+{
+    condExprStr : string;
+    thenBody : list<Instruction>;
+    elseBody : list<Instruction>;
+    hasElse : bool;
+    isBlock : bool;
+    insertCol : int;
+    sb : string;
+    thenScopeId : int;
+    elseScopeId : int;
+}
+
+struct SwitchData
+{
+    exprPath : string;
+    enumTypeName : string;
+    cases : list<CaseData>;
+    isBlock : bool;
+    insertCol : int;
+    sb : string;
+}
+
+struct CallData
+{
+    functionName : string;
+    argsStr : string;
+    sb : string;
+    needsTry : bool;
+}
+
+struct RenderViaOverload
+{
+    tag : string;
+    tagLit : string;
+    isFirst : bool;
+    payloadType : optional<TypeKind>;
+}
+
+struct RenderViaData
+{
+    scopeId : int;
+    collPath : string;
+    elemType : TypeKind;
+    functionName : string;
+    hasSep : bool;
+    sepLit : string;
+    hasFollowed : bool;
+    followedByLit : string;
+    hasPreceded : bool;
+    precededByLit : string;
+    sb : string;
+    isSingleOverload : bool;
+    overloads : list<RenderViaOverload>;
+    policyArg : optional<string>;
+    needsTry : bool;
+}
+
+enum Instruction
+{
+    Emit(EmitData),
+    EmitExpr(EmitExprData),
+    AlignCell,
+    For(ForData),
+    If(IfData),
+    Switch(SwitchData),
+    Call(CallData),
+    RenderVia(RenderViaData)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Policy types
+// ═══════════════════════════════════════════════════════════════════════════════
+
+struct PolicyReplacementInfo
+{
+    findLit : string;
+    replaceLit : string;
+}
+
+struct PolicyRequireInfo
+{
+    regexLit : string;
+    replaceLit : string;
+    hasReplace : bool;
+}
+
+struct PolicyOutputFilterInfo
+{
+    regexLit : string;
+}
+
+struct PolicyInfo
+{
+    tagLit : string;
+    identifier : string;
+    hasLength : bool;
+    minVal : string;
+    maxVal : string;
+    hasRejectIf : bool;
+    rejectIfRegexLit : string;
+    rejectMsgLit : string;
+    require : list<PolicyRequireInfo>;
+    hasRequire : bool;
+    replacements : list<PolicyReplacementInfo>;
+    hasReplacements : bool;
+    outputFilter : list<PolicyOutputFilterInfo>;
+    hasOutputFilter : bool;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Function rendering context (shared across all backends)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+struct RenderFunctionDef
+{
+    name : string;
+    paramsStr : string;
+    paramsStrWithPolicy : string;
+    argsPassStr : string;
+    body : list<Instruction>;
+}
+
+struct RenderFunctionsInput
+{
+    functions : list<RenderFunctionDef>;
+    hasPolicies : bool;
+    needsApplyDispatch : bool;
+    policies : list<PolicyInfo>;
+    functionPrefix : string;
+    namespaceName : optional<string>;
+    staticModifier : string;
+    includes : optional<list<string>>;
+    externalRuntime : optional<bool>;
+}

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <tpp/FunctionSymbol.h>
+#include <tpp/Instruction.h>
 #include <tpp/Policy.h>
 #include <tpp/ArgType.h>
 #include <tpp/RenderMapping.h>
@@ -56,7 +57,8 @@ namespace tpp
         TypeRegistry types;
         PolicyRegistry policies;
         std::string raw_typedefs;
+        std::vector<InstructionFunction> instructionFunctions;
 
-        NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(IR, functions, types, policies, raw_typedefs)
+        NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(IR, functions, types, policies, raw_typedefs, instructionFunctions)
     };
 }

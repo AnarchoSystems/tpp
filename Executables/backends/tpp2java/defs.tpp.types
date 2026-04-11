@@ -1,16 +1,5 @@
-/// Type definitions for Java code generation templates.
-/// These types describe the context that tpp2java builds from the
-/// tpp intermediate representation.
-
-enum TypeKind
-{
-    Str,
-    Int,
-    Bool,
-    Named(string),
-    List(TypeKind),
-    Optional(TypeKind)
-}
+/// Java-specific type definitions for type generation.
+/// Instruction IR types and policy types are in the shared codegen.tpp.types.
 
 struct FieldInfo
 {
