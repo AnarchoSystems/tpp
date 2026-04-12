@@ -112,9 +112,9 @@ Output:
 
 ```bash
 tpp . > project.json
-tpp2cpp -t  --input project.json > project_types.h
-tpp2cpp -fun --input project.json -i project_types.h > project_functions.h
-tpp2cpp -impl --input project.json -i project_functions.h > project_implementation.cc
+tpp2cpp types     --input project.json > project_types.h
+tpp2cpp functions --input project.json -i project_types.h > project_functions.h
+tpp2cpp impl      --input project.json -i project_functions.h > project_implementation.cc
 ```
 
 ---

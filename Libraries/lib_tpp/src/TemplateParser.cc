@@ -2216,7 +2216,7 @@ namespace tpp
                     break;
                 }
             }
-            if (hasErrors || pendingFunctions.empty())
+            if (hasErrors)
                 return false;
 
             output.functions = std::move(pendingFunctions);

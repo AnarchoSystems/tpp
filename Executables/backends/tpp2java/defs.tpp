@@ -1,10 +1,10 @@
 // ── Meta-template: embeds types + template content as constexpr strings ──
 
-template render_templates(types: string, template: string)
+template render_templates(types: string, tmpl: string)
 #pragma once
 
 constexpr char types_content[] = @types@;
-constexpr char template_content[] = @template@;
+constexpr char template_content[] = @tmpl@;
 END
 
 // ── Type name helpers (inline — used in expressions) ─────────────────────

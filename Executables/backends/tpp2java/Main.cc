@@ -1,33 +1,30 @@
 // tpp2java — generates Java source from tpp intermediate representation.
 //
 // Usage:
-//   tpp2java [--input <ir_json>] [--namespace <name>] [-runtime] [--extern-runtime]
-//       Reads IR JSON (from file or stdin), generates Java types + rendering
-//       functions to stdout.
-//   -runtime: generate only the standalone runtime helpers class.
-//   --extern-runtime: suppress inlining runtime helpers in the functions output.
+//   tpp2java <command> [options]
+//
+// Commands:
+//   source   Generate Java types + rendering functions
+//   runtime  Generate only the standalone runtime helpers class
+//
+// Options:
+//   --input <file>    Read IR JSON from file instead of stdin
+//   -ns <name>        Use as the Java class name (default: Functions)
+//   --extern-runtime  Suppress inlining runtime helpers in source output
 
-#include <tpp/Compiler.h>
+#include <tpp/IR.h>
 #include <tpp/Instruction.h>
 #include <CodegenHelpers.h>
-#include "defs.h"
+#include "java_defs_functions.h"
 #include <fstream>
 #include <iostream>
 #include <sstream>
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Build CodegenInput context from IR (delegates to shared builder)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// Uses codegen::buildCodegenInput() from CodegenHelpers.h
-
-// ═══════════════════════════════════════════════════════════════════════════════
 // Build RenderFunctionsInput context from instruction IR
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// ── Build the complete RenderFunctionsInput context ──────────────────────────
-
-static nlohmann::json buildFunctionsContext(
+static codegen::RenderFunctionsInput buildFunctionsContext(
     const tpp::IR &ir, const std::string &functionPrefix,
     const std::string &namespaceName)
 {
@@ -37,39 +34,34 @@ static nlohmann::json buildFunctionsContext(
     cfg.functionPrefix = functionPrefix;
     cfg.callNeedsTry = false;  // Java: checked exceptions propagate without 'try'
 
-    nlohmann::json functions = nlohmann::json::array();
+    std::vector<codegen::RenderFunctionDef> functions;
     for (const auto &fn : ir.instructionFunctions)
     {
-        nlohmann::json params = nlohmann::json::array();
+        std::vector<codegen::ParamInfo> params;
         for (size_t i = 0; i < fn.params.size(); ++i)
-        {
-            params.push_back({
-                {"name", fn.params[i].name},
-                {"type", codegen::typeRefToContext(fn.params[i].type)}
-            });
-        }
+            params.push_back({fn.params[i].name,
+                              std::make_unique<codegen::TypeKind>(codegen::typeRefToContext(fn.params[i].type))});
 
         int scope = 0;
-        nlohmann::json body = nlohmann::json::array();
+        auto body = std::make_unique<std::vector<codegen::Instruction>>();
         for (const auto &instr : fn.body)
-            body.push_back(codegen::convertInstruction(instr, "_sb", fn.policy, scope, ir, cfg));
+            body->push_back(codegen::convertInstruction(instr, "_sb", fn.policy, scope, ir, cfg));
 
-        functions.push_back({
-            {"name", fn.name},
-            {"params", params},
-            {"body", body}
-        });
+        codegen::RenderFunctionDef def;
+        def.name = fn.name;
+        def.params = std::move(params);
+        def.body = std::move(body);
+        functions.push_back(std::move(def));
     }
 
-    nlohmann::json result = {
-        {"functions", functions},
-        {"hasPolicies", hasPol},
-        {"policies", hasPol ? codegen::buildPolicyContext(ir, "null") : nlohmann::json::array()},
-        {"functionPrefix", functionPrefix},
-        {"staticModifier", "static "}  // Java always uses static methods
-    };
+    codegen::RenderFunctionsInput result;
+    result.functions = std::move(functions);
+    result.hasPolicies = hasPol;
+    result.policies = hasPol ? codegen::buildPolicyContext(ir, "null") : std::vector<codegen::PolicyInfo>{};
+    result.functionPrefix = functionPrefix;
+    result.staticModifier = "static ";  // Java always uses static methods
     if (!namespaceName.empty())
-        result["namespaceName"] = namespaceName;
+        result.namespaceName = namespaceName;
     return result;
 }
 
@@ -79,13 +71,17 @@ static nlohmann::json buildFunctionsContext(
 
 static void printUsage()
 {
-    std::cout << "Usage: tpp2java [options]\n"
+    std::cout << "Usage: tpp2java <command> [options]\n"
+                 "\n"
+                 "Commands:\n"
+                 "  source   Generate Java types + rendering functions\n"
+                 "  runtime  Generate only the standalone runtime helpers class\n"
+                 "\n"
                  "Options:\n"
-                 "  --input <file>       Read IR JSON from file instead of stdin\n"
-                 "  -ns, --namespace <name>  Use as the Java class name (default: Functions)\n"
-                 "  -runtime, --runtime  Generate only the standalone runtime helpers class\n"
-                 "  --extern-runtime     Suppress inlining runtime helpers in functions output\n"
-                 "  -h, --help           Print this message\n";
+                 "  --input <file>    Read IR JSON from file instead of stdin\n"
+                 "  -ns <name>        Use as the Java class name (default: Functions)\n"
+                 "  --extern-runtime  Suppress inlining runtime helpers in source output\n"
+                 "  -h, --help        Print this message\n";
 }
 
 int main(int argc, char *argv[])
@@ -95,23 +91,41 @@ int main(int argc, char *argv[])
     bool runtimeMode = false;
     bool externalRuntime = false;
 
+    // Find the subcommand (first non-option argument)
+    int cmdIndex = 0;
     for (int i = 1; i < argc; ++i)
     {
         std::string arg = argv[i];
         if (arg == "-h" || arg == "--help") { printUsage(); return EXIT_SUCCESS; }
-        else if (arg == "--input")
+        if (arg[0] != '-') { cmdIndex = i; break; }
+        if (arg == "-ns" || arg == "--input") ++i;  // skip value
+    }
+
+    if (cmdIndex == 0)
+    {
+        printUsage();
+        return EXIT_FAILURE;
+    }
+
+    std::string cmd = argv[cmdIndex];
+    if (cmd == "source") { runtimeMode = false; }
+    else if (cmd == "runtime") { runtimeMode = true; }
+    else { std::cerr << "Unknown command: " << cmd << "\nUse -h for usage info.\n"; return EXIT_FAILURE; }
+
+    // Parse options (skip subcommand)
+    for (int i = 1; i < argc; ++i)
+    {
+        if (i == cmdIndex) continue;
+        std::string arg = argv[i];
+        if (arg == "--input")
         {
             if (i + 1 >= argc) { std::cerr << "--input requires a file argument\n"; return EXIT_FAILURE; }
             inputFile = argv[++i];
         }
-        else if (arg == "-ns" || arg == "--namespace")
+        else if (arg == "-ns")
         {
-            if (i + 1 >= argc) { std::cerr << arg << " requires a name argument\n"; return EXIT_FAILURE; }
+            if (i + 1 >= argc) { std::cerr << "-ns requires a name argument\n"; return EXIT_FAILURE; }
             namespaceName = argv[++i];
-        }
-        else if (arg == "-runtime" || arg == "--runtime")
-        {
-            runtimeMode = true;
         }
         else if (arg == "--extern-runtime")
         {
@@ -119,7 +133,7 @@ int main(int argc, char *argv[])
         }
         else
         {
-            std::cerr << "Unknown option: " << arg << "\n";
+            std::cerr << "Unknown option: " << arg << "\nUse -h for usage info.\n";
             return EXIT_FAILURE;
         }
     }
@@ -144,83 +158,23 @@ int main(int argc, char *argv[])
     // Function prefix: "render_" when no namespace, "" when namespace set
     std::string functionPrefix = namespaceName.empty() ? "render_" : "";
 
-    // Build codegen context
-    nlohmann::json ctx = codegen::buildCodegenInput(ir);
-
-    // Compile embedded templates
-    tpp::Compiler compiler;
-    std::vector<tpp::DiagnosticLSPMessage> diagnostics;
-    diagnostics.reserve(2);
-    compiler.add_types(types_content, diagnostics.emplace_back("defs.tpp.types").diagnostics);
-    compiler.add_templates(template_content, diagnostics.emplace_back("defs.tpp").diagnostics);
-
-    tpp::IR templateIR;
-    if (!compiler.compile(templateIR))
-    {
-        for (const auto &msg : diagnostics)
-            for (auto &d : msg.toGCCDiagnostics())
-                std::cerr << d << std::endl;
-        return EXIT_FAILURE;
-    }
-
     if (runtimeMode)
     {
-        // Generate only standalone runtime helpers class
-        nlohmann::json funcCtx = buildFunctionsContext(ir, functionPrefix, namespaceName);
-        tpp::FunctionSymbol rtFn;
-        std::string error;
-        if (!templateIR.get_function("render_java_runtime", rtFn, error))
-        {
-            std::cerr << "Template error: " << error << "\n";
-            return EXIT_FAILURE;
-        }
-        std::string rtRendered;
-        if (!rtFn.render(funcCtx, rtRendered, error))
-        {
-            std::cerr << "Render error: " << error << "\n";
-            return EXIT_FAILURE;
-        }
-        std::cout << codegen::reindent(rtRendered, 4) << std::endl;
+        auto funcCtx = buildFunctionsContext(ir, functionPrefix, namespaceName);
+        std::cout << codegen::reindent(codegen::render_java_runtime(funcCtx), 4) << std::endl;
         return EXIT_SUCCESS;
     }
 
-    tpp::FunctionSymbol fn;
-    std::string error;
-    if (!templateIR.get_function("render_java_source", fn, error))
-    {
-        std::cerr << "Template error: " << error << "\n";
-        return EXIT_FAILURE;
-    }
-
-    std::string rendered;
-    if (!fn.render(ctx, rendered, error))
-    {
-        std::cerr << "Render error: " << error << "\n";
-        return EXIT_FAILURE;
-    }
-
-    std::cout << rendered;
+    // Build codegen context and render types
+    codegen::CodegenInput ctx = codegen::buildCodegenInput(ir);
+    std::cout << codegen::render_java_source(ctx);
 
     // Generate rendering functions from instruction IR
-    nlohmann::json funcCtx = buildFunctionsContext(ir, functionPrefix, namespaceName);
+    auto funcCtx = buildFunctionsContext(ir, functionPrefix, namespaceName);
     if (externalRuntime)
-        funcCtx["externalRuntime"] = true;
+        funcCtx.externalRuntime = true;
 
-    tpp::FunctionSymbol funcFn;
-    if (!templateIR.get_function("render_java_functions", funcFn, error))
-    {
-        std::cerr << "Template error: " << error << "\n";
-        return EXIT_FAILURE;
-    }
-
-    std::string funcRendered;
-    if (!funcFn.render(funcCtx, funcRendered, error))
-    {
-        std::cerr << "Render error: " << error << "\n";
-        return EXIT_FAILURE;
-    }
-
-    std::cout << codegen::reindent(funcRendered, 4);
+    std::cout << codegen::reindent(codegen::render_java_functions(funcCtx), 4);
 
     return EXIT_SUCCESS;
 }

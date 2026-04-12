@@ -32,6 +32,7 @@ struct @s.name@;
 @end for@
 
 @for e in input.enums@
+@if not e.hasRecursiveVariants@
 @if e.doc@
 /// @e.doc@
 @end if@
@@ -53,9 +54,10 @@ struct @e.name@
     Value value;
     static std::string tpp_typedefs() noexcept
     {
-        return @input.rawTypedefs@;
+        return @e.rawTypedefs@;
     }
 };
+@end if@
 @end for@
 @for s in input.structs@
 @if s.doc@
@@ -75,9 +77,37 @@ struct @s.name@
     @end for@
     static std::string tpp_typedefs() noexcept
     {
-        return @input.rawTypedefs@;
+        return @s.rawTypedefs@;
     }
 };
+@end for@
+@for e in input.enums@
+@if e.hasRecursiveVariants@
+@if e.doc@
+/// @e.doc@
+@end if@
+@for variant in e.variants@
+@if not variant.payload@
+@if variant.doc@
+/// @variant.doc@
+@end if@
+struct @e.name@_@variant.tag@
+{
+    friend void to_json(nlohmann::json& j, const @e.name@_@variant.tag@&) { j = nlohmann::json::object(); }
+    friend void from_json(const nlohmann::json&, @e.name@_@variant.tag@&) {}
+};
+@end if@
+@end for@
+struct @e.name@
+{
+    using Value = std::variant<@for variant in e.variants | sep=", "@@if not variant.payload@@e.name@_@variant.tag@@else@@if variant.recursive@std::unique_ptr<@cpp_type(variant.payload)@>@else@@cpp_type(variant.payload)@@end if@@end if@@end for@>;
+    Value value;
+    static std::string tpp_typedefs() noexcept
+    {
+        return @e.rawTypedefs@;
+    }
+};
+@end if@
 @end for@
 
 @for e in input.enums@
@@ -526,9 +556,9 @@ switch (@s.exprPath@.value.index()) {
     case @c.variantIndex@: { // @c.tag@
         @if c.hasBinding@
         @if c.isRecursivePayload@
-        const auto& @c.bindingName@ = *std::get<@c.variantIndex@>(@s.exprPath@.value);
+        [[maybe_unused]] const auto& @c.bindingName@ = *std::get<@c.variantIndex@>(@s.exprPath@.value);
         @else@
-        const auto& @c.bindingName@ = std::get<@c.variantIndex@>(@s.exprPath@.value);
+        [[maybe_unused]] const auto& @c.bindingName@ = std::get<@c.variantIndex@>(@s.exprPath@.value);
         @end if@
         @end if@
         @if s.isBlock@

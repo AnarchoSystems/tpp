@@ -6,6 +6,7 @@
 #pragma once
 
 #include <tpp/Compiler.h>
+#include "CodegenTypes.h"
 #include <nlohmann/json.hpp>
 #include <filesystem>
 #include <fstream>
@@ -130,19 +131,25 @@ inline CompileResult compileTestCase(const std::filesystem::path &testDir)
 // Type → template context helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// Converts a tpp::TypeRef to the TypeKind JSON expected by the codegen
-/// templates (enum variant encoding: {"Tag": payload}).
-inline nlohmann::json typeRefToContext(const tpp::TypeRef &t)
+/// Converts a tpp::TypeRef to the codegen::TypeKind struct.
+inline TypeKind typeRefToContext(const tpp::TypeRef &t)
 {
-    if (std::holds_alternative<tpp::StringType>(t)) return {{"Str", true}};
-    if (std::holds_alternative<tpp::IntType>(t))    return {{"Int", true}};
-    if (std::holds_alternative<tpp::BoolType>(t))   return {{"Bool", true}};
-    if (auto *n = std::get_if<tpp::NamedType>(&t))  return {{"Named", n->name}};
-    if (auto *l = std::get_if<std::shared_ptr<tpp::ListType>>(&t))
-        return {{"List", typeRefToContext((*l)->elementType)}};
-    if (auto *o = std::get_if<std::shared_ptr<tpp::OptionalType>>(&t))
-        return {{"Optional", typeRefToContext((*o)->innerType)}};
-    return {{"Str", true}};
+    TypeKind result;
+    if (std::holds_alternative<tpp::StringType>(t))
+        result.value = TypeKind_Str{};
+    else if (std::holds_alternative<tpp::IntType>(t))
+        result.value = TypeKind_Int{};
+    else if (std::holds_alternative<tpp::BoolType>(t))
+        result.value = TypeKind_Bool{};
+    else if (auto *n = std::get_if<tpp::NamedType>(&t))
+        result.value.emplace<3>(n->name);
+    else if (auto *l = std::get_if<std::shared_ptr<tpp::ListType>>(&t))
+        result.value.emplace<4>(std::make_unique<TypeKind>(typeRefToContext((*l)->elementType)));
+    else if (auto *o = std::get_if<std::shared_ptr<tpp::OptionalType>>(&t))
+        result.value.emplace<5>(std::make_unique<TypeKind>(typeRefToContext((*o)->innerType)));
+    else
+        result.value = TypeKind_Str{};
+    return result;
 }
 
 /// Wraps a raw string in a language string literal with escaping.
@@ -266,36 +273,26 @@ inline std::vector<std::vector<tpp::Instruction>> splitCells(
 /// Sanitize a policy tag into a valid identifier (replace non-alnum with _).
 inline std::string sanitizeIdentifier(const std::string &tag);
 
-/// Check if any converted instruction body uses runtime policy dispatch.
-inline bool bodyHasRuntimePolicy(const nlohmann::json &body)
+/// Build a PolicyRef from the active policy state.
+inline std::optional<PolicyRef> makePolicyRef(
+    const std::string &activePolicy, const tpp::IR &ir)
 {
-    for (const auto &instr : body)
+    if (ir.policies.all().empty()) return std::nullopt;
+    if (!activePolicy.empty() && activePolicy != "none")
     {
-        for (const auto &[key, val] : instr.items())
-        {
-            if (key == "EmitExpr" && val.value("useRuntimePolicy", false))
-                return true;
-            // Recurse into block bodies (For, If, Switch, etc.)
-            if (val.is_object())
-            {
-                if (val.contains("body") && bodyHasRuntimePolicy(val["body"]))
-                    return true;
-                if (val.contains("thenBody") && bodyHasRuntimePolicy(val["thenBody"]))
-                    return true;
-                if (val.contains("elseBody") && bodyHasRuntimePolicy(val["elseBody"]))
-                    return true;
-                if (val.contains("cases"))
-                    for (const auto &c : val["cases"])
-                        if (c.contains("body") && bodyHasRuntimePolicy(c["body"]))
-                            return true;
-                if (val.contains("cellBodies"))
-                    for (const auto &cb : val["cellBodies"])
-                        if (bodyHasRuntimePolicy(cb))
-                            return true;
-            }
-        }
+        PolicyRef ref;
+        ref.value = sanitizeIdentifier(activePolicy);
+        return ref;
     }
-    return false;
+    if (activePolicy == "none")
+    {
+        PolicyRef ref;
+        ref.value = PolicyRef_Pure{};
+        return ref;
+    }
+    PolicyRef ref;
+    ref.value = PolicyRef_Runtime{};
+    return ref;
 }
 
 /// Configuration for language-specific aspects of instruction conversion.
@@ -323,65 +320,60 @@ inline FieldLookup lookupField(const std::string &path, const tpp::IR &ir)
     return {};
 }
 
-/// Build a PolicyRef JSON from the active policy state.
-inline nlohmann::json makePolicyRef(
-    const std::string &activePolicy, const tpp::IR &ir)
+/// Wrap a C++ path in (*...) when it traverses a unique_ptr field (recursive type).
+inline std::string fixCppPath(const std::string &path, const tpp::IR &ir)
 {
-    if (ir.policies.all().empty()) return nullptr;
-    if (!activePolicy.empty() && activePolicy != "none")
-        return {{"Named", sanitizeIdentifier(activePolicy)}};
-    if (activePolicy == "none")
-        return {{"Pure", true}};
-    return {{"Runtime", true}};
+    if (lookupField(path, ir).recursive) return "(*" + path + ")";
+    return path;
 }
 
-/// Recursively convert an Instruction to template context JSON.
-inline nlohmann::json convertInstruction(
+/// Recursively convert an Instruction to a codegen::Instruction struct.
+inline Instruction convertInstruction(
     const tpp::Instruction &instr, const std::string &sb,
     const std::string &activePolicy, int &scope, const tpp::IR &ir,
     const ConvertConfig &cfg)
 {
-    return std::visit([&](auto &&arg) -> nlohmann::json
+    return std::visit([&](auto &&arg) -> Instruction
     {
         using T = std::decay_t<decltype(arg)>;
 
         if constexpr (std::is_same_v<T, tpp::EmitInstr>)
         {
-            return {{"Emit", {
-                {"textLit", stringLiteral(arg.text)},
-                {"sb", sb}
-            }}};
+            return {EmitData{stringLiteral(arg.text), sb}};
         }
         else if constexpr (std::is_same_v<T, tpp::EmitExprInstr>)
         {
             std::string effPol = arg.policy.empty() ? activePolicy : arg.policy;
             auto fl = lookupField(arg.expr.path, ir);
-            nlohmann::json emitJson = {
-                {"expr", {{"path", arg.expr.path},
-                          {"type", typeRefToContext(arg.expr.resolvedType)},
-                          {"isRecursive", fl.recursive},
-                          {"isOptional", fl.optional}}},
-                {"sb", sb},
-                {"useRuntimePolicy", false}
+
+            EmitExprData data;
+            data.expr = {
+                arg.expr.path,
+                std::make_unique<TypeKind>(typeRefToContext(arg.expr.resolvedType)),
+                fl.recursive,
+                fl.optional
             };
+            data.sb = sb;
+            data.useRuntimePolicy = false;
+
             if (effPol == "none")
             {
                 // explicit opt-out — no policy at all
             }
             else if (!effPol.empty())
             {
-                emitJson["staticPolicyLit"] = stringLiteral(effPol);
-                emitJson["staticPolicyId"] = sanitizeIdentifier(effPol);
+                data.staticPolicyLit = stringLiteral(effPol);
+                data.staticPolicyId = sanitizeIdentifier(effPol);
             }
             else if (!ir.policies.all().empty())
             {
-                emitJson["useRuntimePolicy"] = true;
+                data.useRuntimePolicy = true;
             }
-            return {{"EmitExpr", emitJson}};
+            return {std::move(data)};
         }
         else if constexpr (std::is_same_v<T, tpp::AlignCellInstr>)
         {
-            return {{"AlignCell", true}};
+            return {Instruction_AlignCell{}};
         }
         else if constexpr (std::is_same_v<T, std::shared_ptr<tpp::ForInstr>>)
         {
@@ -390,68 +382,63 @@ inline nlohmann::json convertInstruction(
             auto elemType = getElemType(arg->collection.resolvedType);
             bool hasAlign = arg->hasAlign;
 
-            nlohmann::json cellsJson = nlohmann::json::array();
-            int numCols = 0;
-            nlohmann::json alignSpecChars = nlohmann::json::array();
-            bool singleAlignChar = false;
-            nlohmann::json bodyJson = nlohmann::json::array();
+            auto forData = std::make_unique<ForData>();
+            forData->scopeId = s;
+            forData->collPath = fixCppPath(arg->collection.path, ir);
+            forData->elemType = std::make_unique<TypeKind>(typeRefToContext(elemType));
+            forData->varName = arg->varName;
+            forData->hasEnum = !arg->enumeratorName.empty();
+            forData->enumeratorName = arg->enumeratorName;
+            forData->hasSep = !arg->sep.empty();
+            forData->sepLit = !arg->sep.empty() ? stringLiteral(arg->sep) : "";
+            forData->hasFollowed = !arg->followedBy.empty();
+            forData->followedByLit = !arg->followedBy.empty() ? stringLiteral(arg->followedBy) : "";
+            forData->hasPreceded = !arg->precededBy.empty();
+            forData->precededByLit = !arg->precededBy.empty() ? stringLiteral(arg->precededBy) : "";
+            forData->isBlock = arg->isBlock;
+            forData->insertCol = arg->insertCol;
+            forData->sb = sb;
+            forData->hasAlign = hasAlign;
+            forData->alignSpec = arg->alignSpec;
+            forData->singleAlignChar = arg->alignSpec.size() == 1;
 
             if (hasAlign)
             {
-                auto cells = splitCells(arg->body);
-                numCols = (int)cells.size();
-                for (int ci = 0; ci < numCols; ++ci)
+                auto cellGroups = splitCells(arg->body);
+                forData->numCols = (int)cellGroups.size();
+                auto cellsVec = std::make_unique<std::vector<AlignCellInfo>>();
+                for (int ci = 0; ci < (int)cellGroups.size(); ++ci)
                 {
-                    std::string cellSb = "_cell" + std::to_string(s)
-                                       + "_" + std::to_string(ci);
-                    nlohmann::json cellBody = nlohmann::json::array();
-                    for (const auto &bi : cells[ci])
-                        cellBody.push_back(convertInstruction(bi, cellSb, pol, scope, ir, cfg));
-                    cellsJson.push_back({{"cellIndex", ci}, {"body", cellBody}});
+                    std::string cellSb = "_cell" + std::to_string(s) + "_" + std::to_string(ci);
+                    auto cellBody = std::make_unique<std::vector<Instruction>>();
+                    for (const auto &bi : cellGroups[ci])
+                        cellBody->push_back(convertInstruction(bi, cellSb, pol, scope, ir, cfg));
+                    cellsVec->push_back({ci, std::move(cellBody)});
                 }
+                forData->cells = std::move(cellsVec);
+                std::vector<std::string> specChars;
                 for (char c : arg->alignSpec)
-                    alignSpecChars.push_back(std::string(1, c));
-                singleAlignChar = arg->alignSpec.size() == 1;
+                    specChars.push_back(std::string(1, c));
+                forData->alignSpecChars = std::move(specChars);
+                forData->body = std::make_unique<std::vector<Instruction>>();
             }
             else
             {
-                std::string bodySb = arg->isBlock
-                    ? ("_blk" + std::to_string(s)) : sb;
+                std::string bodySb = arg->isBlock ? ("_blk" + std::to_string(s)) : sb;
+                auto bodyVec = std::make_unique<std::vector<Instruction>>();
                 for (const auto &bi : arg->body)
-                    bodyJson.push_back(convertInstruction(bi, bodySb, pol, scope, ir, cfg));
+                    bodyVec->push_back(convertInstruction(bi, bodySb, pol, scope, ir, cfg));
+                forData->body = std::move(bodyVec);
+                forData->numCols = 0;
+                forData->cells = std::make_unique<std::vector<AlignCellInfo>>();
             }
 
-            return {{"For", {
-                {"scopeId", s},
-                {"collPath", arg->collection.path},
-                {"elemType", typeRefToContext(elemType)},
-                {"varName", arg->varName},
-                {"hasEnum", !arg->enumeratorName.empty()},
-                {"enumeratorName", arg->enumeratorName},
-                {"body", bodyJson},
-                {"hasSep", !arg->sep.empty()},
-                {"sepLit", !arg->sep.empty()
-                    ? stringLiteral(arg->sep) : ""},
-                {"hasFollowed", !arg->followedBy.empty()},
-                {"followedByLit", !arg->followedBy.empty()
-                    ? stringLiteral(arg->followedBy) : ""},
-                {"hasPreceded", !arg->precededBy.empty()},
-                {"precededByLit", !arg->precededBy.empty()
-                    ? stringLiteral(arg->precededBy) : ""},
-                {"isBlock", arg->isBlock},
-                {"insertCol", arg->insertCol},
-                {"sb", sb},
-                {"hasAlign", hasAlign},
-                {"alignSpec", arg->alignSpec},
-                {"cells", cellsJson},
-                {"numCols", numCols},
-                {"alignSpecChars", alignSpecChars},
-                {"singleAlignChar", singleAlignChar}
-            }}};
+            Instruction result;
+            result.value.emplace<3>(std::move(forData));
+            return result;
         }
         else if constexpr (std::is_same_v<T, std::shared_ptr<tpp::IfInstr>>)
         {
-            bool condIsBool = std::holds_alternative<tpp::BoolType>(arg->condExpr.resolvedType);
             int thenScopeId = 0, elseScopeId = 0;
             std::string thenSb = sb, elseSb = sb;
             if (arg->isBlock)
@@ -464,38 +451,51 @@ inline nlohmann::json convertInstruction(
                     elseSb = "_blk" + std::to_string(elseScopeId);
                 }
             }
-            nlohmann::json thenBody = nlohmann::json::array();
-            for (const auto &ti : arg->thenBody)
-                thenBody.push_back(convertInstruction(ti, thenSb, activePolicy, scope, ir, cfg));
-            nlohmann::json elseBody = nlohmann::json::array();
-            for (const auto &ei : arg->elseBody)
-                elseBody.push_back(convertInstruction(ei, elseSb, activePolicy, scope, ir, cfg));
 
-            return {{"If", {
-                {"condPath", arg->condExpr.path},
-                {"condIsBool", condIsBool},
-                {"isNegated", arg->negated},
-                {"thenBody", thenBody},
-                {"elseBody", elseBody},
-                {"hasElse", !arg->elseBody.empty()},
-                {"isBlock", arg->isBlock},
-                {"insertCol", arg->insertCol},
-                {"sb", sb},
-                {"thenScopeId", thenScopeId},
-                {"elseScopeId", elseScopeId}
-            }}};
+            auto ifData = std::make_unique<IfData>();
+            ifData->condPath = arg->condExpr.path;
+            ifData->condIsBool = std::holds_alternative<tpp::BoolType>(arg->condExpr.resolvedType);
+            ifData->isNegated = arg->negated;
+            ifData->isBlock = arg->isBlock;
+            ifData->insertCol = arg->insertCol;
+            ifData->sb = sb;
+            ifData->thenScopeId = thenScopeId;
+            ifData->elseScopeId = elseScopeId;
+            ifData->hasElse = !arg->elseBody.empty();
+
+            auto thenVec = std::make_unique<std::vector<Instruction>>();
+            for (const auto &ti : arg->thenBody)
+                thenVec->push_back(convertInstruction(ti, thenSb, activePolicy, scope, ir, cfg));
+            ifData->thenBody = std::move(thenVec);
+
+            auto elseVec = std::make_unique<std::vector<Instruction>>();
+            for (const auto &ei : arg->elseBody)
+                elseVec->push_back(convertInstruction(ei, elseSb, activePolicy, scope, ir, cfg));
+            ifData->elseBody = std::move(elseVec);
+
+            Instruction result;
+            result.value.emplace<4>(std::move(ifData));
+            return result;
         }
         else if constexpr (std::is_same_v<T, std::shared_ptr<tpp::SwitchInstr>>)
         {
             std::string pol = arg->policy.empty() ? activePolicy : arg->policy;
 
-            // Look up the enum definition for variant index/recursive info
+            // Unwrap OptionalType to find the underlying NamedType for enum lookup
+            tpp::TypeRef switchType = arg->expr.resolvedType;
+            bool exprIsOptional = false;
+            if (auto *opt = std::get_if<std::shared_ptr<tpp::OptionalType>>(&switchType))
+            {
+                switchType = (*opt)->innerType;
+                exprIsOptional = true;
+            }
+
             const tpp::EnumDef *enumDef = nullptr;
-            if (auto *nt = std::get_if<tpp::NamedType>(&arg->expr.resolvedType))
+            if (auto *nt = std::get_if<tpp::NamedType>(&switchType))
                 for (const auto &e : ir.types.enums)
                     if (e.name == nt->name) { enumDef = &e; break; }
 
-            nlohmann::json casesJson = nlohmann::json::array();
+            auto casesVec = std::make_unique<std::vector<CaseData>>();
             bool first = true;
             for (const auto &c : arg->cases)
             {
@@ -506,11 +506,11 @@ inline nlohmann::json convertInstruction(
                     caseScopeId = scope++;
                     caseSb = "_blk" + std::to_string(caseScopeId);
                 }
-                nlohmann::json caseBody = nlohmann::json::array();
-                for (const auto &bi : c.body)
-                    caseBody.push_back(convertInstruction(bi, caseSb, pol, scope, ir, cfg));
 
-                // Find variant index and recursive info from enum definition
+                auto caseBody = std::make_unique<std::vector<Instruction>>();
+                for (const auto &bi : c.body)
+                    caseBody->push_back(convertInstruction(bi, caseSb, pol, scope, ir, cfg));
+
                 int variantIndex = -1;
                 bool isRecursivePayload = false;
                 if (enumDef)
@@ -527,61 +527,68 @@ inline nlohmann::json convertInstruction(
                     }
                 }
 
-                nlohmann::json caseJson = {
-                    {"tag", c.tag},
-                    {"tagLit", stringLiteral(c.tag)},
-                    {"bindingName", c.bindingName},
-                    {"hasBinding", !c.bindingName.empty()
-                                   && c.payloadType.has_value()},
-                    {"body", caseBody},
-                    {"scopeId", caseScopeId},
-                    {"isFirst", first},
-                    {"variantIndex", variantIndex},
-                    {"isRecursivePayload", isRecursivePayload}
-                };
+                CaseData caseData;
+                caseData.tag = c.tag;
+                caseData.tagLit = stringLiteral(c.tag);
+                caseData.bindingName = c.bindingName;
+                caseData.hasBinding = !c.bindingName.empty();
+                caseData.body = std::move(caseBody);
+                caseData.scopeId = caseScopeId;
+                caseData.isFirst = first;
+                caseData.variantIndex = variantIndex;
+                caseData.isRecursivePayload = isRecursivePayload;
                 if (c.payloadType.has_value())
-                    caseJson["payloadType"] =
-                        typeRefToContext(*c.payloadType);
-                casesJson.push_back(caseJson);
+                    caseData.payloadType = std::make_unique<TypeKind>(typeRefToContext(*c.payloadType));
+                else if (caseData.hasBinding && enumDef)
+                {
+                    // Derive payload type from enum when IR omits it (e.g. optional-wrapped switch)
+                    for (const auto &ev : enumDef->variants)
+                        if (ev.tag == c.tag && ev.payload.has_value())
+                        { caseData.payloadType = std::make_unique<TypeKind>(typeRefToContext(*ev.payload)); break; }
+                }
+
+                casesVec->push_back(std::move(caseData));
                 first = false;
             }
 
-            // Extract the enum type name from the resolved type
             std::string enumTypeName;
-            if (auto *nt = std::get_if<tpp::NamedType>(&arg->expr.resolvedType))
+            if (auto *nt = std::get_if<tpp::NamedType>(&switchType))
                 enumTypeName = nt->name;
 
-            return {{"Switch", {
-                {"exprPath", arg->expr.path},
-                {"enumTypeName", enumTypeName},
-                {"cases", casesJson},
-                {"isBlock", arg->isBlock},
-                {"insertCol", arg->insertCol},
-                {"sb", sb}
-            }}};
+            // Dereference unique_ptr when the switch expression crosses a recursive/optional field
+            std::string switchExprPath = exprIsOptional
+                ? "(*" + arg->expr.path + ")"
+                : fixCppPath(arg->expr.path, ir);
+
+            auto switchData = std::make_unique<SwitchData>();
+            switchData->exprPath = switchExprPath;
+            switchData->enumTypeName = enumTypeName;
+            switchData->cases = std::move(casesVec);
+            switchData->isBlock = arg->isBlock;
+            switchData->insertCol = arg->insertCol;
+            switchData->sb = sb;
+
+            Instruction result;
+            result.value.emplace<5>(std::move(switchData));
+            return result;
         }
         else if constexpr (std::is_same_v<T, std::shared_ptr<tpp::CallInstr>>)
         {
-            nlohmann::json argsJson = nlohmann::json::array();
+            std::vector<CallArgInfo> argsVec;
             for (size_t i = 0; i < arg->arguments.size(); ++i)
             {
                 auto fl = lookupField(arg->arguments[i].path, ir);
-                argsJson.push_back({
-                    {"path", arg->arguments[i].path},
-                    {"isRecursive", fl.recursive},
-                    {"isOptional", fl.optional}
-                });
+                argsVec.push_back({arg->arguments[i].path, fl.recursive, fl.optional});
             }
-            nlohmann::json polRef = makePolicyRef(activePolicy, ir);
-            nlohmann::json callJson = {
-                {"functionName", cfg.functionPrefix + arg->functionName},
-                {"args", argsJson},
-                {"sb", sb},
-                {"needsTry", cfg.callNeedsTry && !ir.policies.all().empty()}
-            };
-            if (!polRef.is_null())
-                callJson["policyArg"] = polRef;
-            return {{"Call", callJson}};
+
+            CallData callData;
+            callData.functionName = cfg.functionPrefix + arg->functionName;
+            callData.args = std::move(argsVec);
+            callData.sb = sb;
+            callData.needsTry = cfg.callNeedsTry && !ir.policies.all().empty();
+            callData.policyArg = makePolicyRef(activePolicy, ir);
+
+            return {std::move(callData)};
         }
         else if constexpr (std::is_same_v<T, std::shared_ptr<tpp::RenderViaInstr>>)
         {
@@ -594,7 +601,7 @@ inline nlohmann::json convertInstruction(
                     overloads.push_back(&fn);
 
             bool isSingleOverload = overloads.size() <= 1;
-            nlohmann::json overloadsJson = nlohmann::json::array();
+            std::vector<RenderViaOverload> overloadsVec;
 
             if (!isSingleOverload)
             {
@@ -621,52 +628,42 @@ inline nlohmann::json convertInstruction(
                         }
                         if (match)
                         {
-                            nlohmann::json ovlJson = {
-                                {"tag", v.tag},
-                                {"tagLit", stringLiteral(v.tag)},
-                                {"isFirst", first}
-                            };
+                            RenderViaOverload ovlData;
+                            ovlData.tag = v.tag;
+                            ovlData.tagLit = stringLiteral(v.tag);
+                            ovlData.isFirst = first;
                             if (v.payload.has_value())
-                                ovlJson["payloadType"] = typeRefToContext(*v.payload);
-                            overloadsJson.push_back(ovlJson);
+                                ovlData.payloadType = std::make_unique<TypeKind>(typeRefToContext(*v.payload));
+                            overloadsVec.push_back(std::move(ovlData));
                             first = false;
                         }
                     }
                 }
             }
 
-            nlohmann::json rvia = {
-                {"scopeId", s},
-                {"collPath", arg->collection.path},
-                {"elemType", typeRefToContext(elemType)},
-                {"functionName", cfg.functionPrefix + arg->functionName},
-                {"hasSep", !arg->sep.empty()},
-                {"sepLit", !arg->sep.empty()
-                    ? stringLiteral(arg->sep) : ""},
-                {"hasFollowed", !arg->followedBy.empty()},
-                {"followedByLit", !arg->followedBy.empty()
-                    ? stringLiteral(arg->followedBy) : ""},
-                {"hasPreceded", !arg->precededBy.empty()},
-                {"precededByLit", !arg->precededBy.empty()
-                    ? stringLiteral(arg->precededBy) : ""},
-                {"sb", sb},
-                {"isSingleOverload", isSingleOverload},
-                {"overloads", overloadsJson},
-                {"needsTry", cfg.callNeedsTry && !ir.policies.all().empty()}
-            };
+            RenderViaData rvia;
+            rvia.scopeId = s;
+            rvia.collPath = fixCppPath(arg->collection.path, ir);
+            rvia.elemType = std::make_unique<TypeKind>(typeRefToContext(elemType));
+            rvia.functionName = cfg.functionPrefix + arg->functionName;
+            rvia.hasSep = !arg->sep.empty();
+            rvia.sepLit = !arg->sep.empty() ? stringLiteral(arg->sep) : "";
+            rvia.hasFollowed = !arg->followedBy.empty();
+            rvia.followedByLit = !arg->followedBy.empty() ? stringLiteral(arg->followedBy) : "";
+            rvia.hasPreceded = !arg->precededBy.empty();
+            rvia.precededByLit = !arg->precededBy.empty() ? stringLiteral(arg->precededBy) : "";
+            rvia.sb = sb;
+            rvia.isSingleOverload = isSingleOverload;
+            rvia.overloads = std::move(overloadsVec);
+            rvia.needsTry = cfg.callNeedsTry && !ir.policies.all().empty();
+            rvia.policyArg = makePolicyRef(
+                arg->policy.empty() ? activePolicy : arg->policy, ir);
 
-            {
-                nlohmann::json polRef = makePolicyRef(
-                    arg->policy.empty() ? activePolicy : arg->policy, ir);
-                if (!polRef.is_null())
-                    rvia["policyArg"] = polRef;
-            }
-
-            return {{"RenderVia", rvia}};
+            return {std::move(rvia)};
         }
         else
         {
-            return nlohmann::json::object();
+            return {EmitData{"", ""}};
         }
     }, instr);
 }
@@ -684,150 +681,138 @@ inline std::string sanitizeIdentifier(const std::string &tag)
 // Build CodegenInput — shared across all backends
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// Build the shared CodegenInput JSON from the IR.
+/// Build the shared CodegenInput from the IR.
 /// Populates structs, enums, functions, and hasRecursiveTypes.
 /// Backend-specific fields (rawTypedefs, iRepJson, functionPrefix, includes,
 /// namespaceName) are set to defaults and should be overridden by callers.
-inline nlohmann::json buildCodegenInput(const tpp::IR &ir)
+inline CodegenInput buildCodegenInput(const tpp::IR &ir)
 {
     // ── Structs ──
-    nlohmann::json structs = nlohmann::json::array();
+    std::vector<StructInfo> structs;
     bool hasRecursiveTypes = false;
     for (const auto &s : ir.types.structs)
     {
-        nlohmann::json fields = nlohmann::json::array();
+        std::vector<FieldInfo> fields;
         for (const auto &f : s.fields)
         {
             bool isOpt = std::holds_alternative<std::shared_ptr<tpp::OptionalType>>(f.type);
-            nlohmann::json innerTypeCtx = typeRefToContext(f.type);
+            TypeKind innerTypeCtx = typeRefToContext(f.type);
             if (isOpt)
             {
                 auto &opt = std::get<std::shared_ptr<tpp::OptionalType>>(f.type);
                 innerTypeCtx = typeRefToContext(opt->innerType);
             }
 
-            nlohmann::json field = {
-                {"name", f.name},
-                {"type", typeRefToContext(f.type)},
-                {"recursive", f.recursive},
-                {"isOptional", isOpt},
-                {"recursiveOptional", f.recursive && isOpt},
-                {"innerType", innerTypeCtx}
-            };
-            if (!f.doc.empty()) field["doc"] = f.doc;
-            fields.push_back(field);
+            FieldInfo field;
+            field.name = f.name;
+            field.type = std::make_unique<TypeKind>(typeRefToContext(f.type));
+            field.recursive = f.recursive;
+            field.isOptional = isOpt;
+            field.recursiveOptional = f.recursive && isOpt;
+            field.innerType = std::make_unique<TypeKind>(std::move(innerTypeCtx));
+            if (!f.doc.empty()) field.doc = f.doc;
+            fields.push_back(std::move(field));
             if (f.recursive) hasRecursiveTypes = true;
         }
-        nlohmann::json structInfo = {{"name", s.name}, {"fields", fields}};
-        if (!s.doc.empty()) structInfo["doc"] = s.doc;
-        structs.push_back(structInfo);
+        StructInfo structInfo;
+        structInfo.name = s.name;
+        structInfo.fields = std::move(fields);
+        if (!s.doc.empty()) structInfo.doc = s.doc;
+        structs.push_back(std::move(structInfo));
     }
 
     // ── Enums ──
-    nlohmann::json enums = nlohmann::json::array();
+    std::vector<EnumInfo> enums;
     for (const auto &e : ir.types.enums)
     {
-        nlohmann::json variants = nlohmann::json::array();
+        std::vector<VariantInfo> variants;
         bool hasRecursive = false;
         int variantIndex = 0;
         for (const auto &v : e.variants)
         {
-            nlohmann::json variant = {
-                {"tag", v.tag},
-                {"recursive", v.recursive},
-                {"index", variantIndex++}
-            };
+            VariantInfo variant;
+            variant.tag = v.tag;
+            variant.recursive = v.recursive;
+            variant.index = variantIndex++;
             if (v.payload.has_value())
-                variant["payload"] = typeRefToContext(*v.payload);
-            if (!v.doc.empty()) variant["doc"] = v.doc;
-            variants.push_back(variant);
+                variant.payload = std::make_unique<TypeKind>(typeRefToContext(*v.payload));
+            if (!v.doc.empty()) variant.doc = v.doc;
+            variants.push_back(std::move(variant));
             if (v.recursive) hasRecursive = true;
         }
-        nlohmann::json enumInfo = {
-            {"name", e.name},
-            {"variants", variants},
-            {"hasRecursiveVariants", hasRecursive}
-        };
-        if (!e.doc.empty()) enumInfo["doc"] = e.doc;
-        enums.push_back(enumInfo);
+        EnumInfo enumInfo;
+        enumInfo.name = e.name;
+        enumInfo.variants = std::move(variants);
+        enumInfo.hasRecursiveVariants = hasRecursive;
+        if (!e.doc.empty()) enumInfo.doc = e.doc;
+        enums.push_back(std::move(enumInfo));
     }
 
     // ── Functions ──
-    nlohmann::json functions = nlohmann::json::array();
+    std::vector<FunctionInfo> functions;
     for (const auto &fn : ir.functions)
     {
-        nlohmann::json params = nlohmann::json::array();
+        std::vector<ParamInfo> params;
         for (const auto &p : fn.params)
-        {
-            params.push_back({
-                {"name", p.name},
-                {"type", typeRefToContext(p.type)}
-            });
-        }
-        nlohmann::json funcInfo = {{"name", fn.name}, {"params", params}};
-        if (!fn.doc.empty()) funcInfo["doc"] = fn.doc;
-        functions.push_back(funcInfo);
+            params.push_back({p.name, std::make_unique<TypeKind>(typeRefToContext(p.type))});
+        FunctionInfo funcInfo;
+        funcInfo.name = fn.name;
+        funcInfo.params = std::move(params);
+        if (!fn.doc.empty()) funcInfo.doc = fn.doc;
+        functions.push_back(std::move(funcInfo));
     }
 
-    return {
-        {"structs", structs},
-        {"enums", enums},
-        {"functions", functions},
-        {"hasRecursiveTypes", hasRecursiveTypes},
-        {"rawTypedefs", ""},
-        {"iRepJson", ""},
-        {"functionPrefix", ""},
-        {"includes", nlohmann::json::array()}
-    };
+    CodegenInput result;
+    result.structs = std::move(structs);
+    result.enums = std::move(enums);
+    result.functions = std::move(functions);
+    result.hasRecursiveTypes = hasRecursiveTypes;
+    return result;
 }
 
-/// Build the policy context JSON array.
-inline nlohmann::json buildPolicyContext(const tpp::IR &ir, const std::string &nullLiteral)
+/// Build the policy context.
+inline std::vector<PolicyInfo> buildPolicyContext(const tpp::IR &ir, const std::string &nullLiteral)
 {
-    nlohmann::json policies = nlohmann::json::array();
+    std::vector<PolicyInfo> policies;
     for (const auto &[tag_, pol] : ir.policies.all())
     {
-        nlohmann::json pj;
-        pj["tagLit"] = stringLiteral(pol.tag);
-        pj["identifier"] = sanitizeIdentifier(pol.tag);
-        pj["hasLength"] = pol.length.has_value();
-        pj["minVal"] = pol.length.has_value() && pol.length->min.has_value()
+        PolicyInfo pj;
+        pj.tagLit = stringLiteral(pol.tag);
+        pj.identifier = sanitizeIdentifier(pol.tag);
+        pj.hasLength = pol.length.has_value();
+        pj.minVal = pol.length.has_value() && pol.length->min.has_value()
                        ? std::to_string(*pol.length->min) : nullLiteral;
-        pj["maxVal"] = pol.length.has_value() && pol.length->max.has_value()
+        pj.maxVal = pol.length.has_value() && pol.length->max.has_value()
                        ? std::to_string(*pol.length->max) : nullLiteral;
-        pj["hasRejectIf"] = pol.rejectIf.has_value();
-        pj["rejectIfRegexLit"] = pol.rejectIf.has_value()
+        pj.hasRejectIf = pol.rejectIf.has_value();
+        pj.rejectIfRegexLit = pol.rejectIf.has_value()
                                  ? stringLiteral(pol.rejectIf->regex) : "";
-        pj["rejectMsgLit"] = pol.rejectIf.has_value()
+        pj.rejectMsgLit = pol.rejectIf.has_value()
                              ? stringLiteral(pol.rejectIf->message) : "";
 
-        nlohmann::json reqArr = nlohmann::json::array();
+        std::vector<PolicyRequireInfo> reqArr;
         for (const auto &r : pol.require)
             reqArr.push_back({
-                {"regexLit", stringLiteral(r.regex)},
-                {"replaceLit", !r.replace.empty()
-                    ? stringLiteral(r.compiled_replace) : ""},
-                {"hasReplace", !r.replace.empty()}
+                stringLiteral(r.regex),
+                !r.replace.empty() ? stringLiteral(r.compiled_replace) : "",
+                !r.replace.empty()
             });
-        pj["require"] = reqArr;
-        pj["hasRequire"] = !pol.require.empty();
+        pj.require = std::move(reqArr);
+        pj.hasRequire = !pol.require.empty();
 
-        nlohmann::json replArr = nlohmann::json::array();
+        std::vector<PolicyReplacementInfo> replArr;
         for (const auto &r : pol.replacements)
-            replArr.push_back({
-                {"findLit", stringLiteral(r.find)},
-                {"replaceLit", stringLiteral(r.replace)}
-            });
-        pj["replacements"] = replArr;
-        pj["hasReplacements"] = !pol.replacements.empty();
+            replArr.push_back({stringLiteral(r.find), stringLiteral(r.replace)});
+        pj.replacements = std::move(replArr);
+        pj.hasReplacements = !pol.replacements.empty();
 
-        nlohmann::json ofArr = nlohmann::json::array();
+        std::vector<PolicyOutputFilterInfo> ofArr;
         for (const auto &f : pol.outputFilter)
-            ofArr.push_back({{"regexLit", stringLiteral(f.regex)}});
-        pj["outputFilter"] = ofArr;
-        pj["hasOutputFilter"] = !pol.outputFilter.empty();
+            ofArr.push_back({stringLiteral(f.regex)});
+        pj.outputFilter = std::move(ofArr);
+        pj.hasOutputFilter = !pol.outputFilter.empty();
 
-        policies.push_back(pj);
+        policies.push_back(std::move(pj));
     }
     return policies;
 }

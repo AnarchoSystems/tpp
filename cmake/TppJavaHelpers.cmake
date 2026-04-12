@@ -60,26 +60,40 @@ function(tpp_java_add target_name)
     # Step 1: tpp → IR JSON
     add_custom_command(
         OUTPUT "${ir_json}"
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${java_dir}"
-        COMMAND $<TARGET_FILE:tpp> "${TJ_TEST_DIR}" > "${ir_json}"
+        COMMAND ${CMAKE_COMMAND}
+            -DCMD=$<TARGET_FILE:tpp>
+            "-DARGS=${TJ_TEST_DIR}"
+            -DOUT=${ir_json}
+            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
         DEPENDS $<TARGET_FILE:tpp> ${test_case_files}
         COMMENT "tpp ${TJ_NAME} → IR JSON"
+        VERBATIM
     )
 
     # Step 2: tpp2java → Generated.java (types + function stubs)
     add_custom_command(
         OUTPUT "${generated_src}"
-        COMMAND $<TARGET_FILE:tpp2java> --input "${ir_json}" > "${generated_src}"
+        COMMAND ${CMAKE_COMMAND}
+            -DCMD=$<TARGET_FILE:tpp2java>
+            "-DARGS=source;--input;${ir_json}"
+            -DOUT=${generated_src}
+            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
         DEPENDS $<TARGET_FILE:tpp2java> "${ir_json}"
-        COMMENT "tpp2java ${TJ_NAME} → Generated.java"
+        COMMENT "tpp2java source ${TJ_NAME}"
+        VERBATIM
     )
 
     # Step 3: make-java-test → Test.java (test harness)
     add_custom_command(
         OUTPUT "${test_src}"
-        COMMAND $<TARGET_FILE:make-java-test> "${TJ_TEST_DIR}" > "${test_src}"
+        COMMAND ${CMAKE_COMMAND}
+            -DCMD=$<TARGET_FILE:make-java-test>
+            "-DARGS=${TJ_TEST_DIR}"
+            -DOUT=${test_src}
+            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
         DEPENDS $<TARGET_FILE:make-java-test> ${test_case_files}
         COMMENT "make-java-test ${TJ_NAME} → Test.java"
+        VERBATIM
     )
 
     # Step 4: javac — compile both together

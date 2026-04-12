@@ -44,26 +44,40 @@ function(tpp_swift_add target_name)
     # Step 1: tpp → IR JSON
     add_custom_command(
         OUTPUT "${ir_json}"
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${swift_dir}"
-        COMMAND $<TARGET_FILE:tpp> "${TS_TEST_DIR}" > "${ir_json}"
+        COMMAND ${CMAKE_COMMAND}
+            -DCMD=$<TARGET_FILE:tpp>
+            "-DARGS=${TS_TEST_DIR}"
+            -DOUT=${ir_json}
+            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
         DEPENDS $<TARGET_FILE:tpp> ${test_case_files}
         COMMENT "tpp ${TS_NAME} → IR JSON"
+        VERBATIM
     )
 
     # Step 2: tpp2swift → Generated.swift (types + function stubs)
     add_custom_command(
         OUTPUT "${generated_src}"
-        COMMAND $<TARGET_FILE:tpp2swift> --input "${ir_json}" > "${generated_src}"
+        COMMAND ${CMAKE_COMMAND}
+            -DCMD=$<TARGET_FILE:tpp2swift>
+            "-DARGS=source;--input;${ir_json}"
+            -DOUT=${generated_src}
+            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
         DEPENDS $<TARGET_FILE:tpp2swift> "${ir_json}"
-        COMMENT "tpp2swift ${TS_NAME} → Generated.swift"
+        COMMENT "tpp2swift source ${TS_NAME}"
+        VERBATIM
     )
 
     # Step 3: make-swift-test → Test.swift (test harness)
     add_custom_command(
         OUTPUT "${test_src}"
-        COMMAND $<TARGET_FILE:make-swift-test> "${TS_TEST_DIR}" > "${test_src}"
+        COMMAND ${CMAKE_COMMAND}
+            -DCMD=$<TARGET_FILE:make-swift-test>
+            "-DARGS=${TS_TEST_DIR}"
+            -DOUT=${test_src}
+            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
         DEPENDS $<TARGET_FILE:make-swift-test> ${test_case_files}
         COMMENT "make-swift-test ${TS_NAME} → main.swift"
+        VERBATIM
     )
 
     # Step 4: swiftc — compile both together

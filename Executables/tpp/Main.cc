@@ -13,10 +13,6 @@ using namespace tpp;
 // finally, compile.
 // if not successful, print diagnostics to stderr in a format that vscode's problem matcher gcc can understand it.
 // if successful, serialize the IR to stdout as JSON.
-// possible flags:
-// -h, --help: print usage info
-// -v, --verbose: this run is not meant to be machine readable, pretty print any output and print what you're doing to stdout
-// --log <file>: also log output to the specified file (for debugging tpp itself)
 
 // Returns true if the string matches the glob pattern (supports '*' wildcard only).
 static bool matchGlob(const std::string &pattern, const std::string &text)
@@ -83,13 +79,9 @@ static std::vector<fs::path> expandPattern(const fs::path &baseDir, const std::s
 
 struct tppApp
 {
-    bool verbose = false;
-    std::ofstream logFile;
     std::string inputDirectory;
     tppApp(int argc, char *argv[]);
-    void log(const std::string &message);
     void run();
-    ~tppApp();
 };
 
 int main(int argc, char *argv[])
@@ -100,35 +92,18 @@ int main(int argc, char *argv[])
 
 tppApp::tppApp(int argc, char *argv[])
 {
-    std::string logFilePath;
     for (int i = 1; i < argc; ++i)
     {
         std::string arg = argv[i];
         if (arg == "-h" || arg == "--help")
         {
-            std::cout << "Usage: tpp [options] [folder]\n"
-                         "Options:\n"
-                         "  -h, --help       Show this help message\n"
-                         "  -v, --verbose    Print verbose output\n"
-                         "  --log <file>     Log output to the specified file\n"
+            std::cout << "Usage: tpp [folder]\n"
                          "\n"
+                         "Compiles .tpp and .tpp.types files to JSON IR on stdout.\n"
                          "The folder must contain a tpp-config.json file specifying which .tpp files\n"
                          "are type definitions and which are templates:\n"
                          "  {\"types\": [\"types.tpp\", \"types/*\"], \"templates\": [\"templates/*\"]}\n";
             exit(0);
-        }
-        else if (arg == "-v" || arg == "--verbose")
-        {
-            verbose = true;
-        }
-        else if (arg == "--log")
-        {
-            if (i + 1 >= argc)
-            {
-                std::cerr << "Error: --log option requires a file path argument\n";
-                exit(1);
-            }
-            logFilePath = argv[++i];
         }
         else
         {
@@ -141,39 +116,9 @@ tppApp::tppApp(int argc, char *argv[])
         }
     }
 
-    if (!logFilePath.empty())
-    {
-        logFile.open(logFilePath);
-        if (!logFile.is_open())
-        {
-            std::cerr << "Error: Could not open log file: " << logFilePath << "\n";
-            exit(1);
-        }
-    }
-
     if (inputDirectory.empty())
     {
         inputDirectory = ".";
-    }
-}
-
-tppApp::~tppApp()
-{
-    if (logFile.is_open())
-    {
-        logFile.close();
-    }
-}
-
-void tppApp::log(const std::string &message)
-{
-    if (verbose)
-    {
-        std::cout << message << std::endl;
-    }
-    if (logFile.is_open())
-    {
-        logFile << message << std::endl;
     }
 }
 
@@ -232,7 +177,6 @@ void tppApp::run()
     {
         if (fe.isTypes)
         {
-            log("Found typedefs file: " + fe.path);
             diags.push_back(DiagnosticLSPMessage(fe.path));
             std::ifstream file(fe.path);
             if (!file.is_open())
@@ -245,7 +189,6 @@ void tppApp::run()
         }
         else
         {
-            log("Found template file: " + fe.path);
             diags.push_back(DiagnosticLSPMessage(fe.path));
             std::ifstream file(fe.path);
             if (!file.is_open())
@@ -257,7 +200,6 @@ void tppApp::run()
             compiler.add_templates(templates, diags.back().diagnostics);
         }
     }
-    log("Finished loading files. Compiling...");
 
     // Load replacement policies
     for (const auto &policyEntry : config.value("replacement-policies", nlohmann::json::array()))
@@ -294,24 +236,13 @@ void tppApp::run()
     if (success)
     {
         nlohmann::json j = output;
-        log("Successfully compiled. Output:");
-        log(j.dump(4));
-        log("Outputting JSON to stdout...");
         std::cout << j.dump() << std::endl;
-    }
-    else
-    {
-        log("Compilation failed. Diagnostics:");
     }
     for (const auto &diag : diags)
     {
         for (const auto &diagnostic : diag.toGCCDiagnostics())
         {
-            log(diagnostic);
-            if (!verbose)
-            {
-                std::cerr << diagnostic << std::endl;
-            }
+            std::cerr << diagnostic << std::endl;
         }
     }
     exit(success ? EXIT_SUCCESS : EXIT_FAILURE);

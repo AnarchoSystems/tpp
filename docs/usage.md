@@ -36,7 +36,7 @@ A standalone **C++ library** (`lib_tpp`) is also available for cases where you w
 ### Synopsis
 
 ```
-tpp [options] [folder]
+tpp [folder]
 ```
 
 If `folder` is omitted, the current working directory is used.
@@ -46,8 +46,6 @@ If `folder` is omitted, the current working directory is used.
 | Option | Short | Description |
 |---|---|---|
 | `--help` | `-h` | Print usage information and exit |
-| `--verbose` | `-v` | Pretty-print the output and log progress to stdout (human-readable mode) |
-| `--log <file>` | | Also write all output to the specified log file (for debugging) |
 
 ### How It Works
 
@@ -119,35 +117,38 @@ This is useful in shell pipelines, test scripts, and CI workflows where you want
 ### Synopsis
 
 ```
-tpp2cpp [options]
+tpp2cpp <command> [options]
 ```
 
 The intermediate representation JSON is read from stdin by default, or from a file with `--input`.
 
+### Commands
+
+| Command | Description |
+|---|---|
+| `types` | Generate a types header (`_types.h`) |
+| `functions` | Generate a functions header (`_functions.h`) |
+| `impl` | Generate a function implementations file (`_implementation.cc`) |
+| `runtime` | Generate a standalone runtime helpers header |
+
 ### Options
 
-| Option | Short | Description |
-|---|---|---|
-| `--help` | `-h` | Print usage information and exit |
-| `--verbose` | `-v` | Print verbose output |
-| `--log <file>` | | Also write output to a log file |
-| `--namespace <name>` | `-ns` | Wrap all generated code in a C++ namespace |
-| `--types` | `-t` | Generate a types header (`_types.h`) |
-| `--functions` | `-fun` | Generate a functions header (`_functions.h`) |
-| `--implementation` | `-impl` | Generate a function implementations file (`_implementation.cc`) |
-| `--include <file>` | `-i` | Add an `#include` directive at the top of the generated file (repeatable) |
-| `--input <file>` | | Read intermediate representation from `<file>` instead of stdin |
-
-Exactly one of `--types`, `--functions`, or `--implementation` must be specified.
+| Option | Description |
+|---|---|
+| `-h`, `--help` | Print usage information and exit |
+| `-ns <name>` | Wrap all generated code in a C++ namespace |
+| `-i <file>` | Add an `#include` directive at the top of the generated file (repeatable) |
+| `--input <file>` | Read intermediate representation from `<file>` instead of stdin |
+| `--extern-runtime` | Suppress inlining runtime helpers |
 
 ### Three-Step Code Generation
 
 tpp2cpp produces three separate files that work together:
 
-#### Step 1: Types Header (`-t`)
+#### Step 1: Types Header (`types`)
 
 ```bash
-tpp ./project | tpp2cpp -t -ns myns > project_types.h
+tpp ./project | tpp2cpp types -ns myns > project_types.h
 ```
 
 Generates a header containing all C++ struct and enum definitions, with:
@@ -156,10 +157,10 @@ Generates a header containing all C++ struct and enum definitions, with:
 - Correct declaration ordering (enums before structs, 4-pass structure for circular deps)
 - `std::unique_ptr<T>` for recursive fields
 
-#### Step 2: Functions Header (`-fun`)
+#### Step 2: Functions Header (`functions`)
 
 ```bash
-tpp ./project | tpp2cpp -fun -ns myns -i project_types.h > project_functions.h
+tpp ./project | tpp2cpp functions -ns myns -i project_types.h > project_functions.h
 ```
 
 Generates a header declaring one C++ function per template:
@@ -172,10 +173,10 @@ namespace myns {
 }
 ```
 
-#### Step 3: Implementation (`-impl`)
+#### Step 3: Implementation (`impl`)
 
 ```bash
-tpp ./project | tpp2cpp -impl -ns myns -i project_functions.h > project_implementation.cc
+tpp ./project | tpp2cpp impl -ns myns -i project_functions.h > project_implementation.cc
 ```
 
 Generates the `.cc` file with the function bodies. At the moment, this just serializes the input parameters and hands them to a `IR` rendered into the source. A data structure that makes it possible to render the template with native c++ code is planned for later (this should make it possible to render other languages as well).
@@ -336,9 +337,9 @@ target_link_libraries(mylib PRIVATE lib_tpp)
 ### What `tpp_add()` Does
 
 1. Runs `tpp <SOURCE_DIR>` → `<NAME>-tpp.json`
-2. Runs `tpp2cpp -t` on the JSON → `<NAME>_types.h`
-3. Runs `tpp2cpp -fun` → `<NAME>_functions.h`
-4. Runs `tpp2cpp -impl` → `<NAME>_implementation.cc`
+2. Runs `tpp2cpp types` on the JSON → `<NAME>_types.h`
+3. Runs `tpp2cpp functions` → `<NAME>_functions.h`
+4. Runs `tpp2cpp impl` → `<NAME>_implementation.cc`
 
 The implementation `.cc` is added as a private source to `<target>`. The generated headers are accessible via the target's include directories — no extra `target_include_directories()` call needed.
 

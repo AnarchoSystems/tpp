@@ -1,6 +1,6 @@
-/// Shared type definitions for all tpp code generation backends.
-/// Contains instruction IR types and policy types used identically
-/// by tpp2swift, tpp2java, and any future backend.
+// Shared type definitions for all tpp code generation backends.
+// Contains instruction IR types and policy types used identically
+// by tpp2swift, tpp2java, and any future backend.
 
 enum TypeKind
 {
@@ -232,6 +232,7 @@ struct StructInfo
     name : string;
     fields : list<FieldInfo>;
     doc : optional<string>;
+    rawTypedefs : string;
 }
 
 struct VariantInfo
@@ -249,6 +250,7 @@ struct EnumInfo
     variants : list<VariantInfo>;
     hasRecursiveVariants : bool;
     doc : optional<string>;
+    rawTypedefs : string;
 }
 
 struct ParamInfo

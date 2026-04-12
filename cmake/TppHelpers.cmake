@@ -58,7 +58,7 @@ function(tpp_add target_name)
         set(ns_args -ns "${TPP_NAMESPACE}")
     endif()
 
-    # Build the -i include list for tpp2cpp -fun and -impl
+    # Build the -i include list for tpp2cpp functions and impl
     set(extra_include_args "")
     foreach(inc IN LISTS TPP_EXTRA_INCLUDES)
         list(APPEND extra_include_args -i "${inc}")
@@ -67,39 +67,56 @@ function(tpp_add target_name)
     # Step 1: compile templates to JSON
     add_custom_command(
         OUTPUT "${out_json}"
-        COMMAND $<TARGET_FILE:tpp> "${TPP_SOURCE_DIR}" > "${out_json}"
+        COMMAND ${CMAKE_COMMAND}
+            -DCMD=$<TARGET_FILE:tpp>
+            "-DARGS=${TPP_SOURCE_DIR}"
+            -DOUT=${out_json}
+            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
         DEPENDS $<TARGET_FILE:tpp> ${tpp_source_files}
         COMMENT "tpp ${out_prefix}"
+        VERBATIM
     )
 
     # Step 2: generate C++ types header
+    set(_types_args types ${ns_args} --input "${out_json}")
     add_custom_command(
         OUTPUT "${out_types}"
-        COMMAND $<TARGET_FILE:tpp2cpp> -t ${ns_args} --input "${out_json}" > "${out_types}"
+        COMMAND ${CMAKE_COMMAND}
+            -DCMD=$<TARGET_FILE:tpp2cpp>
+            "-DARGS=${_types_args}"
+            -DOUT=${out_types}
+            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
         DEPENDS $<TARGET_FILE:tpp2cpp> "${out_json}"
         COMMENT "tpp2cpp types ${out_prefix}"
+        VERBATIM
     )
 
     # Step 3: generate C++ functions header (includes types header)
+    set(_funs_args functions ${ns_args} -i "${out_prefix}_types.h" ${extra_include_args} --input "${out_json}")
     add_custom_command(
         OUTPUT "${out_funs}"
-        COMMAND $<TARGET_FILE:tpp2cpp> -fun ${ns_args}
-                -i "${out_prefix}_types.h"
-                ${extra_include_args}
-                --input "${out_json}" > "${out_funs}"
+        COMMAND ${CMAKE_COMMAND}
+            -DCMD=$<TARGET_FILE:tpp2cpp>
+            "-DARGS=${_funs_args}"
+            -DOUT=${out_funs}
+            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
         DEPENDS $<TARGET_FILE:tpp2cpp> "${out_json}"
         COMMENT "tpp2cpp functions ${out_prefix}"
+        VERBATIM
     )
 
     # Step 4: generate C++ implementation (includes functions header)
+    set(_impl_args impl ${ns_args} -i "${out_prefix}_functions.h" ${extra_include_args} --input "${out_json}")
     add_custom_command(
         OUTPUT "${out_impl}"
-        COMMAND $<TARGET_FILE:tpp2cpp> -impl ${ns_args}
-                -i "${out_prefix}_functions.h"
-                ${extra_include_args}
-                --input "${out_json}" > "${out_impl}"
+        COMMAND ${CMAKE_COMMAND}
+            -DCMD=$<TARGET_FILE:tpp2cpp>
+            "-DARGS=${_impl_args}"
+            -DOUT=${out_impl}
+            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
         DEPENDS $<TARGET_FILE:tpp2cpp> "${out_json}" "${out_funs}" "${out_types}"
-        COMMENT "tpp2cpp implementation ${out_prefix}"
+        COMMENT "tpp2cpp impl ${out_prefix}"
+        VERBATIM
     )
 
     # Add generated sources directly to the existing target.

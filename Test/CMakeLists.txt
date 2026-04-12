@@ -130,9 +130,14 @@ foreach(test_name IN LISTS tpp_success_cases)
     set(out_test ${CMAKE_CURRENT_BINARY_DIR}/${test_name}_test.cc)
 
     add_custom_command(OUTPUT ${out_test}
-        COMMAND $<TARGET_FILE:make-stat-test> ${test_dir} > ${out_test}
+        COMMAND ${CMAKE_COMMAND}
+            -DCMD=$<TARGET_FILE:make-stat-test>
+            "-DARGS=${test_dir}"
+            -DOUT=${out_test}
+            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
         DEPENDS $<TARGET_FILE:make-stat-test> ${test_case_files}
-        COMMENT "make-stat-test ${test_name}")
+        COMMENT "make-stat-test ${test_name}"
+        VERBATIM)
 
     list(APPEND cpp_test_sources ${out_test})
 endforeach()
