@@ -1,10 +1,3 @@
-template render_templates(types: string, template: string)
-#pragma once
-
-constexpr char types_content[] = @types@;
-constexpr char template_content[] =  @template@;
-END
-
 template render_cpp_types(input: CodegenInput, includes: list<string>, namespaceName: optional<string>)
 #pragma once
 @for inc in includes@

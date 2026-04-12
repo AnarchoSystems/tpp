@@ -1,4 +1,4 @@
-#include <tpp/Compiler.h>
+#include <tpp/IR.h>
 #include <tpp/Instruction.h>
 #include <CodegenHelpers.h>
 #include "defs.h"
@@ -179,24 +179,16 @@ static codegen::RenderFunctionsInput buildFunctionsContext(
     const std::vector<std::string> &includes,
     const std::string &namespaceName);
 
+static const tpp::IR &mainIR()
+{
+    static const tpp::IR result =
+        nlohmann::json::parse(defs_ir_json).get<tpp::IR>();
+    return result;
+}
+
 void tpp2cpp::run()
 {
-    tpp::Compiler compiler;
-    tpp::IR iRep;
-
-    std::vector<tpp::DiagnosticLSPMessage> diagnostics;
-    diagnostics.reserve(2);
-
-    compiler.add_types(types_content, diagnostics.emplace_back("defs.tpp.types").diagnostics);
-    compiler.add_templates(template_content, diagnostics.emplace_back("defs.tpp").diagnostics);
-
-    if (!compiler.compile(iRep))
-    {
-        for (const auto &msg : diagnostics)
-            for (auto &d : msg.toGCCDiagnostics())
-                std::cerr << d << std::endl;
-        exit(EXIT_FAILURE);
-    }
+    const auto &iRep = mainIR();
 
     auto renderFunction = [&](const std::string &fnName, const nlohmann::json &ctx, bool reindentOutput = false) {
         tpp::FunctionSymbol fn;
