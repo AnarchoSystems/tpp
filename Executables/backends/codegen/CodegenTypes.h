@@ -354,14 +354,9 @@ struct CodegenInput
     std::vector<EnumInfo> enums;
     std::vector<FunctionInfo> functions;
     bool hasRecursiveTypes;
-    std::string rawTypedefs;
-    std::string iRepJson;
-    std::string functionPrefix;
-    std::vector<std::string> includes;
-    std::optional<std::string> namespaceName;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct CodegenInput\n{\n    structs : list<StructInfo>;\n    enums : list<EnumInfo>;\n    functions : list<FunctionInfo>;\n    hasRecursiveTypes : bool;\n    rawTypedefs : string;\n    iRepJson : string;\n    functionPrefix : string;\n    includes : list<string>;\n    namespaceName : optional<string>;\n}";
+        return "struct CodegenInput\n{\n    structs : list<StructInfo>;\n    enums : list<EnumInfo>;\n    functions : list<FunctionInfo>;\n    hasRecursiveTypes : bool;\n}";
     }
 };
 struct RenderFunctionDef
@@ -965,11 +960,6 @@ inline void from_json(const nlohmann::json& j, CodegenInput& v)
     j.at("enums").get_to(v.enums);
     j.at("functions").get_to(v.functions);
     j.at("hasRecursiveTypes").get_to(v.hasRecursiveTypes);
-    j.at("rawTypedefs").get_to(v.rawTypedefs);
-    j.at("iRepJson").get_to(v.iRepJson);
-    j.at("functionPrefix").get_to(v.functionPrefix);
-    j.at("includes").get_to(v.includes);
-    if (j.contains("namespaceName") && !j.at("namespaceName").is_null()) v.namespaceName = j.at("namespaceName").get<std::string>();
 }
 inline void to_json(nlohmann::json& j, const CodegenInput& v)
 {
@@ -978,11 +968,6 @@ inline void to_json(nlohmann::json& j, const CodegenInput& v)
     j["enums"] = v.enums;
     j["functions"] = v.functions;
     j["hasRecursiveTypes"] = v.hasRecursiveTypes;
-    j["rawTypedefs"] = v.rawTypedefs;
-    j["iRepJson"] = v.iRepJson;
-    j["functionPrefix"] = v.functionPrefix;
-    j["includes"] = v.includes;
-    if (v.namespaceName.has_value()) j["namespaceName"] = *v.namespaceName;
 }
 inline void from_json(const nlohmann::json& j, RenderFunctionDef& v)
 {

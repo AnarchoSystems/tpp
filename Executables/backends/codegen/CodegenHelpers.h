@@ -683,8 +683,8 @@ inline std::string sanitizeIdentifier(const std::string &tag)
 
 /// Build the shared CodegenInput from the IR.
 /// Populates structs, enums, functions, and hasRecursiveTypes.
-/// Backend-specific fields (rawTypedefs, iRepJson, functionPrefix, includes,
-/// namespaceName) are set to defaults and should be overridden by callers.
+/// Backend-specific data (includes, namespace, etc.) should be passed as
+/// additional template arguments — not stored in CodegenInput.
 inline CodegenInput buildCodegenInput(const tpp::IR &ir)
 {
     // ── Structs ──

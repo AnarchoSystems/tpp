@@ -5,9 +5,9 @@ constexpr char types_content[] = @types@;
 constexpr char template_content[] =  @template@;
 END
 
-template render_cpp_types(input: CodegenInput)
+template render_cpp_types(input: CodegenInput, includes: list<string>, namespaceName: optional<string>)
 #pragma once
-@for inc in input.includes@
+@for inc in includes@
 #include "@inc@"
 @end for@
 #include <nlohmann/json.hpp>
@@ -16,8 +16,8 @@ template render_cpp_types(input: CodegenInput)
 #include <vector>
 #include <optional>
 #include <variant>
-@if input.namespaceName@
-namespace @input.namespaceName@ {
+@if namespaceName@
+namespace @namespaceName@ {
 @end if@
 template<typename _TppT>
 inline nlohmann::json _tpp_j(const _TppT& v) { return nlohmann::json(v); }
@@ -174,49 +174,49 @@ inline void to_json(nlohmann::json& j, const @s.name@& v)
     @end for@
 }
 @end for@
-@if input.namespaceName@
-} // namespace @input.namespaceName@
+@if namespaceName@
+} // namespace @namespaceName@
 @end if@
 END
 
-template render_cpp_functions(input: CodegenInput)
+template render_cpp_functions(input: CodegenInput, includes: list<string>, namespaceName: optional<string>, functionPrefix: string)
 #pragma once
 #include <tpp/ArgType.h>
-@for inc in input.includes@
+@for inc in includes@
 #include "@inc@"
 @end for@
 #include <string>
-@if input.namespaceName@
-namespace @input.namespaceName@ {
+@if namespaceName@
+namespace @namespaceName@ {
 @end if@
 @for function in input.functions@
 @if function.doc@
 /// @function.doc@
 @end if@
-std::string @input.functionPrefix@@function.name@(@for param in function.params | sep=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@);
+std::string @functionPrefix@@function.name@(@for param in function.params | sep=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@);
 @end for@
-@if input.namespaceName@
-} // namespace @input.namespaceName@
+@if namespaceName@
+} // namespace @namespaceName@
 @end if@
 END
 
-template render_cpp_implementation(input: CodegenInput)
-@for inc in input.includes@
+template render_cpp_implementation(input: CodegenInput, includes: list<string>, namespaceName: optional<string>, iRepJson: string, functionPrefix: string)
+@for inc in includes@
 #include "@inc@"
 @end for@
 #include <tpp/Compiler.h>
 #include <nlohmann/json.hpp>
-@if input.namespaceName@
-namespace @input.namespaceName@ {
+@if namespaceName@
+namespace @namespaceName@ {
 @end if@
 static const tpp::IR& _getIR()
 {
     static const tpp::IR co =
-        nlohmann::json::parse(@input.iRepJson@).get<tpp::IR>();
+        nlohmann::json::parse(@iRepJson@).get<tpp::IR>();
     return co;
 }
 @for function in input.functions@
-std::string @input.functionPrefix@@function.name@(@for param in function.params | sep=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@)
+std::string @functionPrefix@@function.name@(@for param in function.params | sep=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@)
 {
     const auto& co = _getIR();
     tpp::FunctionSymbol fs;
@@ -228,8 +228,8 @@ std::string @input.functionPrefix@@function.name@(@for param in function.params 
     return output;
 }
 @end for@
-@if input.namespaceName@
-} // namespace @input.namespaceName@
+@if namespaceName@
+} // namespace @namespaceName@
 @end if@
 END
 

@@ -272,11 +272,6 @@ struct CodegenInput
     enums : list<EnumInfo>;
     functions : list<FunctionInfo>;
     hasRecursiveTypes : bool;
-    rawTypedefs : string;
-    iRepJson : string;
-    functionPrefix : string;
-    includes : list<string>;
-    namespaceName : optional<string>;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

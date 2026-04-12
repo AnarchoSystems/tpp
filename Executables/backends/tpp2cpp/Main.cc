@@ -312,14 +312,12 @@ static nlohmann::json to_render_cpp_type_input(const tpp::IR &iRep,
                                                const std::string &namespaceName)
 {
     codegen::CodegenInput ctx = codegen::buildCodegenInput(iRep);
-    ctx.includes = includes;
-    if (!namespaceName.empty())
-        ctx.namespaceName = namespaceName;
     for (auto &s : ctx.structs)
         s.rawTypedefs = toCppStringLiteral(extractTypeDefinition(iRep.raw_typedefs, "struct", s.name));
     for (auto &e : ctx.enums)
         e.rawTypedefs = toCppStringLiteral(extractTypeDefinition(iRep.raw_typedefs, "enum", e.name));
-    return nlohmann::json(ctx);
+    nlohmann::json ns = namespaceName.empty() ? nlohmann::json() : nlohmann::json(namespaceName);
+    return nlohmann::json::array({nlohmann::json(ctx), nlohmann::json(includes), ns});
 }
 
 static nlohmann::json buildFunctionsInputJson(const tpp::IR &iRep,
@@ -327,11 +325,8 @@ static nlohmann::json buildFunctionsInputJson(const tpp::IR &iRep,
                                           const std::string &namespaceName)
 {
     codegen::CodegenInput ctx = codegen::buildCodegenInput(iRep);
-    ctx.includes = includes;
-    if (!namespaceName.empty())
-        ctx.namespaceName = namespaceName;
-    ctx.iRepJson = toCppStringLiteral(nlohmann::json(iRep).dump());
-    return nlohmann::json(ctx);
+    nlohmann::json ns = namespaceName.empty() ? nlohmann::json() : nlohmann::json(namespaceName);
+    return nlohmann::json::array({nlohmann::json(ctx), nlohmann::json(includes), ns, ""});
 }
 
 static nlohmann::json to_render_cpp_functions_input(const tpp::IR &iRep,
