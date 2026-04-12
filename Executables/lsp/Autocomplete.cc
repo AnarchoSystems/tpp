@@ -1,6 +1,5 @@
 #include "Autocomplete.h"
 #include <tpp/IR.h>
-#include <tpp/Types.h>
 #include <tpp/AST.h>
 #include <map>
 #include <string>
@@ -9,6 +8,18 @@ namespace tpp
 {
 
 // ── Scope: variable name → TypeRef at the cursor position ────────────────────
+
+using TypeRef          = compiler::TypeRef;
+using TypeRegistry     = compiler::TypeRegistry;
+using NamedType        = compiler::NamedType;
+using ListType         = compiler::ListType;
+using OptionalType     = compiler::OptionalType;
+using TemplateFunction = compiler::TemplateFunction;
+using ASTNode          = compiler::ASTNode;
+using Variable         = compiler::Variable;
+using ForNode          = compiler::ForNode;
+using IfNode           = compiler::IfNode;
+using SwitchNode       = compiler::SwitchNode;
 
 using Scope = std::map<std::string, TypeRef>;
 
@@ -21,15 +32,15 @@ using Scope = std::map<std::string, TypeRef>;
 }
 
 // Collect all fields of a TypeRef if it's a named struct.
-static std::vector<FieldDef> fieldsOf(const TypeRef &type, const TypeRegistry &reg)
+static std::vector<compiler::FieldDef> fieldsOf(const TypeRef &type, const TypeRegistry &reg)
 {
-    return std::visit([&](auto &&arg) -> std::vector<FieldDef>
+    return std::visit([&](auto &&arg) -> std::vector<compiler::FieldDef>
     {
         using T = std::decay_t<decltype(arg)>;
         if constexpr (std::is_same_v<T, NamedType>)
         {
             auto it = reg.nameIndex.find(arg.name);
-            if (it != reg.nameIndex.end() && it->second.kind == TypeKind::Struct)
+            if (it != reg.nameIndex.end() && it->second.kind == compiler::TypeKind::Struct)
                 return reg.structs[it->second.index].fields;
         }
         else if constexpr (std::is_same_v<T, std::shared_ptr<ListType>>)
@@ -156,13 +167,12 @@ nlohmann::json computeCompletions(const std::string &uri,
                                   const TppProject &project)
 {
     nlohmann::json result = nlohmann::json::array();
-    const auto &output = project.output();
-    const auto &reg = output.types;
+    const auto &reg = project.compiler().types;
 
     // Build initial scope from the function that contains (line, character)
     Scope scope;
     const TemplateFunction *enclosingFunc = nullptr;
-    for (const auto &func : output.functions)
+    for (const auto &func : project.compiler().functions)
     {
         if (func.sourceRange.start.line <= line)
         {
@@ -206,7 +216,7 @@ nlohmann::json computeCompletions(const std::string &uri,
         result.push_back(makeItem(name, 6 /*Variable*/, {}, 0));
 
     // Function names (medium priority)
-    for (const auto &func : output.functions)
+    for (const auto &func : project.compiler().functions)
         result.push_back(makeItem(func.name, 3 /*Function*/, {}, 1));
 
     // Type names — only useful in .tpp.types files, not in templates

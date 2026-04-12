@@ -6,7 +6,7 @@
 #include <map>
 #include <set>
 
-namespace tpp
+namespace tpp::compiler
 {
 
     // ═══════════════════════════════════════════════════════════════════
@@ -711,9 +711,14 @@ namespace tpp
         }
     }
 
+} // namespace tpp::compiler
+
+namespace tpp
+{
+
     void Compiler::clear_types() noexcept
     {
-        types = TypeRegistry{};
+        types = compiler::TypeRegistry{};
         pendingSources_.erase(
             std::remove_if(pendingSources_.begin(), pendingSources_.end(),
                            [](const PendingSource &s) { return s.isTypes; }),

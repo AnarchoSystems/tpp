@@ -39,8 +39,6 @@ namespace tpp
         int col;  // 0-based
     };
 
-    std::vector<Token> tokenize_typedefs(const std::string &src);
-
     // ── Template tokenizer ──
 
     struct Segment

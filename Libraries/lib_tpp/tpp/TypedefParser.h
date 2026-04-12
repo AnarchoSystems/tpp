@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace tpp
+namespace tpp::compiler
 {
     // Tokenises a typedef source string into tokens.
     std::vector<Token> tokenize_typedefs(const std::string &src);

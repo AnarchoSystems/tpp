@@ -1,10 +1,29 @@
 #include "JumpToDefinition.h"
 #include <tpp/Tokenizer.h>
+#include <tpp/TypedefParser.h>
 #include <tpp/TemplateParser.h>
 #include <cctype>
 
 namespace tpp
 {
+
+// ── Compiler type aliases (these live in tpp::compiler after the IR migration) ─
+using TypeRef          = compiler::TypeRef;
+using TypeRegistry     = compiler::TypeRegistry;
+using NamedType        = compiler::NamedType;
+using ListType         = compiler::ListType;
+using OptionalType     = compiler::OptionalType;
+using TemplateFunction = compiler::TemplateFunction;
+using Expression       = compiler::Expression;
+using Variable         = compiler::Variable;
+using FieldAccess      = compiler::FieldAccess;
+using ASTNode          = compiler::ASTNode;
+using InterpolationNode = compiler::InterpolationNode;
+using FunctionCallNode  = compiler::FunctionCallNode;
+using ForNode           = compiler::ForNode;
+using IfNode            = compiler::IfNode;
+using SwitchNode        = compiler::SwitchNode;
+using RenderViaNode     = compiler::RenderViaNode;
 
 // ── Range helpers ─────────────────────────────────────────────────────────────
 
@@ -94,7 +113,7 @@ static nlohmann::json resolveTypeName(const std::string &name,
     if (it == reg.nameIndex.end()) return nullptr;
 
     const Range *range = nullptr;
-    if (it->second.kind == TypeKind::Struct)
+    if (it->second.kind == compiler::TypeKind::Struct)
         range = &reg.structs[it->second.index].sourceRange;
     else
         range = &reg.enums[it->second.index].sourceRange;
@@ -147,7 +166,7 @@ static std::optional<TypeRef> exprTypeRef(const Expression &expr,
         if (auto *named = std::get_if<NamedType>(&inner))
         {
             auto it = reg.nameIndex.find(named->name);
-            if (it != reg.nameIndex.end() && it->second.kind == TypeKind::Struct)
+            if (it != reg.nameIndex.end() && it->second.kind == compiler::TypeKind::Struct)
                 for (const auto &f : reg.structs[it->second.index].fields)
                     if (f.name == (*fa)->field) return f.type;
         }
@@ -174,7 +193,7 @@ static nlohmann::json resolveFieldLocation(const TypeRef &containerType,
     if (auto *named = std::get_if<NamedType>(&inner))
     {
         auto it = reg.nameIndex.find(named->name);
-        if (it != reg.nameIndex.end() && it->second.kind == TypeKind::Struct)
+        if (it != reg.nameIndex.end() && it->second.kind == compiler::TypeKind::Struct)
             for (const auto &f : reg.structs[it->second.index].fields)
                 if (f.name == fieldName)
                     for (const auto &pUri : project.uris())
@@ -273,7 +292,7 @@ static nlohmann::json walkNode(const ASTNode &node,
                 if (character >= sc && character <= nameEnd)
                 {
                     // Cursor on function name — jump to definition
-                    for (const auto &func : project.output().functions)
+                    for (const auto &func : project.compiler().functions)
                     {
                         if (func.name == arg->functionName)
                         {
@@ -370,14 +389,13 @@ nlohmann::json jumpToDefinition(const std::string &uri,
                                 int line, int character,
                                 const TppProject &project)
 {
-    const auto &output = project.output();
-    const auto &reg    = output.types;
+    const auto &reg = project.compiler().types;
 
     // ── Types file ────────────────────────────────────────────────────────────
     if (project.isTypeUri(uri))
     {
         std::string src = project.getContent(uri);
-        auto tokens = tokenize_typedefs(src);
+        auto tokens = compiler::tokenize_typedefs(src);
         for (const auto &tok : tokens)
         {
             if (tok.kind == TokKind::Eof) break;
@@ -395,7 +413,7 @@ nlohmann::json jumpToDefinition(const std::string &uri,
     // ── Template file ─────────────────────────────────────────────────────────
     std::string src = project.getContent(uri);
 
-    for (const auto &func : output.functions)
+    for (const auto &func : project.compiler().functions)
     {
         // ── Header line ───────────────────────────────────────────────────────
         if (line == func.sourceRange.start.line)

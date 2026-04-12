@@ -1,4 +1,5 @@
 #include <tpp/Compiler.h>
+#include <tpp/IR.h>
 #include <nlohmann/json.hpp>
 #include <iostream>
 #include <fstream>
@@ -80,6 +81,7 @@ static std::vector<fs::path> expandPattern(const fs::path &baseDir, const std::s
 struct tppApp
 {
     std::string inputDirectory;
+    bool includeSourceRanges = false;
     tppApp(int argc, char *argv[]);
     void run();
 };
@@ -97,13 +99,20 @@ tppApp::tppApp(int argc, char *argv[])
         std::string arg = argv[i];
         if (arg == "-h" || arg == "--help")
         {
-            std::cout << "Usage: tpp [folder]\n"
+            std::cout << "Usage: tpp [options] [folder]\n"
                          "\n"
                          "Compiles .tpp and .tpp.types files to JSON IR on stdout.\n"
                          "The folder must contain a tpp-config.json file specifying which .tpp files\n"
                          "are type definitions and which are templates:\n"
-                         "  {\"types\": [\"types.tpp\", \"types/*\"], \"templates\": [\"templates/*\"]}\n";
+                         "  {\"types\": [\"types.tpp\", \"types/*\"], \"templates\": [\"templates/*\"]}\n"
+                         "\n"
+                         "Options:\n"
+                         "  --source-ranges  Include source location info in the IR output\n";
             exit(0);
+        }
+        else if (arg == "--source-ranges")
+        {
+            includeSourceRanges = true;
         }
         else
         {
@@ -232,7 +241,7 @@ void tppApp::run()
     }
 
     IR output;
-    bool success = compiler.compile(output);
+    bool success = compiler.compile(output, includeSourceRanges);
     if (success)
     {
         nlohmann::json j = output;

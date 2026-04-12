@@ -2,7 +2,7 @@
 #include <map>
 #include <stdexcept>
 
-namespace tpp
+namespace tpp::compiler
 {
     // ═══════════════════════════════════════════════════════════════════
     // Type environment — maps variable names to their TypeRef
@@ -300,6 +300,7 @@ namespace tpp
             ifn.params = fn.params;
             ifn.policy = fn.policy;
             ifn.doc = fn.doc;
+            ifn.sourceRange = fn.sourceRange;
             ifn.body = lowerNodes(fn.body, env, funcIndex);
 
             out.push_back(std::move(ifn));

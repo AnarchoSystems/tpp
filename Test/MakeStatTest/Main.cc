@@ -3,6 +3,8 @@
 // extracts the main function's parameter info, and renders a test file (to stdout).
 
 #include <tpp/Compiler.h>
+#include <tpp/IR.h>
+#include <tpp/Rendering.h>
 #include <nlohmann/json.hpp>
 #include <filesystem>
 #include <fstream>
@@ -79,23 +81,23 @@ static std::vector<std::filesystem::path> expandPattern(const std::filesystem::p
     return results;
 }
 
-static std::string typeRefToCppStringNs(const tpp::TypeRef &t, const std::string &ns);
-
-static std::string typeRefToCppStringNs(const tpp::TypeRef &t, const std::string &ns)
+static std::string typeKindToCppStringNs(const tpp::TypeKind &t, const std::string &ns)
 {
-    if (std::holds_alternative<tpp::StringType>(t))
-        return "std::string";
-    if (std::holds_alternative<tpp::IntType>(t))
-        return "int";
-    if (std::holds_alternative<tpp::BoolType>(t))
-        return "bool";
-    if (auto *lt = std::get_if<std::shared_ptr<tpp::ListType>>(&t))
-        return "std::vector<" + typeRefToCppStringNs((*lt)->elementType, ns) + ">";
-    if (auto *ot = std::get_if<std::shared_ptr<tpp::OptionalType>>(&t))
-        return "std::optional<" + typeRefToCppStringNs((*ot)->innerType, ns) + ">";
-    if (auto *nt = std::get_if<tpp::NamedType>(&t))
-        return ns.empty() ? nt->name : (ns + "::" + nt->name);
-    return "";
+    switch (t.value.index())
+    {
+    case 0: return "std::string";                // Str
+    case 1: return "int";                        // Int
+    case 2: return "bool";                       // Bool
+    case 3: {                                    // Named
+        auto &name = std::get<3>(t.value);
+        return ns.empty() ? name : (ns + "::" + name);
+    }
+    case 4:                                      // List
+        return "std::vector<" + typeKindToCppStringNs(*std::get<4>(t.value), ns) + ">";
+    case 5:                                      // Optional
+        return "std::optional<" + typeKindToCppStringNs(*std::get<5>(t.value), ns) + ">";
+    default: return "";
+    }
 }
 
 std::string toGoodConstexprString(const std::string &content)
@@ -221,9 +223,9 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    tpp::FunctionSymbol mainSymbol;
+    const tpp::FunctionDef *mainFunc = nullptr;
     std::string error;
-    if (!iRep.get_function("main", mainSymbol, error))
+    if (!tpp::get_function(iRep, "main", mainFunc, error))
     {
         std::cerr << testDir.string() << ": error: " << error << std::endl;
         return EXIT_FAILURE;
@@ -249,13 +251,13 @@ int main(int argc, char *argv[])
     defs.expectedOutput = toGoodConstexprString(expectedRaw);
     defs.iRepJson = toGoodConstexprString(nlohmann::json(iRep).dump());
 
-    const auto &params = mainSymbol.function.params;
+    const auto &params = mainFunc->params;
     if (params.size() == 1)
     {
         Input inp;
-        inp.type = typeRefToCppStringNs(params[0].type, testName);
+        inp.type = typeKindToCppStringNs(*params[0].type, testName);
         nlohmann::json value;
-        bool isList = std::holds_alternative<std::shared_ptr<tpp::ListType>>(params[0].type);
+        bool isList = (params[0].type->value.index() == 4); // List variant
         if (isList)
         {
             // list param: unwrap double-wrapped array (unary-list convention)
@@ -280,7 +282,7 @@ int main(int argc, char *argv[])
         for (size_t i = 0; i < params.size(); ++i)
         {
             Input inp;
-            inp.type = typeRefToCppStringNs(params[i].type, testName);
+            inp.type = typeKindToCppStringNs(*params[i].type, testName);
             inp.value = inputJson[i].dump();
             defs.inputs.push_back(inp);
         }

@@ -1,5 +1,6 @@
 #include <tpp/Compiler.h>
 #include <tpp/IR.h>
+#include <tpp/IRBuilder.h>
 #include <tpp/Lowering.h>
 #include <tpp/TemplateParser.h>
 #include <tpp/TypedefParser.h>
@@ -11,12 +12,8 @@
 #include <map>
 #include <set>
 
-namespace tpp
+namespace tpp::compiler
 {
-
-    // ═══════════════════════════════════════════════════════════════════
-    // Template Parser  (compile)
-    // ═══════════════════════════════════════════════════════════════════
 
     std::vector<Segment> tokenize_template(const std::string &src)
     {
@@ -1992,6 +1989,10 @@ namespace tpp
         return true;
     }
 
+} // namespace tpp::compiler
+
+namespace tpp
+{
     void Compiler::clear_templates() noexcept
     {
         pendingSources_.erase(
@@ -2007,17 +2008,18 @@ namespace tpp
         pendingSources_.push_back({templateString, &diagnostics, false});
     }
 
-    bool Compiler::compile(IR &output) noexcept
+    bool Compiler::compile(IR &output, bool includeSourceRanges) noexcept
     {
         try
         {
             // Rebuild type registry from scratch on each compile
-            types = TypeRegistry{};
+            types = compiler::TypeRegistry{};
 
-            std::vector<TemplateFunction> pendingFunctions;
+            std::vector<compiler::TemplateFunction> pendingFunctions;
 
             // Helper: two functions are duplicate overloads if name + param types match
-            auto isSameSignature = [](const TemplateFunction &a, const TemplateFunction &b) -> bool
+            auto isSameSignature = [](const compiler::TemplateFunction &a,
+                                      const compiler::TemplateFunction &b) -> bool
             {
                 if (a.params.size() != b.params.size())
                     return false;
@@ -2040,7 +2042,6 @@ namespace tpp
                     rawTypedefs += src.content;
                 }
             }
-            output.raw_typedefs = rawTypedefs;
 
             for (auto &src : pendingSources_)
             {
@@ -2051,8 +2052,8 @@ namespace tpp
                 // ── Process type definitions ──────────────────────────
                 if (src.content.empty())
                     continue;
-                auto tokens = tokenize_typedefs(src.content);
-                TypedefParser parser{tokens, 0, types, *src.diagnostics};
+                auto tokens = compiler::tokenize_typedefs(src.content);
+                compiler::TypedefParser parser{tokens, 0, types, *src.diagnostics};
                 parser.parse();
                 if (!parser.ok)
                 {
@@ -2099,12 +2100,12 @@ namespace tpp
                         size_t lineStart = pos;
                         size_t lineEnd = src.content.find('\n', pos);
                         if (lineEnd == std::string::npos) lineEnd = src.content.size();
-                        std::string lineText = trim(src.content.substr(lineStart, lineEnd - lineStart));
+                        std::string lineText = compiler::trim(src.content.substr(lineStart, lineEnd - lineStart));
 
                         // /// doc line comment — accumulate
                         if (lineText.size() >= 3 && lineText[0] == '/' && lineText[1] == '/' && lineText[2] == '/')
                         {
-                            std::string text = trim(lineText.substr(3));
+                            std::string text = compiler::trim(lineText.substr(3));
                             if (!pendingDoc.empty()) pendingDoc += '\n';
                             pendingDoc += text;
                             pos = (lineEnd < src.content.size()) ? lineEnd + 1 : lineEnd;
@@ -2130,9 +2131,9 @@ namespace tpp
                             std::string iline;
                             while (std::getline(iss, iline))
                             {
-                                std::string t = trim(iline);
+                                std::string t = compiler::trim(iline);
                                 if (t.empty()) continue;
-                                if (t[0] == '*') t = trim(t.substr(1));
+                                if (t[0] == '*') t = compiler::trim(t.substr(1));
                                 if (!doc.empty()) doc += '\n';
                                 doc += t;
                             }
@@ -2151,7 +2152,7 @@ namespace tpp
                         }
 
                         // Anything that doesn't start with "template " is unexpected
-                        if (!startsWith(lineText, "template "))
+                        if (!compiler::startsWith(lineText, "template "))
                         {
                             int lineNum = (int)std::count(src.content.begin(),
                                                           src.content.begin() + (std::ptrdiff_t)lineStart,
@@ -2166,12 +2167,12 @@ namespace tpp
                             continue;
                         }
 
-                        TemplateFunction func;
+                        compiler::TemplateFunction func;
                         size_t bodyStartLine = 0;
-                        std::vector<TemplateLine> templateLines;
+                        std::vector<compiler::TemplateLine> templateLines;
                         Range headerRange;
                         std::string headerText;
-                        if (!parseOneTemplate(src.content, pos, func, &bodyStartLine, nullptr,
+                        if (!compiler::parseOneTemplate(src.content, pos, func, &bodyStartLine, nullptr,
                                               &templateLines, src.diagnostics, &headerRange, &headerText))
                         {
                             break; // error diagnostic already added (or end of input)
@@ -2199,7 +2200,7 @@ namespace tpp
                             continue;
                         }
 
-                        validateTemplateSemantics(func, templateLines, bodyStartLine, types, *src.diagnostics,
+                        compiler::validateTemplateSemantics(func, templateLines, bodyStartLine, types, *src.diagnostics,
                                                    (int)bodyStartLine - 1, headerText);
                         pendingFunctions.push_back(std::move(func));
                     }
@@ -2219,14 +2220,17 @@ namespace tpp
             if (hasErrors)
                 return false;
 
-            output.functions = std::move(pendingFunctions);
-            output.types = types;
-            output.policies = policies_;
-
-            // Lower AST to instruction IR for code-generation backends
+            // Lower AST to instruction IR, then convert to generated IR
             std::string lowerError;
-            lowerToInstructions(output.functions, output.types,
-                                output.instructionFunctions, lowerError);
+            std::vector<compiler::InstructionFunction> instructionFunctions;
+            compiler::lowerToInstructions(pendingFunctions, types,
+                                instructionFunctions, lowerError);
+
+            output = build_ir(types, instructionFunctions, policies_,
+                              rawTypedefs, includeSourceRanges);
+
+            // Retain AST-level functions for LSP consumers
+            functions = std::move(pendingFunctions);
 
             return true;
         }

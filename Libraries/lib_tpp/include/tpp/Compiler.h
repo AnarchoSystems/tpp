@@ -1,10 +1,16 @@
 #pragma once
 
-#include <tpp/IR.h>
+#include <tpp/AST.h>
 #include <tpp/Policy.h>
+#include <tpp/Diagnostic.h>
+#include <nlohmann/json.hpp>
+#include <string>
+#include <vector>
 
 namespace tpp
 {
+    struct IR;  // forward declaration — include <tpp/IR.h> for the full type
+
     class Compiler
     {
     public:
@@ -30,9 +36,13 @@ namespace tpp
         bool add_policy(const nlohmann::json &policyJson, std::string &error) noexcept;
 
         [[nodiscard]]
-        bool compile(IR &output) noexcept;
+        bool compile(IR &output, bool includeSourceRanges = false) noexcept;
 
-        TypeRegistry types;
+        compiler::TypeRegistry types;
+
+        // Retained after compile() for consumers that need AST-level access
+        // (e.g. LSP autocomplete, jump-to-definition).
+        std::vector<compiler::TemplateFunction> functions;
 
     private:
         struct PendingSource
@@ -42,6 +52,6 @@ namespace tpp
             bool isTypes;
         };
         std::vector<PendingSource> pendingSources_;
-        PolicyRegistry policies_;
+        compiler::PolicyRegistry policies_;
     };
 }

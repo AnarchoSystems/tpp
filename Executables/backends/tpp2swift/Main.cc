@@ -13,7 +13,6 @@
 //   --extern-runtime  Suppress inlining runtime helpers in source output
 
 #include <tpp/IR.h>
-#include <tpp/Instruction.h>
 #include <CodegenHelpers.h>
 #include "swift_defs_functions.h"
 #include <fstream>
@@ -28,23 +27,23 @@ static codegen::RenderFunctionsInput buildFunctionsContext(
     const tpp::IR &ir, const std::string &functionPrefix,
     const std::string &namespaceName)
 {
-    bool hasPol = !ir.policies.all().empty();
+    bool hasPol = !ir.policies.empty();
 
     codegen::ConvertConfig cfg;
     cfg.functionPrefix = functionPrefix;
     cfg.callNeedsTry = hasPol;
 
     std::vector<codegen::RenderFunctionDef> functions;
-    for (const auto &fn : ir.instructionFunctions)
+    for (const auto &fn : ir.functions)
     {
         std::vector<codegen::ParamInfo> params;
         for (size_t i = 0; i < fn.params.size(); ++i)
             params.push_back({fn.params[i].name,
-                              std::make_unique<codegen::TypeKind>(codegen::typeRefToContext(fn.params[i].type))});
+                              std::make_unique<codegen::TypeKind>(codegen::typeKindToContext(*fn.params[i].type))});
 
         int scope = 0;
         auto body = std::make_unique<std::vector<codegen::Instruction>>();
-        for (const auto &instr : fn.body)
+        for (const auto &instr : *fn.body)
             body->push_back(codegen::convertInstruction(instr, "_sb", fn.policy, scope, ir, cfg));
 
         codegen::RenderFunctionDef def;

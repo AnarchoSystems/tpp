@@ -1,4 +1,5 @@
 #include "TestUtils.h"
+#include <tpp/Rendering.h>
 #include <nlohmann/json.hpp>
 
 // ── AcceptanceTest — in-process compile + render ──────────────────────────────
@@ -35,11 +36,11 @@ TEST_P(AcceptanceTest, RunTestCase)
 {
     tpp::IR output;
     std::string getFunctionError, renderError, renderedOutput;
-    tpp::FunctionSymbol functionSymbol;
+    const tpp::FunctionDef *function = nullptr;
 
     const bool isSuccess = compiler.compile(output) &&
-                           output.get_function("main", functionSymbol, getFunctionError) &&
-                           functionSymbol.render(testCase.input, renderedOutput, renderError);
+                           tpp::get_function(output, "main", function, getFunctionError) &&
+                           tpp::render_function(output, *function, testCase.input, renderedOutput, renderError);
 
     EXPECT_EQ(isSuccess, testCase.expectSuccess) << "Test case: " << testCase.name;
     if (isSuccess)
@@ -78,7 +79,7 @@ TEST_P(AcceptanceTest, CompareCompileByCLI)
     if (expectedSuccess)
     {
         tpp::IR actualOutput = nlohmann::json::parse(cliOutput.output);
-        EXPECT_EQ(actualOutput, expectedOutput)
+        EXPECT_EQ(nlohmann::json(actualOutput), nlohmann::json(expectedOutput))
             << "Test case: " << testCase.name
             << "\nExpected: " << nlohmann::json(expectedOutput).dump(2)
             << "\nActual: " << nlohmann::json(actualOutput).dump(2);

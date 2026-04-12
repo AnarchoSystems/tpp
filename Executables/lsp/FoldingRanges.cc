@@ -5,6 +5,15 @@
 namespace tpp
 {
 
+// ── Compiler type aliases ─────────────────────────────────────────────────────
+using ASTNode          = compiler::ASTNode;
+using CommentNode      = compiler::CommentNode;
+using ForNode          = compiler::ForNode;
+using IfNode           = compiler::IfNode;
+using SwitchNode       = compiler::SwitchNode;
+using TemplateFunction = compiler::TemplateFunction;
+using TextNode         = compiler::TextNode;
+
 static nlohmann::json makeRange(int startLine, int endLine, const char *kind = "region")
 {
     return {{"startLine", startLine}, {"endLine", endLine}, {"kind", kind}};
@@ -83,6 +92,7 @@ static void collectFoldNode(std::vector<nlohmann::json> &out, const ASTNode &nod
                 collectFolds(out, c.body);
             }
         }
+        // Other node types (Text, Interpolation, etc.) don't produce folds.
     }, node);
 }
 
@@ -96,19 +106,23 @@ static void collectFolds(std::vector<nlohmann::json> &out, const std::vector<AST
 static nlohmann::json foldsForTypes(const TppProject &project)
 {
     nlohmann::json result = nlohmann::json::array();
-    for (const auto &sd : project.output().types.structs)
+    for (const auto &sd : project.output().structs)
     {
-        if (sd.fields.empty()) continue;
-        int startLine = sd.sourceRange.start.line;
-        int endLine   = sd.fields.back().sourceRange.start.line;
+        if (sd.fields.empty() || !sd.sourceRange) continue;
+        int startLine = sd.sourceRange->start.line;
+        int endLine = sd.fields.back().sourceRange
+            ? sd.fields.back().sourceRange->start.line
+            : startLine;
         if (endLine > startLine)
             result.push_back(makeRange(startLine, endLine));
     }
-    for (const auto &ed : project.output().types.enums)
+    for (const auto &ed : project.output().enums)
     {
-        if (ed.variants.empty()) continue;
-        int startLine = ed.sourceRange.start.line;
-        int endLine   = ed.variants.back().sourceRange.start.line;
+        if (ed.variants.empty() || !ed.sourceRange) continue;
+        int startLine = ed.sourceRange->start.line;
+        int endLine = ed.variants.back().sourceRange
+            ? ed.variants.back().sourceRange->start.line
+            : startLine;
         if (endLine > startLine)
             result.push_back(makeRange(startLine, endLine));
     }
@@ -157,7 +171,7 @@ static nlohmann::json foldsForTemplate(const std::string &src, const TppProject 
         TemplateFunction func;
         size_t bodyStartLine = 0;
         std::string bodyText;
-        if (!parseOneTemplate(src, pos, func, &bodyStartLine, &bodyText))
+        if (!compiler::parseOneTemplate(src, pos, func, &bodyStartLine, &bodyText))
             break;
 
         // Template-level fold: header line → END line

@@ -193,39 +193,6 @@ std::string @functionPrefix@@function.name@(@for param in function.params | sep=
 @end if@
 END
 
-template render_cpp_implementation(input: CodegenInput, includes: list<string>, namespaceName: optional<string>, iRepJson: string, functionPrefix: string)
-@for inc in includes@
-#include "@inc@"
-@end for@
-#include <tpp/Compiler.h>
-#include <nlohmann/json.hpp>
-@if namespaceName@
-namespace @namespaceName@ {
-@end if@
-static const tpp::IR& _getIR()
-{
-    static const tpp::IR co =
-        nlohmann::json::parse(@iRepJson@).get<tpp::IR>();
-    return co;
-}
-@for function in input.functions@
-std::string @functionPrefix@@function.name@(@for param in function.params | sep=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@)
-{
-    const auto& co = _getIR();
-    tpp::FunctionSymbol fs;
-    std::string error;
-    if (!co.get_function("@function.name@", fs, error)) return {};
-    nlohmann::json _tpp_input = nlohmann::json::array({@for param in function.params | sep=", "@nlohmann::json(@param.name@)@end for@});
-    std::string output;
-    if (!fs.render(_tpp_input, output, error)) return {};
-    return output;
-}
-@end for@
-@if namespaceName@
-} // namespace @namespaceName@
-@end if@
-END
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // Instruction IR → C++ rendering functions (native code generation)
 // ═══════════════════════════════════════════════════════════════════════════════

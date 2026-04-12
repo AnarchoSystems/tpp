@@ -6,6 +6,7 @@
 // extracts the main function's parameter info, and renders a Test.swift file (to stdout).
 
 #include <tpp/Compiler.h>
+#include <tpp/IR.h>
 #include <nlohmann/json.hpp>
 #include <filesystem>
 #include <fstream>
@@ -67,17 +68,18 @@ static std::vector<std::filesystem::path> expandPattern(const std::filesystem::p
 // TypeRef → Swift type name
 // ═══════════════════════════════════════════════════════════════════════════════
 
-static std::string typeRefToSwiftType(const tpp::TypeRef &t)
+static std::string typeKindToSwiftType(const tpp::TypeKind &t)
 {
-    if (std::holds_alternative<tpp::StringType>(t)) return "String";
-    if (std::holds_alternative<tpp::IntType>(t))    return "Int";
-    if (std::holds_alternative<tpp::BoolType>(t))   return "Bool";
-    if (auto *n = std::get_if<tpp::NamedType>(&t))  return n->name;
-    if (auto *l = std::get_if<std::shared_ptr<tpp::ListType>>(&t))
-        return "[" + typeRefToSwiftType((*l)->elementType) + "]";
-    if (auto *o = std::get_if<std::shared_ptr<tpp::OptionalType>>(&t))
-        return typeRefToSwiftType((*o)->innerType) + "?";
-    return "Any";
+    switch (t.value.index())
+    {
+    case 0: return "String";
+    case 1: return "Int";
+    case 2: return "Bool";
+    case 3: return std::get<3>(t.value);
+    case 4: return "[" + typeKindToSwiftType(*std::get<4>(t.value)) + "]";
+    case 5: return typeKindToSwiftType(*std::get<5>(t.value)) + "?";
+    default: return "Any";
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -104,15 +106,14 @@ static std::string swiftStringLiteral(const std::string &s)
 // Generate a Swift parse line for a parameter
 // ═══════════════════════════════════════════════════════════════════════════════
 
-static std::string buildSwiftDecodeLine(const std::string &name, const tpp::TypeRef &type,
+static std::string buildSwiftDecodeLine(const std::string &name, const tpp::TypeKind &type,
                                         const std::string &jsonLiteral)
 {
-    std::string swiftType = typeRefToSwiftType(type);
+    std::string swiftType = typeKindToSwiftType(type);
 
-    if (std::holds_alternative<std::shared_ptr<tpp::OptionalType>>(type))
+    if (type.value.index() == 5)
     {
-        auto *o = std::get_if<std::shared_ptr<tpp::OptionalType>>(&type);
-        std::string innerType = typeRefToSwiftType((*o)->innerType);
+        std::string innerType = typeKindToSwiftType(*std::get<5>(type.value));
         return "let " + name + ": " + swiftType + " = " + jsonLiteral +
                ".data(using: .utf8).flatMap { try? JSONDecoder().decode(" +
                innerType + ".self, from: $0) }";
@@ -191,11 +192,14 @@ int main(int argc, char *argv[])
     }
 
     // Find the main function
-    tpp::FunctionSymbol mainSymbol;
-    std::string error;
-    if (!ir.get_function("main", mainSymbol, error))
+    const tpp::FunctionDef *mainFunction = nullptr;
+    for (const auto &fn : ir.functions)
     {
-        std::cerr << testDir.string() << ": error: " << error << std::endl;
+        if (fn.name == "main") { mainFunction = &fn; break; }
+    }
+    if (!mainFunction)
+    {
+        std::cerr << testDir.string() << ": error: function 'main' not found" << std::endl;
         return EXIT_FAILURE;
     }
 
@@ -218,13 +222,13 @@ int main(int argc, char *argv[])
     defs.testName = testName;
     defs.expectedOutputLiteral = swiftStringLiteral(expectedRaw);
 
-    const auto &params = mainSymbol.function.params;
+    const auto &params = mainFunction->params;
     std::string callArgs;
 
     if (params.size() == 1)
     {
         nlohmann::json value;
-        bool isList = std::holds_alternative<std::shared_ptr<tpp::ListType>>(params[0].type);
+        bool isList = params[0].type->value.index() == 4;
         if (isList)
         {
             if (inputJson.is_array() && inputJson.size() == 1 && inputJson[0].is_array())
@@ -242,7 +246,7 @@ int main(int argc, char *argv[])
         std::string jsonLit = swiftStringLiteral(value.dump());
         SwiftTestParam p;
         p.name = params[0].name;
-        p.parseLine = buildSwiftDecodeLine(p.name, params[0].type, jsonLit);
+        p.parseLine = buildSwiftDecodeLine(p.name, *params[0].type, jsonLit);
         defs.params.push_back(p);
         callArgs = p.name;
     }
@@ -253,14 +257,14 @@ int main(int argc, char *argv[])
             std::string jsonLit = swiftStringLiteral(inputJson[i].dump());
             SwiftTestParam p;
             p.name = params[i].name;
-            p.parseLine = buildSwiftDecodeLine(p.name, params[i].type, jsonLit);
+            p.parseLine = buildSwiftDecodeLine(p.name, *params[i].type, jsonLit);
             defs.params.push_back(p);
             if (i > 0) callArgs += ", ";
             callArgs += p.name;
         }
     }
     defs.callArgs = callArgs;
-    defs.hasPolicies = !ir.policies.all().empty();
+    defs.hasPolicies = !ir.policies.empty();
 
     std::cout << render_test(defs);
     return EXIT_SUCCESS;

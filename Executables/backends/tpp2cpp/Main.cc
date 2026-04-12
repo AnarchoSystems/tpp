@@ -1,5 +1,5 @@
 #include <tpp/IR.h>
-#include <tpp/Instruction.h>
+#include <tpp/Rendering.h>
 #include <CodegenHelpers.h>
 #include "defs.h"
 #include <fstream>
@@ -191,9 +191,9 @@ void tpp2cpp::run()
     const auto &iRep = mainIR();
 
     auto renderFunction = [&](const std::string &fnName, const nlohmann::json &ctx, bool reindentOutput = false) {
-        tpp::FunctionSymbol fn;
+        const tpp::FunctionDef *fn = nullptr;
         std::string error, output;
-        if (!(iRep.get_function(fnName, fn, error) && fn.render(ctx, output, error)))
+        if (!(tpp::get_function(iRep, fnName, fn, error) && tpp::render_function(iRep, *fn, ctx, output, error)))
         {
             std::cerr << "defs.tpp: error: Failed to render " << fnName << ": " << error << std::endl;
             exit(EXIT_FAILURE);
@@ -305,9 +305,9 @@ static nlohmann::json to_render_cpp_type_input(const tpp::IR &iRep,
 {
     codegen::CodegenInput ctx = codegen::buildCodegenInput(iRep);
     for (auto &s : ctx.structs)
-        s.rawTypedefs = toCppStringLiteral(extractTypeDefinition(iRep.raw_typedefs, "struct", s.name));
+        s.rawTypedefs = toCppStringLiteral(extractTypeDefinition(iRep.rawTypedefs, "struct", s.name));
     for (auto &e : ctx.enums)
-        e.rawTypedefs = toCppStringLiteral(extractTypeDefinition(iRep.raw_typedefs, "enum", e.name));
+        e.rawTypedefs = toCppStringLiteral(extractTypeDefinition(iRep.rawTypedefs, "enum", e.name));
     nlohmann::json ns = namespaceName.empty() ? nlohmann::json() : nlohmann::json(namespaceName);
     return nlohmann::json::array({nlohmann::json(ctx), nlohmann::json(includes), ns});
 }
@@ -337,23 +337,23 @@ static codegen::RenderFunctionsInput buildFunctionsContext(
     const std::vector<std::string> &includes,
     const std::string &namespaceName)
 {
-    bool hasPol = !ir.policies.all().empty();
+    bool hasPol = !ir.policies.empty();
 
     codegen::ConvertConfig cfg;
     cfg.functionPrefix = functionPrefix;
     cfg.callNeedsTry = false;
 
     std::vector<codegen::RenderFunctionDef> functions;
-    for (const auto &fn : ir.instructionFunctions)
+    for (const auto &fn : ir.functions)
     {
         std::vector<codegen::ParamInfo> params;
         for (size_t i = 0; i < fn.params.size(); ++i)
             params.push_back({fn.params[i].name,
-                              std::make_unique<codegen::TypeKind>(codegen::typeRefToContext(fn.params[i].type))});
+                              std::make_unique<codegen::TypeKind>(codegen::typeKindToContext(*fn.params[i].type))});
 
         int scope = 0;
         auto body = std::make_unique<std::vector<codegen::Instruction>>();
-        for (const auto &instr : fn.body)
+        for (const auto &instr : *fn.body)
             body->push_back(codegen::convertInstruction(instr, "_sb", fn.policy, scope, ir, cfg));
 
         codegen::RenderFunctionDef def;

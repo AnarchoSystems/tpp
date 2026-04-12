@@ -7,7 +7,7 @@
 #include <vector>
 #include <variant>
 
-namespace tpp
+namespace tpp::compiler
 {
     // ── Expression parser ──
 

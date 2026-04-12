@@ -9,7 +9,7 @@
 #include <optional>
 #include <nlohmann/json.hpp>
 
-namespace tpp
+namespace tpp::compiler
 {
     // ── Primitive types ──
 

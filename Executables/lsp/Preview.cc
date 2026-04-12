@@ -1,5 +1,6 @@
 #include "Preview.h"
 #include <tpp/IR.h>
+#include <tpp/Rendering.h>
 #include <tpp/RenderMapping.h>
 #include <fstream>
 #include <sstream>
@@ -50,7 +51,7 @@ nlohmann::json renderPreview(const nlohmann::json &params, TppProject *project)
     std::string output;
     try
     {
-        output = project->output().renderTracked(templateName, inputJson, mappings);
+        output = renderTracked(project->output(), templateName, inputJson, mappings);
     }
     catch (const std::exception &e)
     {

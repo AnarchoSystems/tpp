@@ -1,4 +1,5 @@
 #include <tpp/IR.h>
+#include <tpp/Rendering.h>
 #include <iostream>
 
 // usage: render-tpp <template> <input>
@@ -24,15 +25,15 @@ int main(int argc, char *argv[])
     {
         nlohmann::json json = nlohmann::json::parse(input);
         IR iRep = json.get<IR>();
-        FunctionSymbol functionSymbol;
+        const FunctionDef *function = nullptr;
         std::string error;
-        if (!iRep.get_function(templateName, functionSymbol, error))
+        if (!get_function(iRep, templateName, function, error))
         {
             std::cerr << "Error: " << error << std::endl;
             return 1;
         }
         std::string output;
-        if (!functionSymbol.render(inputData, output, error))
+        if (!render_function(iRep, *function, inputData, output, error))
         {
             std::cerr << "Error: " << error << std::endl;
             return 1;

@@ -5,6 +5,11 @@ project(Tpp)
 
 set(CMAKE_CXX_STANDARD 17)
 
+# Semantic version — embedded in the IR output so backends can check compatibility.
+set(TPP_VERSION_MAJOR 0)
+set(TPP_VERSION_MINOR 1)
+set(TPP_VERSION_PATCH 0)
+
 enable_testing()
 message(STATUS "Building arm 64Bit")
 

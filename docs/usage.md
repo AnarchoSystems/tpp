@@ -208,8 +208,8 @@ std::string src = myns::Item::tpp_typedefs();
 | Header | Purpose |
 |---|---|
 | `<tpp/Compiler.h>` | Compile type definitions, templates, and policies |
-| `<tpp/IR.h>` | Query and render compiled templates |
-| `<tpp/FunctionSymbol.h>` | Render a single named template function |
+| `<tpp/IR.h>` | Compiled template IR (types, functions, policies) |
+| `<tpp/Rendering.h>` | Render template functions from the IR |
 | `<tpp/Types.h>` | Type definitions (`StructDef`, `EnumDef`, `TypeRegistry`) |
 | `<tpp/Policy.h>` | Policy data model and registry |
 | `<tpp/RenderMapping.h>` | Source-to-output range tracking |
@@ -248,15 +248,17 @@ compiler.add_type<myns::Item>(diags);
 ### Rendering — Dynamic API
 
 ```cpp
-tpp::FunctionSymbol fn;
+#include <tpp/Rendering.h>
+
+const tpp::FunctionDef *fn = nullptr;
 std::string error;
-if (!output.get_function("main", fn, error)) {
+if (!tpp::get_function(output, "main", fn, error)) {
     // function not found
 }
 
 nlohmann::json input = {{"name", "World"}};
 std::string result;
-if (!fn.render(input, result, error)) {
+if (!tpp::render_function(output, *fn, input, result, error)) {
     // render error (e.g. policy violation)
 }
 ```
@@ -279,7 +281,7 @@ std::string out = render(myItem); // throws std::runtime_error on error
 
 ```cpp
 std::vector<tpp::RenderMapping> mappings;
-std::string output = iRep.renderTracked("main", input, mappings);
+std::string output = tpp::renderTracked(ir, "main", input, mappings);
 ```
 
 ---

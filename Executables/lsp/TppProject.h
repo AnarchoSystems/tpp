@@ -39,6 +39,7 @@ namespace tpp
         const std::map<std::string, std::vector<Diagnostic>> &diagnostics() const { return diagnostics_; }
 
         const IR &output() const { return output_; }
+        const Compiler &compiler() const { return compiler_; }
         const std::filesystem::path &configPath() const { return configPath_; }
         const std::filesystem::path &root() const { return root_; }
 

@@ -105,7 +105,7 @@ namespace tpp
         }
 
         IR newOutput;
-        bool ok = compiler_.compile(newOutput);
+        bool ok = compiler_.compile(newOutput, true);  // LSP needs source ranges
         output_ = std::move(newOutput);
         return ok;
     }

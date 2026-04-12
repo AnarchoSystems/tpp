@@ -1,0 +1,246 @@
+// ═══════════════════════════════════════════════════════════════════════════════
+// tpp Intermediate Representation — backend-neutral type definitions.
+//
+// These types encode the full output of the tpp compiler: schema info
+// (structs, enums), template functions as typed instruction trees, and
+// policy definitions.  Backends consume this IR directly, attaching their
+// own templates (possibly with additional args) to convert it into native
+// code with minimal intermediate steps.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── Source location (optional — populated when --source-ranges is set) ───────
+
+struct SourcePosition
+{
+    line : int;
+    character : int;
+}
+
+struct SourceRange
+{
+    start : SourcePosition;
+    end : SourcePosition;
+}
+
+// ── Type system ─────────────────────────────────────────────────────────────
+
+enum TypeKind
+{
+    Str,
+    Int,
+    Bool,
+    Named(string),
+    List(TypeKind),
+    Optional(TypeKind)
+}
+
+// ── Instruction types (backend-neutral) ─────────────────────────────────────
+
+/// Expression with resolved type.
+struct ExprInfo
+{
+    path : string;
+    type : TypeKind;
+}
+
+/// Emit literal text.
+struct EmitInstr
+{
+    text : string;
+}
+
+/// Emit an interpolated expression value.
+struct EmitExprInstr
+{
+    expr : ExprInfo;
+    policy : string;
+}
+
+/// For loop over a collection.
+struct ForInstr
+{
+    varName : string;
+    enumeratorName : string;
+    collection : ExprInfo;
+    body : list<Instruction>;
+    sep : string;
+    followedBy : string;
+    precededBy : string;
+    isBlock : bool;
+    insertCol : int;
+    policy : string;
+    hasAlign : bool;
+    alignSpec : string;
+}
+
+/// One case branch in a switch.
+struct CaseInstr
+{
+    tag : string;
+    bindingName : string;
+    payloadType : optional<TypeKind>;
+    body : list<Instruction>;
+}
+
+/// Conditional.
+struct IfInstr
+{
+    condExpr : ExprInfo;
+    negated : bool;
+    thenBody : list<Instruction>;
+    elseBody : list<Instruction>;
+    isBlock : bool;
+    insertCol : int;
+}
+
+/// Switch on a variant expression.
+struct SwitchInstr
+{
+    expr : ExprInfo;
+    cases : list<CaseInstr>;
+    isBlock : bool;
+    insertCol : int;
+    policy : string;
+}
+
+/// Direct function call.
+struct CallInstr
+{
+    functionName : string;
+    arguments : list<ExprInfo>;
+}
+
+/// Render-via: call a function for each element in a collection.
+struct RenderViaInstr
+{
+    collection : ExprInfo;
+    functionName : string;
+    sep : string;
+    followedBy : string;
+    precededBy : string;
+    isBlock : bool;
+    insertCol : int;
+    policy : string;
+}
+
+enum Instruction
+{
+    Emit(EmitInstr),
+    EmitExpr(EmitExprInstr),
+    AlignCell,
+    For(ForInstr),
+    If(IfInstr),
+    Switch(SwitchInstr),
+    Call(CallInstr),
+    RenderVia(RenderViaInstr)
+}
+
+// ── Template function definition ────────────────────────────────────────────
+
+struct ParamDef
+{
+    name : string;
+    type : TypeKind;
+}
+
+struct FunctionDef
+{
+    name : string;
+    params : list<ParamDef>;
+    body : list<Instruction>;
+    policy : string;
+    doc : string;
+    sourceRange : optional<SourceRange>;
+}
+
+// ── Schema types (for type generation) ──────────────────────────────────────
+
+struct FieldDef
+{
+    name : string;
+    type : TypeKind;
+    recursive : bool;
+    doc : string;
+    sourceRange : optional<SourceRange>;
+}
+
+struct StructDef
+{
+    name : string;
+    fields : list<FieldDef>;
+    doc : string;
+    sourceRange : optional<SourceRange>;
+}
+
+struct VariantDef
+{
+    tag : string;
+    payload : optional<TypeKind>;
+    recursive : bool;
+    doc : string;
+    sourceRange : optional<SourceRange>;
+}
+
+struct EnumDef
+{
+    name : string;
+    variants : list<VariantDef>;
+    doc : string;
+    sourceRange : optional<SourceRange>;
+}
+
+// ── Policy definitions ──────────────────────────────────────────────────────
+
+struct PolicyReplacement
+{
+    find : string;
+    replace : string;
+}
+
+struct PolicyRequire
+{
+    regex : string;
+    replace : string;
+    compiledReplace : string;
+}
+
+struct PolicyOutputFilter
+{
+    regex : string;
+}
+
+struct PolicyLength
+{
+    min : optional<int>;
+    max : optional<int>;
+}
+
+struct PolicyRejectIf
+{
+    regex : string;
+    message : string;
+}
+
+struct PolicyDef
+{
+    tag : string;
+    length : optional<PolicyLength>;
+    rejectIf : optional<PolicyRejectIf>;
+    require : list<PolicyRequire>;
+    replacements : list<PolicyReplacement>;
+    outputFilter : list<PolicyOutputFilter>;
+}
+
+// ── Top-level IR ────────────────────────────────────────────────────────────
+
+struct IR
+{
+    versionMajor : int;
+    versionMinor : int;
+    versionPatch : int;
+    structs : list<StructDef>;
+    enums : list<EnumDef>;
+    functions : list<FunctionDef>;
+    policies : list<PolicyDef>;
+    rawTypedefs : string;
+}

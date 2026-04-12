@@ -6,6 +6,8 @@
 // extracts the main function's parameter info, and renders a Test.java file (to stdout).
 
 #include <tpp/Compiler.h>
+#include <tpp/IR.h>
+#include <tpp/Rendering.h>
 #include <nlohmann/json.hpp>
 #include <filesystem>
 #include <fstream>
@@ -64,35 +66,37 @@ static std::vector<std::filesystem::path> expandPattern(const std::filesystem::p
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// TypeRef → Java type name
+// TypeKind → Java type name
 // ═══════════════════════════════════════════════════════════════════════════════
 
-static std::string typeRefToJavaBoxedType(const tpp::TypeRef &t);
+static std::string typeKindToJavaBoxedType(const tpp::TypeKind &t);
 
-static std::string typeRefToJavaType(const tpp::TypeRef &t)
+static std::string typeKindToJavaType(const tpp::TypeKind &t)
 {
-    if (std::holds_alternative<tpp::StringType>(t)) return "String";
-    if (std::holds_alternative<tpp::IntType>(t))    return "int";
-    if (std::holds_alternative<tpp::BoolType>(t))   return "boolean";
-    if (auto *n = std::get_if<tpp::NamedType>(&t))  return n->name;
-    if (auto *l = std::get_if<std::shared_ptr<tpp::ListType>>(&t))
-        return "java.util.List<" + typeRefToJavaBoxedType((*l)->elementType) + ">";
-    if (auto *o = std::get_if<std::shared_ptr<tpp::OptionalType>>(&t))
-        return typeRefToJavaType((*o)->innerType);
-    return "Object";
+    switch (t.value.index())
+    {
+    case 0: return "String";   // Str
+    case 1: return "int";      // Int
+    case 2: return "boolean";  // Bool
+    case 3: return std::get<3>(t.value); // Named
+    case 4: return "java.util.List<" + typeKindToJavaBoxedType(*std::get<4>(t.value)) + ">"; // List
+    case 5: return typeKindToJavaType(*std::get<5>(t.value)); // Optional
+    default: return "Object";
+    }
 }
 
-static std::string typeRefToJavaBoxedType(const tpp::TypeRef &t)
+static std::string typeKindToJavaBoxedType(const tpp::TypeKind &t)
 {
-    if (std::holds_alternative<tpp::StringType>(t)) return "String";
-    if (std::holds_alternative<tpp::IntType>(t))    return "Integer";
-    if (std::holds_alternative<tpp::BoolType>(t))   return "Boolean";
-    if (auto *n = std::get_if<tpp::NamedType>(&t))  return n->name;
-    if (auto *l = std::get_if<std::shared_ptr<tpp::ListType>>(&t))
-        return "java.util.List<" + typeRefToJavaBoxedType((*l)->elementType) + ">";
-    if (auto *o = std::get_if<std::shared_ptr<tpp::OptionalType>>(&t))
-        return typeRefToJavaBoxedType((*o)->innerType);
-    return "Object";
+    switch (t.value.index())
+    {
+    case 0: return "String";   // Str
+    case 1: return "Integer";  // Int
+    case 2: return "Boolean";  // Bool
+    case 3: return std::get<3>(t.value); // Named
+    case 4: return "java.util.List<" + typeKindToJavaBoxedType(*std::get<4>(t.value)) + ">"; // List
+    case 5: return typeKindToJavaBoxedType(*std::get<5>(t.value)); // Optional
+    default: return "Object";
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -119,37 +123,40 @@ static std::string javaStringLiteral(const std::string &s)
 // Generate a Java parse line for a parameter
 // ═══════════════════════════════════════════════════════════════════════════════
 
-static std::string buildParseLine(const std::string &name, const tpp::TypeRef &type,
+static std::string buildParseLine(const std::string &name, const tpp::TypeKind &type,
                                   const std::string &jsonLiteral)
 {
-    if (std::holds_alternative<tpp::StringType>(type))
-        return "String " + name + " = (String) new org.json.JSONTokener(" + jsonLiteral + ").nextValue();";
-    if (std::holds_alternative<tpp::IntType>(type))
-        return "int " + name + " = ((Number) new org.json.JSONTokener(" + jsonLiteral + ").nextValue()).intValue();";
-    if (std::holds_alternative<tpp::BoolType>(type))
-        return "boolean " + name + " = (Boolean) new org.json.JSONTokener(" + jsonLiteral + ").nextValue();";
-    if (auto *n = std::get_if<tpp::NamedType>(&type))
-        return n->name + " " + name + " = " + n->name + ".fromJson(new org.json.JSONObject(" + jsonLiteral + "));";
-    if (auto *l = std::get_if<std::shared_ptr<tpp::ListType>>(&type))
+    switch (type.value.index())
     {
-        std::string jt = typeRefToJavaType(type);
-        const auto &elemType = (*l)->elementType;
+    case 0: // Str
+        return "String " + name + " = (String) new org.json.JSONTokener(" + jsonLiteral + ").nextValue();";
+    case 1: // Int
+        return "int " + name + " = ((Number) new org.json.JSONTokener(" + jsonLiteral + ").nextValue()).intValue();";
+    case 2: // Bool
+        return "boolean " + name + " = (Boolean) new org.json.JSONTokener(" + jsonLiteral + ").nextValue();";
+    case 3: { // Named
+        auto &n = std::get<3>(type.value);
+        return n + " " + name + " = " + n + ".fromJson(new org.json.JSONObject(" + jsonLiteral + "));";
+    }
+    case 4: { // List
+        std::string jt = typeKindToJavaType(type);
+        const auto &elemType = *std::get<4>(type.value);
         std::string elemExpr;
-        if (std::holds_alternative<tpp::StringType>(elemType))
-            elemExpr = "_arr.getString(_i)";
-        else if (std::holds_alternative<tpp::IntType>(elemType))
-            elemExpr = "_arr.getInt(_i)";
-        else if (std::holds_alternative<tpp::BoolType>(elemType))
-            elemExpr = "_arr.getBoolean(_i)";
-        else if (auto *en = std::get_if<tpp::NamedType>(&elemType))
-            elemExpr = en->name + ".fromJson(_arr.getJSONObject(_i))";
-        else
-            elemExpr = "_arr.get(_i)";
+        switch (elemType.value.index())
+        {
+        case 0: elemExpr = "_arr.getString(_i)"; break;
+        case 1: elemExpr = "_arr.getInt(_i)"; break;
+        case 2: elemExpr = "_arr.getBoolean(_i)"; break;
+        case 3: elemExpr = std::get<3>(elemType.value) + ".fromJson(_arr.getJSONObject(_i))"; break;
+        default: elemExpr = "_arr.get(_i)"; break;
+        }
         return jt + " " + name + " = new java.util.ArrayList<>(); "
                "{ org.json.JSONArray _arr = new org.json.JSONArray(" + jsonLiteral + "); "
                "for (int _i = 0; _i < _arr.length(); _i++) { " + name + ".add(" + elemExpr + "); } }";
     }
-    return typeRefToJavaType(type) + " " + name + " = null;";
+    default:
+        return typeKindToJavaType(type) + " " + name + " = null;";
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -219,9 +226,9 @@ int main(int argc, char *argv[])
     }
 
     // Find the main function
-    tpp::FunctionSymbol mainSymbol;
+    const tpp::FunctionDef *mainFunc = nullptr;
     std::string error;
-    if (!ir.get_function("main", mainSymbol, error))
+    if (!tpp::get_function(ir, "main", mainFunc, error))
     {
         std::cerr << testDir.string() << ": error: " << error << std::endl;
         return EXIT_FAILURE;
@@ -246,13 +253,13 @@ int main(int argc, char *argv[])
     defs.testName = testName;
     defs.expectedOutputLiteral = javaStringLiteral(expectedRaw);
 
-    const auto &params = mainSymbol.function.params;
+    const auto &params = mainFunc->params;
     std::string callArgs;
 
     if (params.size() == 1)
     {
         nlohmann::json value;
-        bool isList = std::holds_alternative<std::shared_ptr<tpp::ListType>>(params[0].type);
+        bool isList = (params[0].type->value.index() == 4); // List variant
         if (isList)
         {
             if (inputJson.is_array() && inputJson.size() == 1 && inputJson[0].is_array())
@@ -270,7 +277,7 @@ int main(int argc, char *argv[])
         std::string jsonLit = javaStringLiteral(value.dump());
         JavaTestParam p;
         p.name = params[0].name;
-        p.parseLine = buildParseLine(p.name, params[0].type, jsonLit);
+        p.parseLine = buildParseLine(p.name, *params[0].type, jsonLit);
         defs.params.push_back(p);
         callArgs = p.name;
     }
@@ -281,7 +288,7 @@ int main(int argc, char *argv[])
             std::string jsonLit = javaStringLiteral(inputJson[i].dump());
             JavaTestParam p;
             p.name = params[i].name;
-            p.parseLine = buildParseLine(p.name, params[i].type, jsonLit);
+            p.parseLine = buildParseLine(p.name, *params[i].type, jsonLit);
             defs.params.push_back(p);
             if (i > 0) callArgs += ", ";
             callArgs += p.name;

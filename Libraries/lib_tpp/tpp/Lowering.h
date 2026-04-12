@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace tpp
+namespace tpp::compiler
 {
     // Lower AST-based TemplateFunctions to type-resolved InstructionFunctions.
     // Returns true on success.  On failure, sets `error` and returns false.

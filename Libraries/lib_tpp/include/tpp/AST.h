@@ -8,7 +8,7 @@
 #include <memory>
 #include <nlohmann/json.hpp>
 
-namespace tpp
+namespace tpp::compiler
 {
     // ── Expressions ──
 

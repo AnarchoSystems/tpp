@@ -1,6 +1,7 @@
 #pragma once
 
 #include <tpp/Types.h>
+#include <tpp/AST.h>
 #include <tpp/Diagnostic.h>
 #include <string>
 #include <vector>
@@ -9,7 +10,7 @@
 #include <optional>
 #include <nlohmann/json.hpp>
 
-namespace tpp
+namespace tpp::compiler
 {
     // ═══════════════════════════════════════════════════════════════════
     // Instruction IR — a lowered, type-resolved representation of
@@ -121,6 +122,7 @@ namespace tpp
         std::vector<Instruction> body;
         std::string policy;
         std::string doc;
+        Range sourceRange{};
     };
 
     // ─────────────────────────────────────────────────────────────────

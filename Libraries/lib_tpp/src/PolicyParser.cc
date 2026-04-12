@@ -2,7 +2,7 @@
 #include <tpp/Compiler.h>
 #include <string>
 
-namespace tpp
+namespace tpp::compiler
 {
 
     // ═══════════════════════════════════════════════════════════════════
@@ -143,9 +143,14 @@ namespace tpp
     // Compiler::clear_policies / add_policy
     // ═══════════════════════════════════════════════════════════════════
 
+} // namespace tpp::compiler
+
+namespace tpp
+{
+
     void Compiler::clear_policies() noexcept
     {
-        policies_ = PolicyRegistry{};
+        policies_ = compiler::PolicyRegistry{};
     }
 
     bool Compiler::add_policy(const nlohmann::json &policyJson, std::string &error) noexcept

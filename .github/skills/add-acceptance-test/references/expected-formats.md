@@ -13,7 +13,7 @@ Hello, world!
 
 ## expected_errors.json (runtime / get-function error)
 
-Used when `output.get_function(...)` or `functionSymbol.render(...)` returns false.
+Used when `tpp::get_function(...)` or `tpp::render_function(...)` returns false.
 
 Schema:
 ```json

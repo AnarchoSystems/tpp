@@ -1,6 +1,7 @@
 #include "SemanticTokens.h"
 #include "LspDefinitions.h"
 #include <tpp/Tokenizer.h>
+#include <tpp/TypedefParser.h>
 #include <tpp/TemplateParser.h>
 #include <vector>
 #include <tuple>
@@ -19,6 +20,23 @@ static constexpr int TT_COMMENT   = lsp::tokenTypeIndex(lsp::SemanticTokenType::
 
 namespace tpp
 {
+
+// ── Compiler type aliases (these live in tpp::compiler after the IR migration) ─
+using Expression        = compiler::Expression;
+using Variable          = compiler::Variable;
+using FieldAccess       = compiler::FieldAccess;
+using ASTNode           = compiler::ASTNode;
+using CaseNode          = compiler::CaseNode;
+using FunctionCallNode  = compiler::FunctionCallNode;
+using AlignmentCellNode = compiler::AlignmentCellNode;
+using CommentNode       = compiler::CommentNode;
+using InterpolationNode = compiler::InterpolationNode;
+using ForNode           = compiler::ForNode;
+using IfNode            = compiler::IfNode;
+using SwitchNode        = compiler::SwitchNode;
+using RenderViaNode     = compiler::RenderViaNode;
+using TemplateFunction  = compiler::TemplateFunction;
+using TypeRegistry      = compiler::TypeRegistry;
 
 // Each raw token: {line, startChar, length, tokenType, modifiers}
 using RawToken = std::tuple<int, int, int, int, int>;
@@ -399,7 +417,7 @@ static void fillGaps(std::vector<RawToken> &out, const std::string &src,
 static void emitTypeTokens(std::vector<RawToken> &out, const std::string &src,
                             const TypeRegistry *reg)
 {
-    const auto &tokens = tokenize_typedefs(src);
+    const auto &tokens = compiler::tokenize_typedefs(src);
 
     // State machine to distinguish struct/enum names, field names, tag names, type refs.
     bool inEnum = false;           // inside an enum { } body
@@ -577,7 +595,7 @@ static nlohmann::json tokensForTemplate(const std::string &src)
         size_t bodyStartLine = 0;
         std::string bodyText;
         std::string headerText;
-        if (!parseOneTemplate(src, pos, func, &bodyStartLine, &bodyText,
+        if (!compiler::parseOneTemplate(src, pos, func, &bodyStartLine, &bodyText,
                               nullptr, nullptr, nullptr, &headerText))
             break;
         // Keep curLine in sync with pos after parseOneTemplate consumed the template
@@ -611,7 +629,7 @@ nlohmann::json computeSemanticTokens(const std::string &uri, const TppProject &p
     {
         // Get the source for this specific file
         std::string src = project.getContent(uri);
-        return tokensForTypes(src, &project.output().types);
+        return tokensForTypes(src, nullptr);
     }
     else
     {
