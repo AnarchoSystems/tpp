@@ -159,6 +159,94 @@ namespace tpp
     static std::string renderInstructions(const std::vector<Instruction> &instrs, RenderContext &ctx);
     static std::string renderBlockBody(const std::vector<Instruction> &instrs, RenderContext &ctx, int insertCol);
 
+    static bool jsonMatchesType(const nlohmann::json &value, const TypeKind &type)
+    {
+        switch (type.value.index())
+        {
+        case 0:
+            return value.is_string();
+        case 1:
+            return value.is_number_integer();
+        case 2:
+            return value.is_boolean();
+        case 3:
+            return value.is_object();
+        case 4:
+            return value.is_array();
+        case 5:
+            return value.is_null() || jsonMatchesType(value, *std::get<5>(type.value));
+        default:
+            return false;
+        }
+    }
+
+    static const FunctionDef *resolveRenderViaTarget(const std::vector<const FunctionDef *> &overloads,
+                                                     const nlohmann::json &value,
+                                                     nlohmann::json &boundValue)
+    {
+        if (overloads.size() == 1 && overloads[0]->params.size() == 1)
+        {
+            boundValue = value;
+            return overloads[0];
+        }
+
+        if (!value.is_object())
+            return nullptr;
+
+        for (auto it = value.begin(); it != value.end(); ++it)
+        {
+            const auto &payload = it.value();
+            for (auto *overload : overloads)
+            {
+                if (overload->params.empty())
+                {
+                    if (payload.is_null() || (payload.is_object() && payload.empty()))
+                    {
+                        boundValue = payload;
+                        return overload;
+                    }
+                    continue;
+                }
+
+                if (overload->params.size() == 1 && overload->params[0].type && jsonMatchesType(payload, *overload->params[0].type))
+                {
+                    boundValue = payload;
+                    return overload;
+                }
+            }
+        }
+
+        return nullptr;
+    }
+
+    static std::string renderRenderViaTarget(const FunctionDef &targetFunc,
+                                             const nlohmann::json &boundValue,
+                                             RenderContext &ctx)
+    {
+        if (!targetFunc.params.empty())
+            ctx.pushBinding(targetFunc.params[0].name, boundValue);
+
+        std::string savedPolicy = ctx.activePolicy;
+        const CompiledPolicy *savedPolicyPtr = ctx.activePolicyPtr;
+        if (!targetFunc.policy.empty())
+        {
+            ctx.activePolicy = targetFunc.policy;
+            ctx.activePolicyPtr = ctx.findPolicy(targetFunc.policy);
+        }
+
+        std::string rendered = renderInstructions(*targetFunc.body, ctx);
+        ctx.activePolicy = savedPolicy;
+        ctx.activePolicyPtr = savedPolicyPtr;
+
+        if (!rendered.empty() && rendered.back() == '\n')
+            rendered.pop_back();
+
+        if (!targetFunc.params.empty())
+            ctx.popBinding();
+
+        return rendered;
+    }
+
     // Render instructions, splitting output at AlignCell markers.
     // Within an aligned for-loop body, each cell typically contains only
     // Emit/EmitExpr instructions. We accumulate text per cell directly
@@ -522,10 +610,12 @@ namespace tpp
                             ctx.activePolicy = arg->policy;
                             ctx.activePolicyPtr = ctx.findPolicy(arg->policy);
                         }
+                        bool matchedCase = false;
                         for (const auto &c : *arg->cases)
                         {
                             if (val.contains(c.tag))
                             {
+                                matchedCase = true;
                                 if (!c.bindingName.empty())
                                     ctx.pushBinding(c.bindingName, val[c.tag]);
                                 if (arg->isBlock)
@@ -536,6 +626,14 @@ namespace tpp
                                     ctx.popBinding();
                                 break;
                             }
+                        }
+                        if (!matchedCase && arg->defaultCase)
+                        {
+                            const auto &defaultCase = *arg->defaultCase;
+                            if (arg->isBlock)
+                                result += renderBlockBody(*defaultCase.body, ctx, arg->insertCol);
+                            else
+                                result += renderInstructions(*defaultCase.body, ctx);
                         }
                         ctx.activePolicy = savedPolicy;
                         ctx.activePolicyPtr = savedPolicyPtr;
@@ -573,8 +671,8 @@ namespace tpp
                 }
                 else if constexpr (std::is_same_v<T, RenderViaInstr>)
                 {
-                    auto collection = ctx.resolve(arg.collection);
-                    if (collection.is_array())
+                    auto value = ctx.resolve(arg.collection);
+                    if (value.is_array() || value.is_object())
                     {
                         std::string savedPolicy = ctx.activePolicy;
                         const CompiledPolicy *savedPolicyPtr = ctx.activePolicyPtr;
@@ -589,65 +687,32 @@ namespace tpp
                             for (size_t idx : rvIt->second)
                                 overloads.push_back(&ctx.functions[idx]);
 
-                        for (size_t i = 0; i < collection.size(); ++i)
+                        auto appendRenderedItem = [&](const nlohmann::json &item, bool hasMore)
                         {
-                            const FunctionDef *targetFunc = nullptr;
-                            if (overloads.size() == 1)
+                            nlohmann::json boundValue;
+                            const FunctionDef *targetFunc = resolveRenderViaTarget(overloads, item, boundValue);
+                            if (!targetFunc)
+                                return;
+
+                            std::string iterResult = renderRenderViaTarget(*targetFunc, boundValue, ctx);
+                            result += arg.precededBy;
+                            result += iterResult;
+                            if (hasMore)
+                                result += arg.sep;
+                            else if (!arg.followedBy.empty())
+                                result += arg.followedBy;
+                        };
+
+                        if (value.is_array())
+                        {
+                            for (size_t i = 0; i < value.size(); ++i)
                             {
-                                targetFunc = overloads[0];
+                                appendRenderedItem(value[i], i + 1 < value.size());
                             }
-                            else if (overloads.size() > 1 && collection[i].is_object())
-                            {
-                                for (auto it = collection[i].begin(); it != collection[i].end(); ++it)
-                                {
-                                    const auto &payload = it.value();
-                                    for (auto *ovl : overloads)
-                                    {
-                                        if (ovl->params.size() == 1)
-                                        {
-                                            const auto &ptype = *ovl->params[0].type;
-                                            bool matches = false;
-                                            if (ptype.value.index() == 0 && payload.is_string()) matches = true;
-                                            else if (ptype.value.index() == 1 && payload.is_number()) matches = true;
-                                            else if (ptype.value.index() == 2 && payload.is_boolean()) matches = true;
-                                            if (matches) { targetFunc = ovl; break; }
-                                        }
-                                    }
-                                    if (targetFunc) break;
-                                }
-                            }
-                            if (targetFunc && !targetFunc->params.empty())
-                            {
-                                nlohmann::json elemVal = collection[i];
-                                if (overloads.size() > 1 && elemVal.is_object())
-                                {
-                                    for (auto it = elemVal.begin(); it != elemVal.end(); ++it)
-                                    {
-                                        elemVal = it.value();
-                                        break;
-                                    }
-                                }
-                                ctx.pushBinding(targetFunc->params[0].name, elemVal);
-                                std::string funcSavedPolicy = ctx.activePolicy;
-                                const CompiledPolicy *funcSavedPolicyPtr = ctx.activePolicyPtr;
-                                if (!targetFunc->policy.empty())
-                                {
-                                    ctx.activePolicy = targetFunc->policy;
-                                    ctx.activePolicyPtr = ctx.findPolicy(targetFunc->policy);
-                                }
-                                std::string iterResult = renderInstructions(*targetFunc->body, ctx);
-                                ctx.activePolicy = funcSavedPolicy;
-                                ctx.activePolicyPtr = funcSavedPolicyPtr;
-                                if (!iterResult.empty() && iterResult.back() == '\n')
-                                    iterResult.pop_back();
-                                ctx.popBinding();
-                                result += arg.precededBy;
-                                result += iterResult;
-                                if (i + 1 < collection.size())
-                                    result += arg.sep;
-                                else if (!arg.followedBy.empty())
-                                    result += arg.followedBy;
-                            }
+                        }
+                        else
+                        {
+                            appendRenderedItem(value, false);
                         }
                         ctx.activePolicy = savedPolicy;
                         ctx.activePolicyPtr = savedPolicyPtr;

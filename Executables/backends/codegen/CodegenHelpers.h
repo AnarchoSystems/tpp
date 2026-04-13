@@ -152,9 +152,7 @@ inline tpp::TypeKind getElemType(const tpp::TypeKind &t)
 {
     if (t.value.index() == 4) // List
         return cloneTypeKind(*std::get<4>(t.value));
-    tpp::TypeKind str;
-    str.value.emplace<0>();
-    return str;
+    return cloneTypeKind(t);
 }
 
 /// Split instructions at AlignCell boundaries into separate cell bodies.
@@ -458,6 +456,36 @@ inline Instruction convertInstruction(
                 first = false;
             }
 
+            std::unique_ptr<CaseData> defaultCase;
+            if (arg->defaultCase)
+            {
+                const auto &c = *arg->defaultCase;
+                int caseScopeId = 0;
+                std::string caseSb = sb;
+                if (arg->isBlock)
+                {
+                    caseScopeId = scope++;
+                    caseSb = "_blk" + std::to_string(caseScopeId);
+                }
+
+                auto caseBody = std::make_unique<std::vector<Instruction>>();
+                for (const auto &bi : *c.body)
+                    caseBody->push_back(convertInstruction(bi, caseSb, pol, scope, ir, cfg));
+
+                defaultCase = std::make_unique<CaseData>();
+                defaultCase->tag = c.tag;
+                defaultCase->tagLit = stringLiteral(c.tag);
+                defaultCase->bindingName = c.bindingName;
+                defaultCase->hasBinding = !c.bindingName.empty();
+                defaultCase->body = std::move(caseBody);
+                defaultCase->scopeId = caseScopeId;
+                defaultCase->isFirst = first;
+                defaultCase->variantIndex = -1;
+                defaultCase->isRecursivePayload = false;
+                if (c.payloadType)
+                    defaultCase->payloadType = std::make_unique<TypeKind>(typeKindToContext(*c.payloadType));
+            }
+
             std::string enumTypeName;
             if (switchType->value.index() == 3)
                 enumTypeName = std::get<3>(switchType->value);
@@ -471,6 +499,7 @@ inline Instruction convertInstruction(
             switchData->exprPath = switchExprPath;
             switchData->enumTypeName = enumTypeName;
             switchData->cases = std::move(casesVec);
+            switchData->defaultCase = std::move(defaultCase);
             switchData->isBlock = arg->isBlock;
             switchData->insertCol = arg->insertCol;
             switchData->sb = sb;
@@ -500,6 +529,7 @@ inline Instruction convertInstruction(
         else if constexpr (std::is_same_v<T, tpp::RenderViaInstr>)
         {
             int s = scope++;
+            bool isCollection = arg.collection.type->value.index() == 4;
             auto elemType = getElemType(*arg.collection.type);
 
             std::vector<const tpp::FunctionDef *> overloads;
@@ -507,17 +537,19 @@ inline Instruction convertInstruction(
                 if (fn.name == arg.functionName)
                     overloads.push_back(&fn);
 
-            bool isSingleOverload = overloads.size() <= 1;
+            bool isSingleOverload = overloads.size() == 1 && overloads[0]->params.size() == 1
+                && overloads[0]->params[0].type && typeKindEqual(*overloads[0]->params[0].type, elemType);
             std::vector<RenderViaOverload> overloadsVec;
+            std::string enumTypeName;
 
             if (!isSingleOverload)
             {
                 const tpp::EnumDef *enumDef = nullptr;
                 if (elemType.value.index() == 3)
                 {
-                    const auto &typeName = std::get<3>(elemType.value);
+                    enumTypeName = std::get<3>(elemType.value);
                     for (const auto &e : ir.enums)
-                        if (e.name == typeName) { enumDef = &e; break; }
+                        if (e.name == enumTypeName) { enumDef = &e; break; }
                 }
 
                 if (enumDef)
@@ -528,8 +560,16 @@ inline Instruction convertInstruction(
                         const tpp::FunctionDef *match = nullptr;
                         for (auto *ovl : overloads)
                         {
+                            if (!v.payload)
+                            {
+                                if (ovl->params.empty())
+                                {
+                                    match = ovl;
+                                    break;
+                                }
+                                continue;
+                            }
                             if (ovl->params.size() == 1
-                                && v.payload != nullptr
                                 && ovl->params[0].type
                                 && typeKindEqual(*ovl->params[0].type, *v.payload))
                             {
@@ -555,7 +595,9 @@ inline Instruction convertInstruction(
             RenderViaData rvia;
             rvia.scopeId = s;
             rvia.collPath = fixCppPath(arg.collection.path, ir);
+            rvia.isCollection = isCollection;
             rvia.elemType = std::make_unique<TypeKind>(typeKindToContext(elemType));
+            rvia.enumTypeName = enumTypeName;
             rvia.functionName = cfg.functionPrefix + arg.functionName;
             rvia.hasSep = !arg.sep.empty();
             rvia.sepLit = !arg.sep.empty() ? stringLiteral(arg.sep) : "";

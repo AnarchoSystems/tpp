@@ -546,6 +546,21 @@ StringBuilder _blk@c.scopeId@ = new StringBuilder();
 @s.sb@.append(_tppBlockIndent(_blk@c.scopeId@.toString(), @s.insertCol@));
 END
 
+template emit_switch_default(s: SwitchData, c: CaseData)
+@if c.isFirst@
+{
+@else@
+} else {
+@end if@
+    @if s.isBlock@
+    @emit_switch_case_block(s, c)@
+    @else@
+    @for instr in c.body@
+    @emit_instr(instr)@
+    @end for@
+    @end if@
+END
+
 template emit_switch(s: SwitchData)
 @for c in s.cases@
 @if c.isFirst@
@@ -564,6 +579,9 @@ if (@s.exprPath@._tag.equals(@c.tagLit@)) {
     @end for@
     @end if@
 @end for@
+@if s.defaultCase@
+@emit_switch_default(s, s.defaultCase)@
+@end if@
 }
 END
 
@@ -573,6 +591,7 @@ template emit_render_via_dispatch(r: RenderViaData)
 String _res@r.scopeId@ = "";
 @for ovl in r.overloads@
 @if ovl.isFirst@
+@if ovl.payloadType@
 @if r.policyArg@
 if (_item@r.scopeId@._tag.equals(@ovl.tagLit@)) {
     _res@r.scopeId@ = @r.functionName@(_item@r.scopeId@.get@ovl.tag@(), @java_policy_ref(r.policyArg)@);
@@ -582,18 +601,57 @@ if (_item@r.scopeId@._tag.equals(@ovl.tagLit@)) {
 @end if@
 @else@
 @if r.policyArg@
+if (_item@r.scopeId@._tag.equals(@ovl.tagLit@)) {
+    _res@r.scopeId@ = @r.functionName@(@java_policy_ref(r.policyArg)@);
+@else@
+if (_item@r.scopeId@._tag.equals(@ovl.tagLit@)) {
+    _res@r.scopeId@ = @r.functionName@();
+@end if@
+@end if@
+@else@
+@if ovl.payloadType@
+@if r.policyArg@
 } else if (_item@r.scopeId@._tag.equals(@ovl.tagLit@)) {
     _res@r.scopeId@ = @r.functionName@(_item@r.scopeId@.get@ovl.tag@(), @java_policy_ref(r.policyArg)@);
 @else@
 } else if (_item@r.scopeId@._tag.equals(@ovl.tagLit@)) {
     _res@r.scopeId@ = @r.functionName@(_item@r.scopeId@.get@ovl.tag@());
+@end if@
+@else@
+@if r.policyArg@
+} else if (_item@r.scopeId@._tag.equals(@ovl.tagLit@)) {
+    _res@r.scopeId@ = @r.functionName@(@java_policy_ref(r.policyArg)@);
+@else@
+} else if (_item@r.scopeId@._tag.equals(@ovl.tagLit@)) {
+    _res@r.scopeId@ = @r.functionName@();
+@end if@
 @end if@
 @end if@
 @end for@
 }
 END
 
-template emit_render_via(r: RenderViaData)
+template emit_render_via_single(r: RenderViaData)
+@java_type(r.elemType)@ _item@r.scopeId@ = @r.collPath@;
+@if r.isSingleOverload@
+@if r.policyArg@
+String _res@r.scopeId@ = @r.functionName@(_item@r.scopeId@, @java_policy_ref(r.policyArg)@);
+@else@
+String _res@r.scopeId@ = @r.functionName@(_item@r.scopeId@);
+@end if@
+@else@
+@emit_render_via_dispatch(r)@
+@end if@
+@if r.hasPreceded@
+@r.sb@.append(@r.precededByLit@);
+@end if@
+@r.sb@.append(_res@r.scopeId@);
+@if r.hasFollowed@
+@r.sb@.append(@r.followedByLit@);
+@end if@
+END
+
+template emit_render_via_collection(r: RenderViaData)
 for (int _i@r.scopeId@ = 0; _i@r.scopeId@ < @r.collPath@.size(); _i@r.scopeId@++) {
     @java_type(r.elemType)@ _item@r.scopeId@ = @r.collPath@.get(_i@r.scopeId@);
     @if r.isSingleOverload@
@@ -620,6 +678,14 @@ for (int _i@r.scopeId@ = 0; _i@r.scopeId@ < @r.collPath@.size(); _i@r.scopeId@++
     @end if@
     @end if@
 }
+END
+
+template emit_render_via(r: RenderViaData)
+@if r.isCollection@
+@emit_render_via_collection(r)@
+@else@
+@emit_render_via_single(r)@
+@end if@
 END
 
 // ── Policy helpers ───────────────────────────────────────────────────────────

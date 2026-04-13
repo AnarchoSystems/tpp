@@ -346,6 +346,13 @@ namespace tpp::compiler
             return EndCaseDirective{};
         }
 
+        if (startsWith(t, "default"))
+        {
+            if (!trim(t.substr(7)).empty())
+                return ErrorDirective{"unexpected trailing tokens in default directive"};
+            return DefaultDirective{};
+        }
+
         if (startsWith(t, "for "))
         {
             std::string mainPart = t;
@@ -782,6 +789,10 @@ namespace tpp::compiler
                 {
                     return sub;
                 }
+                else if (std::holds_alternative<DefaultDirective>(s.info))
+                {
+                    return sub;
+                }
                 else if (std::holds_alternative<EndIfDirective>(s.info))
                 {
                     lastTerminatorRange = makeRange(lineIndex, s);
@@ -816,6 +827,17 @@ namespace tpp::compiler
                             CaseNode cn;
                             cn.tag = cd->tag;
                             cn.bindingName = cd->binding;
+                            cn.sourceRange = makeRange(lineIndex, cs);
+                            ++pos;
+                            lastTerminatorRange = {};
+                            cn.body = recurse();
+                            cn.endRange = lastTerminatorRange;
+                            lastTerminatorRange = {};
+                            switchNode->cases.push_back(std::move(cn));
+                        }
+                        else if (std::holds_alternative<DefaultDirective>(cs.info))
+                        {
+                            CaseNode cn;
                             cn.sourceRange = makeRange(lineIndex, cs);
                             ++pos;
                             lastTerminatorRange = {};
@@ -957,6 +979,10 @@ namespace tpp::compiler
                         ++pos;
                         return nodes;
                     }
+                    else if (std::holds_alternative<DefaultDirective>(seg.info))
+                    {
+                        return nodes;
+                    }
                     else if (auto *d = std::get_if<SwitchDirective>(&seg.info))
                     {
                         auto switchNode = std::make_shared<SwitchNode>();
@@ -988,6 +1014,17 @@ namespace tpp::compiler
                                         CaseNode cn;
                                         cn.tag = cd->tag;
                                         cn.bindingName = cd->binding;
+                                        cn.sourceRange = makeRange((int)pos, s2);
+                                        ++pos;
+                                        Range caseEndRange{};
+                                        cn.body = parseBlock(tl.indent, &caseEndRange);
+                                        cn.endRange = caseEndRange;
+                                        switchNode->cases.push_back(std::move(cn));
+                                        break;
+                                    }
+                                    if (std::holds_alternative<DefaultDirective>(s2.info))
+                                    {
+                                        CaseNode cn;
                                         cn.sourceRange = makeRange((int)pos, s2);
                                         ++pos;
                                         Range caseEndRange{};
@@ -1031,6 +1068,10 @@ namespace tpp::compiler
                         return nodes;
                     }
                     else if (std::holds_alternative<CaseDirective>(seg.info))
+                    {
+                        return nodes;
+                    }
+                    else if (std::holds_alternative<DefaultDirective>(seg.info))
                     {
                         return nodes;
                     }
@@ -1239,6 +1280,47 @@ namespace tpp::compiler
         return nullptr;
     }
 
+    static std::vector<const TemplateFunction *> findTemplateOverloads(const std::vector<TemplateFunction> &functions,
+                                                                       const std::string &name)
+    {
+        std::vector<const TemplateFunction *> overloads;
+        for (const auto &function : functions)
+        {
+            if (function.name == name)
+                overloads.push_back(&function);
+        }
+        return overloads;
+    }
+
+    static bool hasWholeEnumRenderViaOverload(const std::vector<const TemplateFunction *> &overloads,
+                                              const TypeRef &enumType)
+    {
+        return overloads.size() == 1 && overloads[0]->params.size() == 1 && overloads[0]->params[0].type == enumType;
+    }
+
+    static bool renderViaVariantCovered(const std::vector<const TemplateFunction *> &overloads,
+                                        const TypeRef &enumType,
+                                        const VariantDef &variant)
+    {
+        if (hasWholeEnumRenderViaOverload(overloads, enumType))
+            return true;
+
+        for (const auto *overload : overloads)
+        {
+            if (!variant.payload.has_value())
+            {
+                if (overload->params.empty())
+                    return true;
+                continue;
+            }
+
+            if (overload->params.size() == 1 && overload->params[0].type == variant.payload.value())
+                return true;
+        }
+
+        return false;
+    }
+
     static bool lookupVariableType(const std::string &name,
                                    const std::vector<ValidationFrame> &frames,
                                    TypeRef &outType)
@@ -1410,6 +1492,7 @@ namespace tpp::compiler
                                           size_t bodyStartLine,
                                           const TypeRegistry &types,
                                           std::vector<Diagnostic> &diags,
+                                          const std::vector<TemplateFunction> &allFunctions,
                                           int headerLine = 0,
                                           const std::string &headerText = "")
     {
@@ -1637,6 +1720,29 @@ namespace tpp::compiler
                         }
                     }
                 }
+                else if (std::holds_alternative<DefaultDirective>(seg.info))
+                {
+                    ValidationFrame frame{ScopeKind::Case};
+                    bool foundSwitch = false;
+                    bool duplicateDefault = false;
+                    for (auto it = frames.rbegin(); it != frames.rend(); ++it)
+                    {
+                        if (it->kind != ScopeKind::Switch)
+                            continue;
+                        foundSwitch = true;
+                        if (it->switchCaseTags.count("") != 0)
+                            duplicateDefault = true;
+                        it->switchCaseTags.insert("");
+                        break;
+                    }
+                    if (!foundSwitch)
+                        addTemplateDiagnostic(diags, bodyStartLine, li, seg, "default directive must be inside a switch");
+                    else if (duplicateDefault)
+                        addTemplateDiagnostic(diags, bodyStartLine, li, seg, "switch may contain at most one default branch");
+                    frame.openLineIndex = (int)li;
+                    frame.openSeg = seg;
+                    frames.push_back(std::move(frame));
+                }
                 else if (std::holds_alternative<EndIfDirective>(seg.info))
                 {
                     popTo(ScopeKind::If);
@@ -1669,7 +1775,7 @@ namespace tpp::compiler
                                 std::vector<std::string> missing;
                                 for (const auto &variant : switchEnum->variants)
                                 {
-                                    if (it->switchCaseTags.count(variant.tag) == 0)
+                                    if (it->switchCaseTags.count(variant.tag) == 0 && it->switchCaseTags.count("") == 0)
                                         missing.push_back(variant.tag);
                                 }
                                 if (!missing.empty())
@@ -1699,6 +1805,8 @@ namespace tpp::compiler
                     {
                         if (it->kind == ScopeKind::Switch)
                         {
+                            if (it->switchCaseTags.count("") != 0)
+                                addTemplateDiagnostic(diags, bodyStartLine, li, seg, "default branch must be the last branch in a switch");
                             it->switchCaseTags.insert(d->tag);
                             break;
                         }
@@ -1731,15 +1839,57 @@ namespace tpp::compiler
                     const EnumDef *switchEnum = findNearestSwitchEnum(frames, types);
                     const VariantDef *variant = findEnumVariant(switchEnum, d->exprText);
                     if (switchEnum && variant)
+                    {
+                        for (auto it = frames.rbegin(); it != frames.rend(); ++it)
+                        {
+                            if (it->kind != ScopeKind::Switch)
+                                continue;
+                            if (it->switchCaseTags.count("") != 0)
+                                addTemplateDiagnostic(diags, bodyStartLine, li, seg, "default branch must be the last branch in a switch");
+                            break;
+                        }
                         continue; // Pointfree variant visitor inside switch: @render Tag via fn@
+                    }
 
                     if (!validatePathExpressionType(d->exprText, frames, types, activeNarrowing, activeAbsent, false, exprType, err))
                     {
                         addTemplateDiagnostic(diags, bodyStartLine, li, seg, err);
                         continue;
                     }
-                    if (!std::holds_alternative<std::shared_ptr<ListType>>(exprType))
-                        addTemplateDiagnostic(diags, bodyStartLine, li, seg, "render expression must be a list");
+
+                    TypeRef renderElemType = exprType;
+                    if (auto listType = std::get_if<std::shared_ptr<ListType>>(&exprType))
+                        renderElemType = (*listType)->elementType;
+                    else if (!resolveEnumFromType(exprType, types))
+                    {
+                        addTemplateDiagnostic(diags, bodyStartLine, li, seg, "render expression must be a list or enum");
+                        continue;
+                    }
+
+                    const EnumDef *renderEnum = resolveEnumFromType(renderElemType, types);
+                    if (!renderEnum)
+                        continue;
+
+                    auto overloads = findTemplateOverloads(allFunctions, d->func);
+                    std::vector<std::string> missing;
+                    for (const auto &renderVariant : renderEnum->variants)
+                    {
+                        if (!renderViaVariantCovered(overloads, renderElemType, renderVariant))
+                            missing.push_back(renderVariant.tag);
+                    }
+
+                    if (!missing.empty())
+                    {
+                        std::string missingText;
+                        for (size_t i = 0; i < missing.size(); ++i)
+                        {
+                            if (i > 0)
+                                missingText += ", ";
+                            missingText += missing[i];
+                        }
+                        addTemplateDiagnostic(diags, bodyStartLine, li, seg,
+                                              "render-via function '" + d->func + "' is missing overloads for enum '" + renderEnum->name + "': " + missingText);
+                    }
                 }
             }
         }
@@ -2016,6 +2166,15 @@ namespace tpp
             types = compiler::TypeRegistry{};
 
             std::vector<compiler::TemplateFunction> pendingFunctions;
+            struct PendingTemplateValidation
+            {
+                size_t functionIndex;
+                size_t bodyStartLine;
+                std::vector<compiler::TemplateLine> templateLines;
+                std::vector<Diagnostic> *diagnostics;
+                std::string headerText;
+            };
+            std::vector<PendingTemplateValidation> pendingValidations;
 
             // Helper: two functions are duplicate overloads if name + param types match
             auto isSameSignature = [](const compiler::TemplateFunction &a,
@@ -2200,10 +2359,28 @@ namespace tpp
                             continue;
                         }
 
-                        compiler::validateTemplateSemantics(func, templateLines, bodyStartLine, types, *src.diagnostics,
-                                                   (int)bodyStartLine - 1, headerText);
                         pendingFunctions.push_back(std::move(func));
+                        pendingValidations.push_back({
+                            pendingFunctions.size() - 1,
+                            bodyStartLine,
+                            std::move(templateLines),
+                            src.diagnostics,
+                            std::move(headerText)
+                        });
                     }
+                }
+
+                for (const auto &pendingValidation : pendingValidations)
+                {
+                    compiler::validateTemplateSemantics(
+                        pendingFunctions[pendingValidation.functionIndex],
+                        pendingValidation.templateLines,
+                        pendingValidation.bodyStartLine,
+                        types,
+                        *pendingValidation.diagnostics,
+                        pendingFunctions,
+                        (int)pendingValidation.bodyStartLine - 1,
+                        pendingValidation.headerText);
                 }
             }
 

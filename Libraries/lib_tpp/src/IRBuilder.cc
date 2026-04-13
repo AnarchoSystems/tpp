@@ -130,7 +130,10 @@ static Instruction convert_instruction(const compiler::Instruction &instr)
                 if (c.payloadType.has_value())
                     ci.payloadType = std::make_unique<TypeKind>(convert_type(*c.payloadType));
                 ci.body = std::make_unique<std::vector<Instruction>>(convert_body(c.body));
-                cases->push_back(std::move(ci));
+                if (c.tag.empty())
+                    out->defaultCase = std::make_unique<CaseInstr>(std::move(ci));
+                else
+                    cases->push_back(std::move(ci));
             }
             out->cases = std::move(cases);
             out->isBlock = arg->isBlock;

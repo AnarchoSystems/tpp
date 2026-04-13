@@ -136,12 +136,13 @@ struct SwitchInstr
 {
     ExprInfo expr;
     std::unique_ptr<std::vector<CaseInstr>> cases;
+    std::unique_ptr<CaseInstr> defaultCase;
     bool isBlock;
     int insertCol;
     std::string policy;
     static std::string tpp_typedefs() noexcept
     {
-        return "/// Switch on a variant expression.\nstruct SwitchInstr\n{\n    expr : ExprInfo;\n    cases : list<CaseInstr>;\n    isBlock : bool;\n    insertCol : int;\n    policy : string;\n}";
+        return "/// Switch on a variant expression.\nstruct SwitchInstr\n{\n    expr : ExprInfo;\n    cases : list<CaseInstr>;\n    defaultCase : optional<CaseInstr>;\n    isBlock : bool;\n    insertCol : int;\n    policy : string;\n}";
     }
 };
 /// Direct function call.
@@ -562,6 +563,7 @@ inline void from_json(const nlohmann::json& j, SwitchInstr& v)
 {
     j.at("expr").get_to(v.expr);
     v.cases = std::make_unique<std::vector<CaseInstr>>(j.at("cases").get<std::vector<CaseInstr>>());
+    if (j.contains("defaultCase") && !j.at("defaultCase").is_null()) v.defaultCase = std::make_unique<CaseInstr>(j.at("defaultCase").get<CaseInstr>());
     j.at("isBlock").get_to(v.isBlock);
     j.at("insertCol").get_to(v.insertCol);
     j.at("policy").get_to(v.policy);
@@ -571,6 +573,7 @@ inline void to_json(nlohmann::json& j, const SwitchInstr& v)
     j = nlohmann::json{};
     j["expr"] = v.expr;
     j["cases"] = *v.cases;
+    if (v.defaultCase) j["defaultCase"] = *v.defaultCase;
     j["isBlock"] = v.isBlock;
     j["insertCol"] = v.insertCol;
     j["policy"] = v.policy;

@@ -422,6 +422,17 @@ var _blk@c.scopeId@ = ""
 @s.sb@ += _tppBlockIndent(_blk@c.scopeId@, @s.insertCol@)
 END
 
+template emit_switch_default(s: SwitchData, c: CaseData)
+default:
+    @if s.isBlock@
+    @emit_switch_case_block(s, c)@
+    @else@
+    @for instr in c.body@
+    @emit_instr(instr)@
+    @end for@
+    @end if@
+END
+
 template emit_switch(s: SwitchData)
 switch @s.exprPath@ {
 @for c in s.cases@
@@ -442,7 +453,11 @@ case .@c.tag@:
     @end for@
     @end if@
 @end for@
+@if s.defaultCase@
+@emit_switch_default(s, s.defaultCase)@
+@else@
 default: break
+@end if@
 }
 END
 
@@ -452,6 +467,7 @@ template emit_render_via_dispatch(r: RenderViaData)
 var _res@r.scopeId@ = ""
 switch _item@r.scopeId@ {
 @for ovl in r.overloads@
+@if ovl.payloadType@
 case .@ovl.tag@(let _payload):
 @if r.needsTry@
 @if r.policyArg@
@@ -466,12 +482,56 @@ case .@ovl.tag@(let _payload):
     _res@r.scopeId@ = @r.functionName@(_payload)
 @end if@
 @end if@
+@else@
+case .@ovl.tag@:
+@if r.needsTry@
+@if r.policyArg@
+    _res@r.scopeId@ = try @r.functionName@(@swift_policy_ref(r.policyArg)@)
+@else@
+    _res@r.scopeId@ = try @r.functionName@()
+@end if@
+@else@
+@if r.policyArg@
+    _res@r.scopeId@ = @r.functionName@(@swift_policy_ref(r.policyArg)@)
+@else@
+    _res@r.scopeId@ = @r.functionName@()
+@end if@
+@end if@
+@end if@
 @end for@
 default: break
 }
 END
 
-template emit_render_via(r: RenderViaData)
+template emit_render_via_single(r: RenderViaData)
+let _item@r.scopeId@ = @r.collPath@
+@if r.isSingleOverload@
+@if r.needsTry@
+@if r.policyArg@
+let _res@r.scopeId@ = try @r.functionName@(_item@r.scopeId@, @swift_policy_ref(r.policyArg)@)
+@else@
+let _res@r.scopeId@ = try @r.functionName@(_item@r.scopeId@)
+@end if@
+@else@
+@if r.policyArg@
+let _res@r.scopeId@ = @r.functionName@(_item@r.scopeId@, @swift_policy_ref(r.policyArg)@)
+@else@
+let _res@r.scopeId@ = @r.functionName@(_item@r.scopeId@)
+@end if@
+@end if@
+@else@
+@emit_render_via_dispatch(r)@
+@end if@
+@if r.hasPreceded@
+@r.sb@ += @r.precededByLit@
+@end if@
+@r.sb@ += _res@r.scopeId@
+@if r.hasFollowed@
+@r.sb@ += @r.followedByLit@
+@end if@
+END
+
+template emit_render_via_collection(r: RenderViaData)
 for _i@r.scopeId@ in 0..<@r.collPath@.count {
     let _item@r.scopeId@ = @r.collPath@[_i@r.scopeId@]
     @if r.isSingleOverload@
@@ -506,6 +566,14 @@ for _i@r.scopeId@ in 0..<@r.collPath@.count {
     @end if@
     @end if@
 }
+END
+
+template emit_render_via(r: RenderViaData)
+@if r.isCollection@
+@emit_render_via_collection(r)@
+@else@
+@emit_render_via_single(r)@
+@end if@
 END
 
 // ── Policy helpers ───────────────────────────────────────────────────────────

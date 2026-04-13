@@ -510,6 +510,19 @@ std::string _blk@c.scopeId@;
 @s.sb@ += _tppBlockIndent(_blk@c.scopeId@, @s.insertCol@);
 END
 
+template emit_switch_default(s: SwitchData, c: CaseData)
+    default: {
+        @if s.isBlock@
+        @emit_switch_case_block(s, c)@
+        @else@
+        @for instr in c.body@
+        @emit_instr(instr)@
+        @end for@
+        @end if@
+        break;
+    }
+END
+
 template emit_switch(s: SwitchData)
 switch (@s.exprPath@.value.index()) {
 @for c in s.cases@
@@ -531,6 +544,9 @@ switch (@s.exprPath@.value.index()) {
         break;
     }
 @end for@
+@if s.defaultCase@
+@emit_switch_default(s, s.defaultCase)@
+@end if@
 }
 END
 
@@ -548,12 +564,40 @@ std::visit([&](const auto& _sv) {
         _res@r.scopeId@ = @r.functionName@(_sv);
 @end if@
     }
+@else@
+    if constexpr (std::is_same_v<std::decay_t<decltype(_sv)>, @r.enumTypeName@_@ovl.tag@>) {
+@if r.policyArg@
+        _res@r.scopeId@ = @r.functionName@(@cpp_policy_ref(r.policyArg)@);
+@else@
+        _res@r.scopeId@ = @r.functionName@();
+@end if@
+    }
 @end if@
 @end for@
 }, _item@r.scopeId@.value);
 END
 
-template emit_render_via(r: RenderViaData)
+template emit_render_via_single(r: RenderViaData)
+const auto& _item@r.scopeId@ = @r.collPath@;
+@if r.isSingleOverload@
+@if r.policyArg@
+std::string _res@r.scopeId@ = @r.functionName@(_item@r.scopeId@, @cpp_policy_ref(r.policyArg)@);
+@else@
+std::string _res@r.scopeId@ = @r.functionName@(_item@r.scopeId@);
+@end if@
+@else@
+@emit_render_via_dispatch(r)@
+@end if@
+@if r.hasPreceded@
+@r.sb@ += @r.precededByLit@;
+@end if@
+@r.sb@ += _res@r.scopeId@;
+@if r.hasFollowed@
+@r.sb@ += @r.followedByLit@;
+@end if@
+END
+
+template emit_render_via_collection(r: RenderViaData)
 for (size_t _i@r.scopeId@ = 0; _i@r.scopeId@ < @r.collPath@.size(); _i@r.scopeId@++) {
     const auto& _item@r.scopeId@ = @r.collPath@[_i@r.scopeId@];
     @if r.isSingleOverload@
@@ -580,6 +624,14 @@ for (size_t _i@r.scopeId@ = 0; _i@r.scopeId@ < @r.collPath@.size(); _i@r.scopeId
     @end if@
     @end if@
 }
+END
+
+template emit_render_via(r: RenderViaData)
+@if r.isCollection@
+@emit_render_via_collection(r)@
+@else@
+@emit_render_via_single(r)@
+@end if@
 END
 
 // ── Policy helpers ───────────────────────────────────────────────────────────

@@ -1,0 +1,15 @@
+[
+	{
+		"uri": "error_render_via_missing_enum_overload/template.tpp",
+		"diagnostics": [
+			{
+				"range": {
+					"start": {"line": 4, "character": 0},
+					"end": {"line": 4, "character": 30}
+				},
+				"message": "render-via function 'render_item' is missing overloads for enum 'Item': Text, None",
+				"severity": "error"
+			}
+		]
+	}
+]

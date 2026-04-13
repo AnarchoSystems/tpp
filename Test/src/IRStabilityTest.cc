@@ -30,8 +30,7 @@ static void collectPaths(const nlohmann::json &j, const std::string &prefix,
 // ── Excluded paths (version fields change on every bump) ─────────────────────
 
 static const std::set<std::string> kExcludedPaths = {
-    "versionMajor", "versionMinor", "versionPatch"
-};
+    "versionMajor", "versionMinor", "versionPatch"};
 
 // ── Single aggregate test ────────────────────────────────────────────────────
 

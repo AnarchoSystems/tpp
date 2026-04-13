@@ -169,12 +169,13 @@ struct SwitchData
     std::string exprPath;
     std::string enumTypeName;
     std::unique_ptr<std::vector<CaseData>> cases;
+    std::unique_ptr<CaseData> defaultCase;
     bool isBlock;
     int insertCol;
     std::string sb;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct SwitchData\n{\n    exprPath : string;\n    enumTypeName : string;\n    cases : list<CaseData>;\n    isBlock : bool;\n    insertCol : int;\n    sb : string;\n}";
+        return "struct SwitchData\n{\n    exprPath : string;\n    enumTypeName : string;\n    cases : list<CaseData>;\n    defaultCase : optional<CaseData>;\n    isBlock : bool;\n    insertCol : int;\n    sb : string;\n}";
     }
 };
 struct CallArgInfo
@@ -214,7 +215,9 @@ struct RenderViaData
 {
     int scopeId;
     std::string collPath;
+    bool isCollection;
     std::unique_ptr<TypeKind> elemType;
+    std::string enumTypeName;
     std::string functionName;
     bool hasSep;
     std::string sepLit;
@@ -229,7 +232,7 @@ struct RenderViaData
     bool needsTry;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct RenderViaData\n{\n    scopeId : int;\n    collPath : string;\n    elemType : TypeKind;\n    functionName : string;\n    hasSep : bool;\n    sepLit : string;\n    hasFollowed : bool;\n    followedByLit : string;\n    hasPreceded : bool;\n    precededByLit : string;\n    sb : string;\n    isSingleOverload : bool;\n    overloads : list<RenderViaOverload>;\n    policyArg : optional<PolicyRef>;\n    needsTry : bool;\n}";
+        return "struct RenderViaData\n{\n    scopeId : int;\n    collPath : string;\n    isCollection : bool;\n    elemType : TypeKind;\n    enumTypeName : string;\n    functionName : string;\n    hasSep : bool;\n    sepLit : string;\n    hasFollowed : bool;\n    followedByLit : string;\n    hasPreceded : bool;\n    precededByLit : string;\n    sb : string;\n    isSingleOverload : bool;\n    overloads : list<RenderViaOverload>;\n    policyArg : optional<PolicyRef>;\n    needsTry : bool;\n}";
     }
 };
 struct PolicyReplacementInfo
@@ -696,6 +699,7 @@ inline void from_json(const nlohmann::json& j, SwitchData& v)
     j.at("exprPath").get_to(v.exprPath);
     j.at("enumTypeName").get_to(v.enumTypeName);
     v.cases = std::make_unique<std::vector<CaseData>>(j.at("cases").get<std::vector<CaseData>>());
+    if (j.contains("defaultCase") && !j.at("defaultCase").is_null()) v.defaultCase = std::make_unique<CaseData>(j.at("defaultCase").get<CaseData>());
     j.at("isBlock").get_to(v.isBlock);
     j.at("insertCol").get_to(v.insertCol);
     j.at("sb").get_to(v.sb);
@@ -706,6 +710,7 @@ inline void to_json(nlohmann::json& j, const SwitchData& v)
     j["exprPath"] = v.exprPath;
     j["enumTypeName"] = v.enumTypeName;
     j["cases"] = *v.cases;
+    if (v.defaultCase) j["defaultCase"] = *v.defaultCase;
     j["isBlock"] = v.isBlock;
     j["insertCol"] = v.insertCol;
     j["sb"] = v.sb;
@@ -759,7 +764,9 @@ inline void from_json(const nlohmann::json& j, RenderViaData& v)
 {
     j.at("scopeId").get_to(v.scopeId);
     j.at("collPath").get_to(v.collPath);
+    j.at("isCollection").get_to(v.isCollection);
     v.elemType = std::make_unique<TypeKind>(j.at("elemType").get<TypeKind>());
+    j.at("enumTypeName").get_to(v.enumTypeName);
     j.at("functionName").get_to(v.functionName);
     j.at("hasSep").get_to(v.hasSep);
     j.at("sepLit").get_to(v.sepLit);
@@ -778,7 +785,9 @@ inline void to_json(nlohmann::json& j, const RenderViaData& v)
     j = nlohmann::json{};
     j["scopeId"] = v.scopeId;
     j["collPath"] = v.collPath;
+    j["isCollection"] = v.isCollection;
     j["elemType"] = *v.elemType;
+    j["enumTypeName"] = v.enumTypeName;
     j["functionName"] = v.functionName;
     j["hasSep"] = v.hasSep;
     j["sepLit"] = v.sepLit;

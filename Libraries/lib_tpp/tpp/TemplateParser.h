@@ -48,6 +48,8 @@ namespace tpp::compiler
     struct SwitchDirective { Expression expr; bool checkExhaustive = false; std::string policy; };
     // @case Tag@ / @case Tag(binding)@
     struct CaseDirective   { std::string tag; std::string binding; };
+    // @default@
+    struct DefaultDirective {};
     // @render collection via func | sep="," ...@
     struct RenderDirective {
         Expression  expr;
@@ -81,6 +83,7 @@ namespace tpp::compiler
         IfDirective,
         SwitchDirective,
         CaseDirective,
+        DefaultDirective,
         RenderDirective,
         AlignmentCellDirective,
         CommentDirective,
