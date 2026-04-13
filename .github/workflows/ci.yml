@@ -29,5 +29,8 @@ jobs:
       - name: Build
         run: cmake --build build -j$(nproc)
 
+      - name: Build Java & Swift tests
+        run: cmake --build build --target build_all_tests -j$(nproc)
+
       - name: Test
         run: ctest -j$(nproc) --output-on-failure --test-dir build
