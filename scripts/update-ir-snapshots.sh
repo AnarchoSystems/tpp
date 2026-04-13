@@ -10,6 +10,17 @@ TPP_EXE="$BUILD_DIR/Executables/tpp/tpp"
 TEST_EXE="$BUILD_DIR/Test/tpp_acceptance_test"
 TEST_DIR="$REPO_ROOT/Test"
 
+has_missing_snapshots=0
+missing_snapshot_count=0
+for dir in "$REPO_ROOT"/Test/TestCases/*/; do
+    test_name=$(basename "$dir")
+    case "$test_name" in error_*) continue ;; esac
+    if [ -f "$dir/expected_output.txt" ] && [ ! -f "$dir/expected_ir.json" ]; then
+        has_missing_snapshots=1
+        missing_snapshot_count=$((missing_snapshot_count + 1))
+    fi
+done
+
 echo "=== Step 1: Build test binary ==="
 cmake --build "$BUILD_DIR" --target tpp_acceptance_test -j8
 
@@ -24,7 +35,7 @@ elif echo "$SCHEMA_OUTPUT" | grep -q "IR_SCHEMA_RESULT:MINOR"; then
     BUMP="minor"
 fi
 
-if [ -z "$BUMP" ]; then
+if [ -z "$BUMP" ] && [ "$has_missing_snapshots" -eq 0 ]; then
     # Check if test passed or if there were simply no snapshots
     if echo "$SCHEMA_OUTPUT" | grep -q "No IR snapshots found"; then
         echo "=== No snapshots yet — generating initial set ==="
@@ -46,6 +57,10 @@ else
 
     echo "=== Step 5: Rebuild tpp with new version ==="
     cmake --build "$BUILD_DIR" --target tpp -j8
+fi
+
+if [ "$has_missing_snapshots" -eq 1 ]; then
+    echo "=== Missing snapshots detected: $missing_snapshot_count ==="
 fi
 
 echo "=== Step 6: Regenerate IR snapshots ==="

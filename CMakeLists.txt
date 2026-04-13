@@ -49,6 +49,23 @@ endif()
 
 add_subdirectory(Libraries)
 add_subdirectory(Executables)
+
+add_custom_target(update-ir-types
+  COMMAND ${CMAKE_COMMAND}
+          -DCMD=$<TARGET_FILE:tpp>
+          "-DARGS=${CMAKE_SOURCE_DIR}/Libraries/lib_tpp"
+          -DOUT=${CMAKE_BINARY_DIR}/Libraries/lib_tpp/_ir.json
+          -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
+  COMMAND ${CMAKE_COMMAND}
+          -DCMD=$<TARGET_FILE:tpp2cpp>
+          "-DARGS=types;-ns;tpp;--input;${CMAKE_BINARY_DIR}/Libraries/lib_tpp/_ir.json"
+          -DOUT=${CMAKE_SOURCE_DIR}/Libraries/lib_tpp/include/tpp/IR.h
+          -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
+  DEPENDS tpp tpp2cpp
+  COMMENT "Regenerating IR.h from Libraries/lib_tpp/ir.tpp.types"
+  VERBATIM
+)
+
 if(TPP_CONFIGURE_TESTS)
   add_subdirectory(Test)
 endif()

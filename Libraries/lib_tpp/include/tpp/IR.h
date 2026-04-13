@@ -44,7 +44,7 @@ struct SourcePosition
     int character;
     static std::string tpp_typedefs() noexcept
     {
-        return "// ═══════════════════════════════════════════════════════════════════════════════\n// tpp Intermediate Representation — backend-neutral type definitions.\n//\n// These types encode the full output of the tpp compiler: schema info\n// (structs, enums), template functions as typed instruction trees, and\n// policy definitions.  Backends consume this IR directly, attaching their\n// own templates (possibly with additional args) to convert it into native\n// code with minimal intermediate steps.\n// ═══════════════════════════════════════════════════════════════════════════════\n\n// ── Source location (optional — populated when --source-ranges is set) ───────\n\nstruct SourcePosition\n{\n    line : int;\n    character : int;\n}";
+        return "// ═══════════════════════════════════════════════════════════════════════════════\n// tpp Intermediate Representation — backend-neutral type definitions.\n//\n// These types encode the full output of the tpp compiler: schema info\n// (structs, enums), template functions as typed instruction trees, and\n// policy definitions. Backends can consume this IR directly, including\n// generators for non-C++ languages.\n// ═══════════════════════════════════════════════════════════════════════════════\n\n// ── Source location (optional — populated when --source-ranges is set) ───────\n\nstruct SourcePosition\n{\n    line : int;\n    character : int;\n}";
     }
 };
 struct SourceRange
@@ -155,7 +155,7 @@ struct CallInstr
         return "/// Direct function call.\nstruct CallInstr\n{\n    functionName : string;\n    arguments : list<ExprInfo>;\n}";
     }
 };
-/// Render-via: call a function for each element in a collection.
+/// Render-via: call a function for each element in a collection or single enum.
 struct RenderViaInstr
 {
     ExprInfo collection;
@@ -168,7 +168,7 @@ struct RenderViaInstr
     std::string policy;
     static std::string tpp_typedefs() noexcept
     {
-        return "/// Render-via: call a function for each element in a collection.\nstruct RenderViaInstr\n{\n    collection : ExprInfo;\n    functionName : string;\n    sep : string;\n    followedBy : string;\n    precededBy : string;\n    isBlock : bool;\n    insertCol : int;\n    policy : string;\n}";
+        return "/// Render-via: call a function for each element in a collection or single enum.\nstruct RenderViaInstr\n{\n    collection : ExprInfo;\n    functionName : string;\n    sep : string;\n    followedBy : string;\n    precededBy : string;\n    isBlock : bool;\n    insertCol : int;\n    policy : string;\n}";
     }
 };
 struct ParamDef
@@ -310,7 +310,7 @@ struct IR
     std::vector<PolicyDef> policies;
     static std::string tpp_typedefs() noexcept
     {
-        return "// ── Top-level IR ────────────────────────────────────────────────────────────\n\nstruct IR\n{\n    versionMajor : int;\n    versionMinor : int;\n    versionPatch : int;\n    structs : list<StructDef>;\n    enums : list<EnumDef>;\n    functions : list<FunctionDef>;\n    policies : list<PolicyDef>;\n}";
+        return "// ── Top-level IR ─────────────────────────────────────────────────────────────\n\nstruct IR\n{\n    versionMajor : int;\n    versionMinor : int;\n    versionPatch : int;\n    structs : list<StructDef>;\n    enums : list<EnumDef>;\n    functions : list<FunctionDef>;\n    policies : list<PolicyDef>;\n}";
     }
 };
 struct TypeKind_Str
@@ -334,7 +334,7 @@ struct TypeKind
     Value value;
     static std::string tpp_typedefs() noexcept
     {
-        return "// ── Type system ─────────────────────────────────────────────────────────────\n\nenum TypeKind\n{\n    Str,\n    Int,\n    Bool,\n    Named(string),\n    List(TypeKind),\n    Optional(TypeKind)\n}";
+        return "// ── Type system ───────────────────────────────────────────────────────────────\n\nenum TypeKind\n{\n    Str,\n    Int,\n    Bool,\n    Named(string),\n    List(TypeKind),\n    Optional(TypeKind)\n}";
     }
 };
 struct Instruction_AlignCell
