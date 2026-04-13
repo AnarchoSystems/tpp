@@ -65,11 +65,9 @@ Successful compilation emits a single JSON document on stdout:
 tpp ./my-project > my-project.json
 ```
 
-This JSON is the input consumed by all backends (`tpp2cpp`, `render-tpp`, etc.) and by the C++ library.
+This JSON is the input consumed by all backends (`tpp2cpp`, `render-tpp`, etc.) and by the C++ library. For a full description of the IR schema, see the [IR Reference](ir.md).
 
-!!! Note of caution !!!
-
-The intermediate representation is an important part of the language's public interface and should therefore be versioned. This is currently not the case, as this project is in early development. Coming up with a schema to check when the version must be incremented will be addressed, but for now, please do not cosider this a stable contract.
+The IR carries `versionMajor`, `versionMinor`, and `versionPatch` fields that record which compiler produced it. These are informational — the IR schema itself is not yet independently versioned. As the project matures, a formal compatibility policy will be introduced.
 
 ### Diagnostics
 

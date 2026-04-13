@@ -1,132 +1,17 @@
-// CodegenHelpers.h — shared helpers for tpp2java and tpp2swift code generators.
+// CodegenHelpers.h — shared helpers for tpp code generation backends.
 //
-// Provides file utilities, test case compilation, and context-building
-// functions for the template-based code generation pipeline.
+// Provides context-building functions for the template-based code
+// generation pipeline (tpp2cpp, tpp2java, tpp2swift).
 
 #pragma once
 
-#include <tpp/Compiler.h>
 #include <tpp/IR.h>
 #include "CodegenTypes.h"
 #include <nlohmann/json.hpp>
-#include <filesystem>
-#include <fstream>
-#include <iostream>
 #include <algorithm>
 #include <sstream>
 
 namespace codegen {
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// File / glob helpers
-// ═══════════════════════════════════════════════════════════════════════════════
-
-inline std::string readFile(const std::filesystem::path &path)
-{
-    std::ifstream f(path);
-    if (!f.is_open())
-        throw std::runtime_error("Cannot open: " + path.string());
-    return std::string(std::istreambuf_iterator<char>(f),
-                       std::istreambuf_iterator<char>());
-}
-
-inline bool matchGlob(const std::string &pattern, const std::string &text)
-{
-    size_t pi = 0, ti = 0, starPos = std::string::npos, matchPos = 0;
-    while (ti < text.size())
-    {
-        if (pi < pattern.size() && (pattern[pi] == '?' || pattern[pi] == text[ti]))
-            { ++pi; ++ti; }
-        else if (pi < pattern.size() && pattern[pi] == '*')
-            { starPos = pi++; matchPos = ti; }
-        else if (starPos != std::string::npos)
-            { pi = starPos + 1; ti = ++matchPos; }
-        else
-            return false;
-    }
-    while (pi < pattern.size() && pattern[pi] == '*') ++pi;
-    return pi == pattern.size();
-}
-
-inline std::vector<std::filesystem::path> expandPattern(const std::filesystem::path &baseDir,
-                                                        const std::string &pattern)
-{
-    std::filesystem::path patPath(pattern);
-    std::string filename = patPath.filename().string();
-    std::filesystem::path parentDir = baseDir / patPath.parent_path();
-    if (filename.find('*') == std::string::npos)
-        return {baseDir / pattern};
-    std::vector<std::filesystem::path> results;
-    if (std::filesystem::is_directory(parentDir))
-    {
-        for (const auto &entry : std::filesystem::directory_iterator(parentDir))
-        {
-            if (!entry.is_regular_file()) continue;
-            auto name = entry.path().filename().string();
-            if (name.size() < 4 || name.substr(name.size() - 4) != ".tpp") continue;
-            if (matchGlob(filename, name))
-                results.push_back(entry.path());
-        }
-        std::sort(results.begin(), results.end());
-    }
-    return results;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Compile a test case directory → tpp::IR + config
-// ═══════════════════════════════════════════════════════════════════════════════
-
-struct CompileResult
-{
-    tpp::IR ir;
-    nlohmann::json config;      // parsed tpp-config.json
-};
-
-inline CompileResult compileTestCase(const std::filesystem::path &testDir)
-{
-    std::filesystem::path configPath = testDir / "tpp-config.json";
-    nlohmann::json config = nlohmann::json::parse(readFile(configPath));
-
-    struct FileEntry { std::filesystem::path path; bool isTypes; };
-    std::vector<FileEntry> fileEntries;
-    for (const auto &pattern : config.value("types", nlohmann::json::array()))
-        for (const auto &p : expandPattern(testDir, pattern.get<std::string>()))
-            fileEntries.push_back({p, true});
-    for (const auto &pattern : config.value("templates", nlohmann::json::array()))
-        for (const auto &p : expandPattern(testDir, pattern.get<std::string>()))
-            fileEntries.push_back({p, false});
-
-    tpp::Compiler compiler;
-    std::vector<tpp::Diagnostic> diagnostics;
-    for (const auto &fe : fileEntries)
-    {
-        std::string content = readFile(fe.path);
-        if (fe.isTypes)
-            compiler.add_types(content, diagnostics);
-        else
-            compiler.add_templates(content, diagnostics);
-    }
-
-    for (const auto &pe : config.value("replacement-policies", nlohmann::json::array()))
-    {
-        nlohmann::json pj = nlohmann::json::parse(readFile(testDir / pe.get<std::string>()));
-        std::string err;
-        if (!compiler.add_policy(pj, err))
-            throw std::runtime_error(err);
-    }
-
-    tpp::IR ir;
-    if (!compiler.compile(ir))
-    {
-        std::string errors;
-        for (const auto &d : diagnostics)
-            if (d.severity && *d.severity == tpp::DiagnosticSeverity::Error)
-                errors += d.message + "\n";
-        throw std::runtime_error("Compile failed:\n" + errors);
-    }
-
-    return {std::move(ir), std::move(config)};
-}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Type → template context helpers
@@ -740,6 +625,7 @@ inline CodegenInput buildCodegenInput(const tpp::IR &ir)
         StructInfo structInfo;
         structInfo.name = s.name;
         structInfo.fields = std::move(fields);
+        structInfo.rawTypedefs = s.rawTypedefs;
         if (!s.doc.empty()) structInfo.doc = s.doc;
         structs.push_back(std::move(structInfo));
     }
@@ -767,6 +653,7 @@ inline CodegenInput buildCodegenInput(const tpp::IR &ir)
         enumInfo.name = e.name;
         enumInfo.variants = std::move(variants);
         enumInfo.hasRecursiveVariants = hasRecursive;
+        enumInfo.rawTypedefs = e.rawTypedefs;
         if (!e.doc.empty()) enumInfo.doc = e.doc;
         enums.push_back(std::move(enumInfo));
     }
@@ -841,116 +728,60 @@ inline std::vector<PolicyInfo> buildPolicyContext(const tpp::IR &ir, const std::
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Build the TestContext JSON consumed by the defs.tpp templates
+// Unified buildFunctionsContext
 // ═══════════════════════════════════════════════════════════════════════════════
 
-inline nlohmann::json buildTestContext(
-    const tpp::IR &ir,
-    const nlohmann::json &config,
-    const std::filesystem::path &testDir)
+struct BuildFunctionsConfig
 {
-    std::string testName = testDir.filename().string();
+    std::string nullLiteral;
+    std::string staticModifier;
+    bool callNeedsTry = false;
+    std::vector<std::string> includes;
+};
 
-    // Expected output
-    std::string expected = readFile(testDir / "expected_output.txt");
-    if (!expected.empty() && expected.back() == '\n')
-        expected.pop_back();
+inline RenderFunctionsInput buildFunctionsContext(
+    const tpp::IR &ir,
+    const std::string &functionPrefix,
+    const std::string &namespaceName,
+    const BuildFunctionsConfig &bfCfg)
+{
+    bool hasPol = !ir.policies.empty();
 
-    // Find main function in IR
-    const tpp::FunctionDef *mainFn = nullptr;
-    for (const auto &fn : ir.functions)
-        if (fn.name == "main") { mainFn = &fn; break; }
-    if (!mainFn)
-        throw std::runtime_error("No 'main' function found in IR");
+    ConvertConfig cfg;
+    cfg.functionPrefix = functionPrefix;
+    cfg.callNeedsTry = bfCfg.callNeedsTry;
 
-    // Input from config
-    nlohmann::json input;
-    if (config.contains("previews") && !config["previews"].empty()
-        && config["previews"][0].contains("input"))
-        input = config["previews"][0]["input"];
-
-    // ── Structs ──
-    nlohmann::json structs = nlohmann::json::array();
-    bool needsBox = false;
-    for (const auto &s : ir.structs)
-    {
-        nlohmann::json fields = nlohmann::json::array();
-        for (const auto &f : s.fields)
-        {
-            fields.push_back({
-                {"name", f.name},
-                {"type", typeKindToContext(*f.type)},
-                {"recursive", f.recursive}
-            });
-            if (f.recursive) needsBox = true;
-        }
-        structs.push_back({{"name", s.name}, {"fields", fields}});
-    }
-
-    // ── Enums ──
-    nlohmann::json enums = nlohmann::json::array();
-    for (const auto &e : ir.enums)
-    {
-        nlohmann::json variants = nlohmann::json::array();
-        bool hasRecursive = false;
-        for (const auto &v : e.variants)
-        {
-            nlohmann::json variant = {{"tag", v.tag}, {"recursive", v.recursive}};
-            if (v.payload)
-                variant["payload"] = typeKindToContext(*v.payload);
-            variants.push_back(variant);
-            if (v.recursive) hasRecursive = true;
-        }
-        enums.push_back({
-            {"name", e.name},
-            {"variants", variants},
-            {"hasRecursiveVariants", hasRecursive}
-        });
-    }
-
-    // ── Functions ──
-    nlohmann::json functions = nlohmann::json::array();
+    std::vector<RenderFunctionDef> functions;
     for (const auto &fn : ir.functions)
     {
-        nlohmann::json fparams = nlohmann::json::array();
-        for (const auto &p : fn.params)
-        {
-            fparams.push_back({
-                {"name", p.name},
-                {"type", typeKindToContext(*p.type)},
-                {"jsonValueLiteral", ""}
-            });
-        }
-        functions.push_back({{"name", fn.name}, {"params", fparams}});
+        std::vector<ParamInfo> params;
+        for (size_t i = 0; i < fn.params.size(); ++i)
+            params.push_back({fn.params[i].name,
+                              std::make_unique<TypeKind>(typeKindToContext(*fn.params[i].type))});
+
+        int scope = 0;
+        auto body = std::make_unique<std::vector<Instruction>>();
+        for (const auto &instr : *fn.body)
+            body->push_back(convertInstruction(instr, "_sb", fn.policy, scope, ir, cfg));
+
+        RenderFunctionDef def;
+        def.name = fn.name;
+        def.params = std::move(params);
+        def.body = std::move(body);
+        functions.push_back(std::move(def));
     }
 
-    // ── Main function params with JSON value literals ──
-    nlohmann::json params = nlohmann::json::array();
-    for (size_t i = 0; i < mainFn->params.size(); ++i)
-    {
-        const auto &p = mainFn->params[i];
-        nlohmann::json paramValue;
-        if (input.is_array() && i < input.size())
-            paramValue = input[i];
-        else if (!input.is_array() && mainFn->params.size() == 1)
-            paramValue = input;
-
-        params.push_back({
-            {"name", p.name},
-            {"type", typeKindToContext(*p.type)},
-            {"jsonValueLiteral", stringLiteral(paramValue.dump())}
-        });
-    }
-
-    return {
-        {"testName", testName},
-        {"structs", structs},
-        {"enums", enums},
-        {"functions", functions},
-        {"params", params},
-        {"expectedOutputLiteral", stringLiteral(expected)},
-        {"needsBox", needsBox}
-    };
+    RenderFunctionsInput result;
+    result.functions = std::move(functions);
+    result.hasPolicies = hasPol;
+    result.policies = hasPol ? buildPolicyContext(ir, bfCfg.nullLiteral) : std::vector<PolicyInfo>{};
+    result.functionPrefix = functionPrefix;
+    result.staticModifier = bfCfg.staticModifier;
+    if (!bfCfg.includes.empty())
+        result.includes = bfCfg.includes;
+    if (!namespaceName.empty())
+        result.namespaceName = namespaceName;
+    return result;
 }
 
 } // namespace codegen

@@ -245,69 +245,15 @@ static std::string toCppStringLiteral(const std::string &s)
     return result + "\"";
 }
 
-// Extract a single type definition (struct or enum) from the raw typedefs string.
-// Includes any preceding doc comments (lines starting with //).
-static std::string extractTypeDefinition(const std::string &raw,
-                                         const std::string &keyword,
-                                         const std::string &name)
-{
-    std::string marker = keyword + " " + name;
-    auto pos = raw.find(marker);
-    if (pos == std::string::npos) return "";
-
-    // Walk backward to include preceding doc-comment lines and blank lines
-    auto start = pos;
-    while (start > 0)
-    {
-        // find beginning of previous line
-        auto prev_end = start - 1; // points at '\n' before current line
-        if (prev_end == std::string::npos || raw[prev_end] != '\n') break;
-        auto prev_start = raw.rfind('\n', prev_end - 1);
-        prev_start = (prev_start == std::string::npos) ? 0 : prev_start + 1;
-        auto line = raw.substr(prev_start, prev_end - prev_start);
-        // trim leading whitespace
-        auto first_non_ws = line.find_first_not_of(" \t");
-        if (first_non_ws == std::string::npos)
-        {
-            // blank line — include it and keep going
-            start = prev_start;
-            continue;
-        }
-        if (line.substr(first_non_ws, 2) == "//")
-        {
-            start = prev_start;
-            continue;
-        }
-        break;
-    }
-
-    // Strip leading blank lines from extracted text
-    while (start < pos && (raw[start] == '\n' || raw[start] == '\r'))
-        ++start;
-
-    // Find closing brace
-    auto brace = raw.find('{', pos);
-    if (brace == std::string::npos) return "";
-    int depth = 0;
-    auto end = brace;
-    for (; end < raw.size(); ++end)
-    {
-        if (raw[end] == '{') ++depth;
-        else if (raw[end] == '}') { --depth; if (depth == 0) { ++end; break; } }
-    }
-
-    return raw.substr(start, end - start);
-}
-
 static nlohmann::json to_render_cpp_type_input(const tpp::IR &iRep,
                                                const std::vector<std::string> &includes,
                                                const std::string &namespaceName)
 {
     codegen::CodegenInput ctx = codegen::buildCodegenInput(iRep);
     for (auto &s : ctx.structs)
-        s.rawTypedefs = toCppStringLiteral(extractTypeDefinition(iRep.rawTypedefs, "struct", s.name));
+        s.rawTypedefs = toCppStringLiteral(s.rawTypedefs);
     for (auto &e : ctx.enums)
-        e.rawTypedefs = toCppStringLiteral(extractTypeDefinition(iRep.rawTypedefs, "enum", e.name));
+        e.rawTypedefs = toCppStringLiteral(e.rawTypedefs);
     nlohmann::json ns = namespaceName.empty() ? nlohmann::json() : nlohmann::json(namespaceName);
     return nlohmann::json::array({nlohmann::json(ctx), nlohmann::json(includes), ns});
 }
@@ -337,40 +283,10 @@ static codegen::RenderFunctionsInput buildFunctionsContext(
     const std::vector<std::string> &includes,
     const std::string &namespaceName)
 {
-    bool hasPol = !ir.policies.empty();
-
-    codegen::ConvertConfig cfg;
-    cfg.functionPrefix = functionPrefix;
-    cfg.callNeedsTry = false;
-
-    std::vector<codegen::RenderFunctionDef> functions;
-    for (const auto &fn : ir.functions)
-    {
-        std::vector<codegen::ParamInfo> params;
-        for (size_t i = 0; i < fn.params.size(); ++i)
-            params.push_back({fn.params[i].name,
-                              std::make_unique<codegen::TypeKind>(codegen::typeKindToContext(*fn.params[i].type))});
-
-        int scope = 0;
-        auto body = std::make_unique<std::vector<codegen::Instruction>>();
-        for (const auto &instr : *fn.body)
-            body->push_back(codegen::convertInstruction(instr, "_sb", fn.policy, scope, ir, cfg));
-
-        codegen::RenderFunctionDef def;
-        def.name = fn.name;
-        def.params = std::move(params);
-        def.body = std::move(body);
-        functions.push_back(std::move(def));
-    }
-
-    codegen::RenderFunctionsInput result;
-    result.functions = std::move(functions);
-    result.hasPolicies = hasPol;
-    result.policies = hasPol ? codegen::buildPolicyContext(ir, "std::nullopt") : std::vector<codegen::PolicyInfo>{};
-    result.functionPrefix = functionPrefix;
-    result.staticModifier = "";
-    result.includes = std::vector<std::string>(includes.begin(), includes.end());
-    if (!namespaceName.empty())
-        result.namespaceName = namespaceName;
-    return result;
+    codegen::BuildFunctionsConfig bfCfg;
+    bfCfg.nullLiteral = "std::nullopt";
+    bfCfg.staticModifier = "";
+    bfCfg.callNeedsTry = false;
+    bfCfg.includes = includes;
+    return codegen::buildFunctionsContext(ir, functionPrefix, namespaceName, bfCfg);
 }

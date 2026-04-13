@@ -170,6 +170,7 @@ struct StructDef
     fields : list<FieldDef>;
     doc : string;
     sourceRange : optional<SourceRange>;
+    rawTypedefs : string;
 }
 
 struct VariantDef
@@ -187,6 +188,7 @@ struct EnumDef
     variants : list<VariantDef>;
     doc : string;
     sourceRange : optional<SourceRange>;
+    rawTypedefs : string;
 }
 
 // ── Policy definitions ──────────────────────────────────────────────────────
@@ -242,5 +244,4 @@ struct IR
     enums : list<EnumDef>;
     functions : list<FunctionDef>;
     policies : list<PolicyDef>;
-    rawTypedefs : string;
 }

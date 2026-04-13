@@ -27,41 +27,11 @@ static codegen::RenderFunctionsInput buildFunctionsContext(
     const tpp::IR &ir, const std::string &functionPrefix,
     const std::string &namespaceName)
 {
-    bool hasPol = !ir.policies.empty();
-
-    codegen::ConvertConfig cfg;
-    cfg.functionPrefix = functionPrefix;
-    cfg.callNeedsTry = false;  // Java: checked exceptions propagate without 'try'
-
-    std::vector<codegen::RenderFunctionDef> functions;
-    for (const auto &fn : ir.functions)
-    {
-        std::vector<codegen::ParamInfo> params;
-        for (size_t i = 0; i < fn.params.size(); ++i)
-            params.push_back({fn.params[i].name,
-                              std::make_unique<codegen::TypeKind>(codegen::typeKindToContext(*fn.params[i].type))});
-
-        int scope = 0;
-        auto body = std::make_unique<std::vector<codegen::Instruction>>();
-        for (const auto &instr : *fn.body)
-            body->push_back(codegen::convertInstruction(instr, "_sb", fn.policy, scope, ir, cfg));
-
-        codegen::RenderFunctionDef def;
-        def.name = fn.name;
-        def.params = std::move(params);
-        def.body = std::move(body);
-        functions.push_back(std::move(def));
-    }
-
-    codegen::RenderFunctionsInput result;
-    result.functions = std::move(functions);
-    result.hasPolicies = hasPol;
-    result.policies = hasPol ? codegen::buildPolicyContext(ir, "null") : std::vector<codegen::PolicyInfo>{};
-    result.functionPrefix = functionPrefix;
-    result.staticModifier = "static ";  // Java always uses static methods
-    if (!namespaceName.empty())
-        result.namespaceName = namespaceName;
-    return result;
+    codegen::BuildFunctionsConfig bfCfg;
+    bfCfg.nullLiteral = "null";
+    bfCfg.staticModifier = "static ";
+    bfCfg.callNeedsTry = false;
+    return codegen::buildFunctionsContext(ir, functionPrefix, namespaceName, bfCfg);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

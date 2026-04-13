@@ -210,9 +210,10 @@ struct StructDef
     std::vector<FieldDef> fields;
     std::string doc;
     std::optional<SourceRange> sourceRange;
+    std::string rawTypedefs;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct StructDef\n{\n    name : string;\n    fields : list<FieldDef>;\n    doc : string;\n    sourceRange : optional<SourceRange>;\n}";
+        return "struct StructDef\n{\n    name : string;\n    fields : list<FieldDef>;\n    doc : string;\n    sourceRange : optional<SourceRange>;\n    rawTypedefs : string;\n}";
     }
 };
 struct VariantDef
@@ -233,9 +234,10 @@ struct EnumDef
     std::vector<VariantDef> variants;
     std::string doc;
     std::optional<SourceRange> sourceRange;
+    std::string rawTypedefs;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct EnumDef\n{\n    name : string;\n    variants : list<VariantDef>;\n    doc : string;\n    sourceRange : optional<SourceRange>;\n}";
+        return "struct EnumDef\n{\n    name : string;\n    variants : list<VariantDef>;\n    doc : string;\n    sourceRange : optional<SourceRange>;\n    rawTypedefs : string;\n}";
     }
 };
 struct PolicyReplacement
@@ -305,10 +307,9 @@ struct IR
     std::vector<EnumDef> enums;
     std::vector<FunctionDef> functions;
     std::vector<PolicyDef> policies;
-    std::string rawTypedefs;
     static std::string tpp_typedefs() noexcept
     {
-        return "// ── Top-level IR ────────────────────────────────────────────────────────────\n\nstruct IR\n{\n    versionMajor : int;\n    versionMinor : int;\n    versionPatch : int;\n    structs : list<StructDef>;\n    enums : list<EnumDef>;\n    functions : list<FunctionDef>;\n    policies : list<PolicyDef>;\n    rawTypedefs : string;\n}";
+        return "// ── Top-level IR ────────────────────────────────────────────────────────────\n\nstruct IR\n{\n    versionMajor : int;\n    versionMinor : int;\n    versionPatch : int;\n    structs : list<StructDef>;\n    enums : list<EnumDef>;\n    functions : list<FunctionDef>;\n    policies : list<PolicyDef>;\n}";
     }
 };
 struct TypeKind_Str
@@ -661,6 +662,7 @@ inline void from_json(const nlohmann::json& j, StructDef& v)
     j.at("fields").get_to(v.fields);
     j.at("doc").get_to(v.doc);
     if (j.contains("sourceRange") && !j.at("sourceRange").is_null()) v.sourceRange = j.at("sourceRange").get<SourceRange>();
+    j.at("rawTypedefs").get_to(v.rawTypedefs);
 }
 inline void to_json(nlohmann::json& j, const StructDef& v)
 {
@@ -669,6 +671,7 @@ inline void to_json(nlohmann::json& j, const StructDef& v)
     j["fields"] = v.fields;
     j["doc"] = v.doc;
     if (v.sourceRange.has_value()) j["sourceRange"] = *v.sourceRange;
+    j["rawTypedefs"] = v.rawTypedefs;
 }
 inline void from_json(const nlohmann::json& j, VariantDef& v)
 {
@@ -693,6 +696,7 @@ inline void from_json(const nlohmann::json& j, EnumDef& v)
     j.at("variants").get_to(v.variants);
     j.at("doc").get_to(v.doc);
     if (j.contains("sourceRange") && !j.at("sourceRange").is_null()) v.sourceRange = j.at("sourceRange").get<SourceRange>();
+    j.at("rawTypedefs").get_to(v.rawTypedefs);
 }
 inline void to_json(nlohmann::json& j, const EnumDef& v)
 {
@@ -701,6 +705,7 @@ inline void to_json(nlohmann::json& j, const EnumDef& v)
     j["variants"] = v.variants;
     j["doc"] = v.doc;
     if (v.sourceRange.has_value()) j["sourceRange"] = *v.sourceRange;
+    j["rawTypedefs"] = v.rawTypedefs;
 }
 inline void from_json(const nlohmann::json& j, PolicyReplacement& v)
 {
@@ -785,7 +790,6 @@ inline void from_json(const nlohmann::json& j, IR& v)
     j.at("enums").get_to(v.enums);
     j.at("functions").get_to(v.functions);
     j.at("policies").get_to(v.policies);
-    j.at("rawTypedefs").get_to(v.rawTypedefs);
 }
 inline void to_json(nlohmann::json& j, const IR& v)
 {
@@ -797,6 +801,5 @@ inline void to_json(nlohmann::json& j, const IR& v)
     j["enums"] = v.enums;
     j["functions"] = v.functions;
     j["policies"] = v.policies;
-    j["rawTypedefs"] = v.rawTypedefs;
 }
 } // namespace tpp

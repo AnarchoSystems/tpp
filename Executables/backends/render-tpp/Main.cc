@@ -29,13 +29,13 @@ int main(int argc, char *argv[])
         std::string error;
         if (!get_function(iRep, templateName, function, error))
         {
-            std::cerr << "Error: " << error << std::endl;
+            std::cerr << error << std::endl;
             return 1;
         }
         std::string output;
         if (!render_function(iRep, *function, inputData, output, error))
         {
-            std::cerr << "Error: " << error << std::endl;
+            std::cerr << error << std::endl;
             return 1;
         }
         std::cout << output;
