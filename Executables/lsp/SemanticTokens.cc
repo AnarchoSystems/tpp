@@ -336,7 +336,7 @@ static void emitTemplateHeader(std::vector<RawToken> &out,
                 col = (int)colon + 1;
                 while (col < (int)headerText.size() && headerText[col] == ' ') ++col;
                 // type name (may be followed by '<...>')
-                size_t typeStart = col;
+                int typeStart = col;
                 while (col < (int)headerText.size() &&
                        headerText[col] != ',' && headerText[col] != ')' && headerText[col] != '<')
                     ++col;
@@ -346,7 +346,7 @@ static void emitTemplateHeader(std::vector<RawToken> &out,
                 if (col < (int)headerText.size() && headerText[col] == '<')
                 {
                     out.push_back({line, col, 1, TT_OPERATOR, 0}); ++col;
-                    size_t innerStart = col;
+                    int innerStart = col;
                     while (col < (int)headerText.size() && headerText[col] != '>') ++col;
                     if (col > innerStart)
                         out.push_back({line, (int)innerStart, (int)(col - innerStart), TT_TYPE, 0});
