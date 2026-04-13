@@ -1,0 +1,1 @@
+{"enums":[],"functions":[{"body":[{"EmitExpr":{"expr":{"path":"val","type":{"Str":{}}},"policy":""}},{"Emit":{"text":"\n"}}],"doc":"","name":"main","params":[{"name":"val","type":{"Str":{}}}],"policy":""}],"policies":[],"structs":[],"versionMajor":0,"versionMinor":1,"versionPatch":0}

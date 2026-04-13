@@ -90,6 +90,7 @@ add_executable(tpp_acceptance_test
     src/TestUtils.cc
     src/AcceptanceTest.cc
     src/RenderCLITest.cc
+    src/IRStabilityTest.cc
     src/LspClient.cc
     src/LspTest.cc
 )
@@ -201,3 +202,12 @@ add_custom_target(build_all_tests)
 add_dependencies(build_all_tests tpp_acceptance_test)
 add_dependencies(build_all_tests java_tests)
 add_dependencies(build_all_tests swift_tests)
+
+# ── update_ir_snapshots — regenerate IR snapshots and bump version ───────────
+
+add_custom_target(update_ir_snapshots
+    COMMAND ${CMAKE_SOURCE_DIR}/scripts/update-ir-snapshots.sh ${CMAKE_BINARY_DIR}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    USES_TERMINAL
+    COMMENT "Updating IR snapshots and version"
+)

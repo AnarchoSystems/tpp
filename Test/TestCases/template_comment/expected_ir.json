@@ -1,0 +1,1 @@
+{"enums":[],"functions":[{"body":[],"doc":"documentation","name":"foo","params":[],"policy":""},{"body":[{"Emit":{"text":"before\nafter\n"}}],"doc":"more documentation","name":"main","params":[],"policy":""}],"policies":[],"structs":[],"versionMajor":0,"versionMinor":1,"versionPatch":0}

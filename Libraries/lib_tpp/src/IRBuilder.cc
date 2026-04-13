@@ -1,4 +1,5 @@
 #include <tpp/IRBuilder.h>
+#include "tpp/Version.h"
 #include <cassert>
 
 namespace tpp

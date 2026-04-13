@@ -1,6 +1,7 @@
 #include <tpp/IR.h>
 #include <tpp/Rendering.h>
 #include <tpp/RenderMapping.h>
+#include <tpp/Policy.h>
 #include <nlohmann/json.hpp>
 #include <functional>
 #include <algorithm>
@@ -34,34 +35,6 @@ namespace tpp
         std::vector<std::regex> outputFilter;
     };
 
-    static std::string precompile_replace(const std::string &replace)
-    {
-        std::string out;
-        out.reserve(replace.size());
-        size_t p = 0;
-        while (p < replace.size())
-        {
-            if (replace[p] == '@')
-            {
-                size_t end = replace.find('@', p + 1);
-                if (end != std::string::npos)
-                {
-                    std::string inner = replace.substr(p + 1, end - p - 1);
-                    if (inner.size() > 8 && inner.substr(0, 8) == "subexpr_")
-                    {
-                        out += '$';
-                        out += inner.substr(8);
-                        p = end + 1;
-                        continue;
-                    }
-                }
-            }
-            out += replace[p];
-            ++p;
-        }
-        return out;
-    }
-
     static CompiledPolicy compilePolicy(const PolicyDef &def)
     {
         CompiledPolicy cp;
@@ -79,7 +52,7 @@ namespace tpp
             step.rx = std::regex(r.regex);
             step.replace = r.replace;
             step.compiled_replace = r.compiledReplace.empty() && !r.replace.empty()
-                ? precompile_replace(r.replace) : r.compiledReplace;
+                ? compiler::precompile_replace(r.replace) : r.compiledReplace;
             cp.require.push_back(std::move(step));
         }
         cp.replacements = def.replacements;
@@ -96,6 +69,7 @@ namespace tpp
     {
         const std::vector<FunctionDef> &functions;
         std::vector<std::pair<std::string, nlohmann::json>> bindings;
+        std::unordered_map<std::string, std::vector<int>> bindingIndex;
         std::string activePolicy;
         const CompiledPolicy *activePolicyPtr = nullptr;
         std::map<std::string, CompiledPolicy> compiledPolicies;
@@ -105,10 +79,15 @@ namespace tpp
 
         void pushBinding(const std::string &name, const nlohmann::json &val)
         {
+            bindingIndex[name].push_back((int)bindings.size());
             bindings.push_back({name, val});
         }
         void popBinding()
         {
+            auto &indices = bindingIndex[bindings.back().first];
+            indices.pop_back();
+            if (indices.empty())
+                bindingIndex.erase(bindings.back().first);
             bindings.pop_back();
         }
 
@@ -118,19 +97,11 @@ namespace tpp
             auto dot = path.find('.');
             std::string head = (dot == std::string::npos) ? path : path.substr(0, dot);
 
-            // Look up head in bindings (reverse for lexical scoping)
-            nlohmann::json val;
-            bool found = false;
-            for (int i = (int)bindings.size() - 1; i >= 0; --i)
-            {
-                if (bindings[i].first == head)
-                {
-                    val = bindings[i].second;
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) return nullptr;
+            // Look up head in binding index (O(1) instead of linear scan)
+            auto it = bindingIndex.find(head);
+            if (it == bindingIndex.end() || it->second.empty())
+                return nullptr;
+            nlohmann::json val = bindings[it->second.back()].second;
 
             // Walk remaining path
             if (dot != std::string::npos)
