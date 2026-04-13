@@ -1,6 +1,6 @@
 # tpp Usage & Tooling Guide
 
-This guide covers the tpp compiler toolchain — how to integrate it into your build system, use the CLIs, consume the C++ library, and set up the VS Code extension.
+This guide covers the tpp compiler toolchain as a whole: how source files become validated IR, how that IR feeds multiple backends, how to integrate the generated code into builds, and how to use the runtime and editor tooling.
 
 For the template language itself, see the [Language Reference](language.md).
 
@@ -14,6 +14,16 @@ The compiler (`tpp`) reads your type definitions and template sources, validates
 
 Every backend has an **easy job**: take that detailed intermediate representation and transform it into something useful. Because the compiler has already done all the hard work — type checking, field validation, policy registration, AST construction — a backend can focus purely on transformation without reimplementing any language logic.
 
+This is what gives the project its leverage. tpp is not a C++-only template generator with a few side tools attached. It is a compiler pipeline whose output can be consumed by:
+
+- `tpp2cpp` for native C++ types and functions
+- `tpp2java` and `tpp2swift` for source generation in other languages
+- `render-tpp` for direct rendering in scripts and tests
+- `lib_tpp` for embedding compilation and rendering in a host application
+- `tpp-lsp` and the VS Code extension for diagnostics, navigation, and preview
+
+The more complete way to think about the project is: **one typed source language, one validating frontend, many consumers**.
+
 ### Why this matters for C++
 
 The `tpp2cpp` backend generates C++ types and function wrappers from the intermediate representation. Because the types were already validated and compiled by `tpp`, the generated C++ code:
@@ -26,6 +36,12 @@ The `tpp2cpp` backend generates C++ types and function wrappers from the interme
 This means template functions can be **called as normal C++ functions** with full compile-time type checking — no JSON at the call site, no runtime type dispatch, no surprises. The heavy checking happens once, at tpp compile time, and the result is a C++ function you can trust.
 
 A standalone **C++ library** (`lib_tpp`) is also available for cases where you want to compile and render templates entirely at runtime, without a build-time code generation step.
+
+### Why this matters beyond C++
+
+Because the compiler output is backend-neutral, the project can keep adding consumers without duplicating the language implementation. That matters for maintenance and for confidence: type checking, variant semantics, policy behavior, and block rendering rules are all defined once and reused.
+
+In practice, that gives tpp a very wide range. It can sit in a build pipeline, a test generator, a codegen workflow, an editor integration, or a dynamic runtime environment without splitting into separate dialects or inconsistent engines.
 
 ---
 
@@ -84,7 +100,7 @@ Exit code is `0` on success, non-zero on failure.
 
 ## `render-tpp` — Scripting Backend
 
-`render-tpp` is a minimal rendering backend for scripting and testing. It reads intermediate representation JSON from stdin, renders a named template with a JSON input, and writes the result to stdout.
+`render-tpp` is the direct execution path for the compiled IR. It is useful in scripts, tests, shell pipelines, and debugging because it exercises the same compiled template semantics without requiring generated host-language code.
 
 ### Synopsis
 
@@ -105,13 +121,13 @@ The intermediate representation JSON is read from stdin.
 tpp ./my-project | render-tpp main '{"name": "World"}'
 ```
 
-This is useful in shell pipelines, test scripts, and CI workflows where you want to render a template without writing C++ at all.
+This is useful in shell pipelines, test scripts, and CI workflows where you want the compiled template behavior immediately, without generating or compiling host-language bindings first.
 
 ---
 
 ## `tpp2cpp` — C++ Code Generation Backend
 
-`tpp2cpp` reads intermediate representation JSON and generates C++ source files. It has three modes, each producing one output file.
+`tpp2cpp` reads intermediate representation JSON and generates C++ source files. This is one of the strongest parts of the toolchain: templates stop being an external asset and become ordinary typed C++ APIs that can live inside a normal build.
 
 ### Synopsis
 
@@ -180,6 +196,8 @@ tpp ./project | tpp2cpp impl -ns myns -i project_functions.h > project_implement
 
 Generates the `.cc` file with native C++ implementations for the compiled template functions. The generated code renders directly from typed C++ values, including native handling for loops, conditionals, switch dispatch, recursive types, and policy application.
 
+The result is not a thin wrapper around a dynamic engine. It is generated C++ that reflects the validated template structure and can be compiled, tested, profiled, and linked like the rest of your code.
+
 ### Using Generated Code
 
 ```cpp
@@ -189,7 +207,7 @@ Generates the `.cc` file with native C++ implementations for the compiled templa
 std::string output = myns::render_item(myItem);
 ```
 
-Every generated type also has a static `tpp_typedefs()` method:
+Every generated type also has a static `tpp_typedefs()` method returning the type's tpp source code:
 
 ```cpp
 // Retrieve the raw tpp source that produced this type:
@@ -200,7 +218,7 @@ std::string src = myns::Item::tpp_typedefs();
 
 ## `tpp2java` — Java Code Generation Backend
 
-`tpp2java` reads intermediate representation JSON and emits Java source. It supports generating a single source file containing the types plus rendering functions, or a standalone runtime helper file.
+`tpp2java` reads intermediate representation JSON and emits Java source. It demonstrates that the compiler frontend is genuinely backend-neutral: the same validated templates can be lowered into Java rendering code without reinterpreting the language from scratch.
 
 ### Synopsis
 
@@ -229,7 +247,7 @@ The intermediate representation JSON is read from stdin by default, or from a fi
 ### Example
 
 ```bash
-tpp ./project | tpp2java source -ns Functions > Functions.java
+tpp my_project | tpp2java source -ns Functions > Functions.java
 ```
 
 This backend is used by the Java acceptance-test pipeline in `Test/MakeJavaTest/` and by `cmake/TppJavaHelpers.cmake`.
@@ -238,7 +256,7 @@ This backend is used by the Java acceptance-test pipeline in `Test/MakeJavaTest/
 
 ## `tpp2swift` — Swift Code Generation Backend
 
-`tpp2swift` reads intermediate representation JSON and emits Swift source. It supports generating a single source file containing the types plus rendering functions, or a standalone runtime helper file.
+`tpp2swift` reads intermediate representation JSON and emits Swift source. Like the Java backend, it extends the same typed source language into another target environment while preserving one compiler frontend and one semantic model.
 
 ### Synopsis
 
@@ -276,7 +294,7 @@ This backend is used by the Swift acceptance-test pipeline in `Test/MakeSwiftTes
 
 ## C++ Library
 
-`lib_tpp` provides the full compiler and renderer as a linkable library. Use it when you want to compile and render templates at runtime — for example, to support user-defined templates, to load template updates without restarting, or to use tpp as a rendering engine inside a C++ application.
+`lib_tpp` provides the full compiler and renderer as a linkable library. Use it when you want to compile and render templates at runtime — for example, to support user-defined templates, to load template updates without restarting, to power editor tooling, or to embed tpp as an application subsystem rather than an offline codegen step.
 
 ### Key Headers
 

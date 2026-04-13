@@ -1,6 +1,8 @@
 # tpp Language Reference
 
-tpp is a **typed template preprocessor**. You define the shape of your data once, write templates that express exactly what to generate, and let the compiler verify that every field access and every interpolation is valid before any output is produced.
+tpp is a **typed template language designed to be compiled**, not just interpreted. You define the shape of your data once, write templates against that schema, and let the compiler verify field access, optional handling, variant dispatch, and policy usage before any output is produced.
+
+That distinction matters. In tpp, templates are not throwaway text snippets hanging off dynamic values. They are checked program artifacts that can be rendered directly, converted into backend-neutral IR, and compiled into typed code for multiple target languages.
 
 Templates use `@…@` delimiters for expressions and control flow. Everything outside those delimiters is literal text that passes through unchanged.
 
@@ -19,11 +21,11 @@ Both roles use the same file extension; the [`tpp-config.json`](#tpp-configjson-
 
 tpp templates are *typed*. Every parameter, every field access, every loop variable carries a declared type — and the compiler checks all of them before generating a single line of output.
 
-That might sound like overhead, but it unlocks something compelling: **tpp templates can be compiled into type-safe C++ functions**.
+That might sound like overhead, but it unlocks something much stronger than ordinary templating: **tpp templates can be compiled into type-safe functions and reused across multiple backends without reimplementing the language**.
 
-### Templates become C++ functions
+### Templates become typed callable code
 
-The `tpp2cpp` tool reads the compiler's output and emits C++ headers and implementations. A template like this:
+The `tpp2cpp` tool reads the compiler's output and emits C++ headers and implementations. Other backends consume the same IR for Java, Swift, runtime rendering, and tooling. A template like this:
 
 ```
 template render_item(item: Item)
@@ -39,6 +41,8 @@ std::string render_item(const Item& item);
 ```
 
 You call it with a real `Item` value. The compiler will reject any call that passes the wrong type. No JSON marshalling, no stringly-typed dispatch at the call site — the type system does the work.
+
+This is the core payoff: the same template can participate in a scripting workflow, a native C++ build, or another backend pipeline, while preserving one set of semantics.
 
 ### Types travel with the output
 
@@ -77,7 +81,7 @@ Because the template compiler knows the schema of every value being interpolated
 
 You get these diagnostics before any code runs, not when a user triggers an edge case in production.
 
-> **Summary:** Typing in tpp is not a formality. It is what allows templates to become verified, type-safe, statically-dispatchable C++ functions — and it is what lets the policy system catch invalid output at render time rather than silently emitting it.
+> **Summary:** Typing in tpp is not a formality. It is what lets the project behave like a real language toolchain: templates can be validated once, lowered into a reusable IR, rendered dynamically, or compiled into statically typed code with the same rules.
 
 ---
 

@@ -1,12 +1,42 @@
 # tpp Intermediate Representation
 
-The tpp compiler emits a single JSON document — the **intermediate representation** (IR) — that encodes everything a backend needs: compiled types, template functions as instruction trees, and policy definitions. This document describes the IR schema and the semantics of each node.
+The tpp compiler emits a single JSON document — the **intermediate representation** (IR) — that acts as the contract between the compiler frontend and every downstream consumer. It encodes the compiled schema, the compiled template functions, and the registered policy definitions in one self-contained payload.
+
+This is not just an internal dump for debugging. The IR is the handoff format used by the rest of the toolchain:
+
+- `tpp2cpp`, `tpp2java`, and `tpp2swift` consume it for source generation
+- `render-tpp` consumes it for direct execution
+- `lib_tpp` exposes it for embedding and runtime rendering
+- `tpp-lsp` and editor tooling rely on the same structured information for navigation and diagnostics
+
+Because the frontend has already parsed, validated, and typed the source language, downstream tools can stay focused on their own job instead of reimplementing template semantics. This document describes the IR schema and the meaning of each node.
+
+## The IR Schema Is Also Authored In tpp
+
+Before diving into the field-by-field schema, it is worth knowing that the IR definition is not maintained separately by hand in each target language. The canonical IR schema lives in [Libraries/lib_tpp/ir.tpp.types](/Users/markus/Documents/C++/tpp/Libraries/lib_tpp/ir.tpp.types), and you can compile that directory to produce JSON-serializable host-language IR types directly.
+
+Examples:
+
+```bash
+tpp Libraries/lib_tpp | tpp2cpp types -ns tpp > IR.h
+tpp Libraries/lib_tpp | tpp2java source -ns IR > IR.java
+tpp Libraries/lib_tpp | tpp2swift source -ns IR > IR.swift
+```
+
+In other words, the schema described below is itself expressed in the source language and can be re-emitted through the normal backend pipeline. The repository's checked-in [Libraries/lib_tpp/include/tpp/IR.h](/Users/markus/Documents/C++/tpp/Libraries/lib_tpp/include/tpp/IR.h) is generated this way.
 
 For how to produce and consume the IR, see the [Usage Guide](usage.md). For the template language that compiles into this IR, see the [Language Reference](language.md).
 
 ---
 
 ## Overview
+
+At a high level, the IR contains four kinds of information:
+
+- compiler provenance via version fields
+- schema definitions for structs and enums
+- compiled template functions expressed as typed instruction trees
+- policy definitions used during interpolation and rendering
 
 The IR is a self-contained JSON object with these top-level fields:
 
@@ -20,13 +50,29 @@ The IR is a self-contained JSON object with these top-level fields:
 | `functions` | array of [FunctionDef](#functiondef) | All compiled template functions |
 | `policies` | array of [PolicyDef](#policydef) | All registered replacement policies |
 
-The version fields record which compiler produced the IR. These are informational — backends should not gate behaviour on them.
+The version fields record which compiler produced the IR. These are informational metadata, not a formal schema-version negotiation mechanism. Consumers may use them for diagnostics or traceability, but should not treat them as an API compatibility promise by themselves.
+
+## What The IR Guarantees
+
+The IR is produced only after the compiler has already done the language-level work. By the time a consumer sees it:
+
+- template parameters and expression paths have been resolved and type-checked
+- schema definitions have been validated
+- recursive schema edges have been annotated
+- template bodies have been lowered into explicit instruction nodes
+- policies have been parsed into structured definitions
+
+That means a backend does not need to rediscover field access rules, optional semantics, switch structure, or policy declarations from raw source files. Those concerns have already been compiled into the IR.
+
+What the IR does not promise is a separately versioned long-term stability guarantee yet. It is a real toolchain contract, but it still evolves together with the compiler.
 
 ---
 
 ## Type System
 
-Types flow through the IR in two forms: **schema definitions** (the struct/enum declarations that backends use for code generation) and **inline type annotations** on expressions and parameters.
+Types flow through the IR in two forms: **schema definitions** and **inline resolved type annotations**.
+
+Schema definitions describe the named data model that backends may turn into native host-language types. Inline type annotations attach resolved type information directly to parameters and expression references so consumers do not need to infer types from raw syntax.
 
 ### TypeKind
 
@@ -78,7 +124,7 @@ A named record type with ordered fields.
 | `doc` | string | Doc comment text |
 | `sourceRange` | [SourceRange](#sourcerange) or null | Source location |
 
-The `recursive` flag tells backends that this field needs indirection in the generated code (e.g. `std::unique_ptr<T>` in C++, `Box<T>` in Rust).
+The `recursive` flag tells backends that this field needs indirection in generated code. The exact representation is backend-specific; for example, the C++ backend uses owning indirection for recursive fields.
 
 ### EnumDef
 
@@ -105,6 +151,8 @@ A tagged union (sum type) with named variants.
 ---
 
 ## Template Functions
+
+Template source does not survive in the IR as raw syntax trees. Instead, each template becomes a typed function definition whose body is expressed as executable instruction nodes. That makes the IR easier for backends to consume deterministically.
 
 ### FunctionDef
 
@@ -138,7 +186,7 @@ The `body` of a `FunctionDef` (and the bodies of `For`, `If`, `Switch`, etc.) is
 | `EmitExpr` | [EmitExprInstr](#emitexprinstr) | Emit an interpolated expression |
 | `AlignCell` | — | Column alignment separator (`@&@`) |
 | `For` | [ForInstr](#forinstr) | Loop over a collection |
-| `If` | [IfinStr](#ifinstr) | Conditional |
+| `If` | [IfInstr](#ifinstr) | Conditional |
 | `Switch` | [SwitchInstr](#switchinstr) | Pattern match on a variant |
 | `Call` | [CallInstr](#callinstr) | Direct function call |
 | `RenderVia` | [RenderViaInstr](#renderviainstr) | Call a function for each element in a collection |
@@ -151,6 +199,8 @@ All expression references in instructions carry resolved type information:
 |---|---|---|
 | `path` | string | Dot-separated field access path (e.g. `"item.name"`) |
 | `type` | [TypeKind](#typekind) | Resolved type of the expression |
+
+`ExprInfo` is intentionally simple. It records the resolved access path and the resolved type, not the original source syntax. Consumers should treat it as a compiled access plan, not as a lossless source-level expression tree.
 
 ### EmitInstr
 
@@ -209,6 +259,7 @@ Pattern match on a variant (enum) expression.
 |---|---|---|
 | `expr` | [ExprInfo](#exprinfo) | The expression to match |
 | `cases` | array of [CaseInstr](#caseinstr) | Case branches |
+| `defaultCase` | [CaseInstr](#caseinstr) or null | Default branch, if present |
 | `isBlock` | bool | Whether the switch was on a block line |
 | `insertCol` | int | Column position for block content insertion |
 | `policy` | string | Policy tag for this scope |
@@ -251,6 +302,8 @@ Call a function once for each element in a collection — a higher-order loop.
 ## Policies
 
 Policies define text transformation rules applied to interpolated expressions. They are registered externally (via JSON files referenced in `tpp-config.json`) and attached to scopes or individual interpolations.
+
+The IR stores policies structurally rather than as opaque blobs. That allows runtime renderers and code generators to preserve the same policy behavior without reparsing configuration files.
 
 ### PolicyDef
 
@@ -303,6 +356,8 @@ Policies define text transformation rules applied to interpolated expressions. T
 ## Source Locations
 
 When the compiler is invoked with source range tracking (used by the language server), each definition includes its source location.
+
+Source locations are optional metadata. Consumers that do not need editor features or source mapping can ignore them safely.
 
 ### SourceRange
 
