@@ -3,6 +3,7 @@
   "displayName": "tpp Template Language Support",
   "description": "Language support for tpp template files (.tpp, .tpp.types) with LSP backend.",
   "version": "0.1.0",
+  "author": "AnarchoSystems",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -12,7 +13,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/placeholder/tpp"
+    "url": "https://github.com/AnarchoSystems/tpp.git"
+  },
+  "homepage": "https://github.com/AnarchoSystems/tpp",
+  "bugs": {
+    "url": "https://github.com/AnarchoSystems/tpp/issues"
   },
   "main": "./out/extension.js",
   "contributes": {
@@ -76,9 +81,10 @@
   },
   "scripts": {
     "build-lsp": "bash scripts/build-lsp.sh",
+    "sync-version": "node scripts/sync-version.mjs",
     "compile": "esbuild src/extension.ts --bundle --minify --outfile=out/extension.js --external:vscode --format=cjs --platform=node",
     "watch": "npm run compile -- --watch",
-    "package": "npm run compile && echo y | vsce package --allow-missing-repository --no-dependencies"
+    "package": "npm run sync-version && npm run compile && echo y | vsce package --no-dependencies"
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1"

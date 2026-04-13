@@ -1,8 +1,6 @@
 #include "SemanticTokens.h"
 #include "LspDefinitions.h"
-#include <tpp/Tokenizer.h>
-#include <tpp/TypedefParser.h>
-#include <tpp/TemplateParser.h>
+#include <tpp/Tooling.h>
 #include <vector>
 #include <tuple>
 
@@ -417,7 +415,7 @@ static void fillGaps(std::vector<RawToken> &out, const std::string &src,
 static void emitTypeTokens(std::vector<RawToken> &out, const std::string &src,
                             const TypeRegistry *reg)
 {
-    const auto &tokens = compiler::tokenize_typedefs(src);
+    const auto tokens = tokenizeTypeSource(src);
 
     // State machine to distinguish struct/enum names, field names, tag names, type refs.
     bool inEnum = false;           // inside an enum { } body
@@ -427,61 +425,63 @@ static void emitTypeTokens(std::vector<RawToken> &out, const std::string &src,
 
     for (const auto &tok : tokens)
     {
-        if (tok.kind == TokKind::Eof) break;
+        if (tok.kind == TypeSourceTokenKind::Eof) break;
         int len = (int)tok.text.size();
         if (len <= 0) continue;
         int type = -1;
+        int line = tok.range.start.line;
+        int col = tok.range.start.character;
 
         switch (tok.kind)
         {
-        case TokKind::Struct:
+        case TypeSourceTokenKind::Struct:
             inEnum = false;
             expectDeclName = true;
             expectMemberName = false;
             type = TT_KEYWORD;
             break;
-        case TokKind::Enum:
+        case TypeSourceTokenKind::Enum:
             inEnum = true;
             expectDeclName = true;
             expectMemberName = false;
             type = TT_KEYWORD;
             break;
-        case TokKind::KwOptional: case TokKind::KwList:
-        case TokKind::KwString: case TokKind::KwInt: case TokKind::KwBool:
+        case TypeSourceTokenKind::KwOptional: case TypeSourceTokenKind::KwList:
+        case TypeSourceTokenKind::KwString: case TypeSourceTokenKind::KwInt: case TypeSourceTokenKind::KwBool:
             type = TT_KEYWORD;
             break;
-        case TokKind::LBrace:
+        case TypeSourceTokenKind::LBrace:
             depth++;
             if (depth == 1) expectMemberName = true;
             type = TT_OPERATOR;
             break;
-        case TokKind::RBrace:
+        case TypeSourceTokenKind::RBrace:
             depth--;
             if (depth == 0) { inEnum = false; expectMemberName = false; }
             type = TT_OPERATOR;
             break;
-        case TokKind::Semi:
+        case TypeSourceTokenKind::Semi:
             if (depth == 1) { expectMemberName = true; }
             type = TT_OPERATOR;
             break;
-        case TokKind::LParen: case TokKind::RParen:
+        case TypeSourceTokenKind::LParen: case TypeSourceTokenKind::RParen:
             type = TT_OPERATOR;
             break;
-        case TokKind::Colon:
+        case TypeSourceTokenKind::Colon:
             type = TT_OPERATOR;
             break;
-        case TokKind::Comma:
+        case TypeSourceTokenKind::Comma:
             type = TT_OPERATOR;
             break;
-        case TokKind::LAngle: case TokKind::RAngle:
+        case TypeSourceTokenKind::LAngle: case TypeSourceTokenKind::RAngle:
             type = TT_OPERATOR;
             break;
-        case TokKind::Comment:
-        case TokKind::DocComment:
+        case TypeSourceTokenKind::Comment:
+        case TypeSourceTokenKind::DocComment:
         {
             // Emit one TT_COMMENT token per source line (semantic tokens are single-line)
-            int curLine = tok.line;
-            int curCol  = tok.col;
+            int curLine = line;
+            int curCol  = col;
             std::string remaining = tok.text;
             while (!remaining.empty())
             {
@@ -496,7 +496,7 @@ static void emitTypeTokens(std::vector<RawToken> &out, const std::string &src,
             }
             break;
         }
-        case TokKind::Ident:
+        case TypeSourceTokenKind::Ident:
             if (expectDeclName)
             {
                 type = TT_TYPE;            // struct/enum declaration name
@@ -518,7 +518,85 @@ static void emitTypeTokens(std::vector<RawToken> &out, const std::string &src,
         }
 
         if (type >= 0)
-            out.push_back({tok.line, tok.col, len, type, 0});
+            out.push_back({line, col, len, type, 0});
+    }
+}
+
+static bool lineIsWithinTemplate(const std::vector<std::pair<int, int>> &templateLineRanges,
+                                 int line)
+{
+    for (const auto &[startLine, endLine] : templateLineRanges)
+        if (line >= startLine && line <= endLine)
+            return true;
+    return false;
+}
+
+static void emitTopLevelCommentTokens(std::vector<RawToken> &out, const std::string &src,
+                                      const std::vector<std::pair<int, int>> &templateLineRanges)
+{
+    int line = 0;
+    size_t pos = 0;
+    while (pos < src.size())
+    {
+        size_t lineEnd = src.find('\n', pos);
+        if (lineEnd == std::string::npos)
+            lineEnd = src.size();
+
+        std::string_view text(src.data() + pos, lineEnd - pos);
+        const size_t firstNonWhitespace = text.find_first_not_of(" \t\r");
+        if (firstNonWhitespace != std::string::npos && !lineIsWithinTemplate(templateLineRanges, line))
+        {
+            std::string_view trimmed = text.substr(firstNonWhitespace);
+            if (trimmed.size() >= 2 && trimmed[0] == '/' && trimmed[1] == '/')
+            {
+                out.push_back({line, static_cast<int>(firstNonWhitespace),
+                               static_cast<int>(text.size() - firstNonWhitespace), TT_COMMENT, 0});
+            }
+            else if (trimmed.size() >= 2 && trimmed[0] == '/' && trimmed[1] == '*')
+            {
+                size_t blockPos = pos + firstNonWhitespace;
+                size_t blockEnd = src.find("*/", blockPos + 2);
+                if (blockEnd == std::string::npos)
+                    blockEnd = src.size();
+                else
+                    blockEnd += 2;
+
+                size_t segmentPos = blockPos;
+                int blockLine = line;
+                int blockColumn = static_cast<int>(firstNonWhitespace);
+                while (segmentPos < blockEnd)
+                {
+                    size_t segmentEnd = src.find('\n', segmentPos);
+                    if (segmentEnd == std::string::npos || segmentEnd > blockEnd)
+                        segmentEnd = blockEnd;
+
+                    if (!lineIsWithinTemplate(templateLineRanges, blockLine) && segmentEnd > segmentPos)
+                    {
+                        out.push_back({blockLine, blockColumn,
+                                       static_cast<int>(segmentEnd - segmentPos), TT_COMMENT, 0});
+                    }
+
+                    if (segmentEnd == blockEnd)
+                        break;
+
+                    segmentPos = segmentEnd + 1;
+                    ++blockLine;
+                    blockColumn = 0;
+                }
+
+                while (pos < blockEnd)
+                {
+                    if (src[pos] == '\n')
+                        ++line;
+                    ++pos;
+                }
+                continue;
+            }
+        }
+
+        pos = (lineEnd == src.size()) ? src.size() : lineEnd + 1;
+        if (lineEnd != src.size())
+            ++line;
     }
 }
 
@@ -539,85 +617,24 @@ static nlohmann::json tokensForTypes(const std::string &src, const TypeRegistry 
 static nlohmann::json tokensForTemplate(const std::string &src)
 {
     std::vector<RawToken> out;
-    size_t pos = 0;
-    int curLine = 0;
-
-    while (pos < src.size())
+    std::vector<ParsedTemplateSource> templates;
+    parseTemplateSource(src, templates);
+    std::vector<std::pair<int, int>> templateLineRanges;
+    for (const auto &tpl : templates)
     {
-        // Skip non-template-header lines, emitting comment tokens as we go
-        while (pos < src.size())
-        {
-            size_t nl = src.find('\n', pos);
-            size_t lineEnd = (nl == std::string::npos) ? src.size() : nl;
-            std::string_view line(src.data() + pos, lineEnd - pos);
-            while (!line.empty() && (line.back() == '\r' || line.back() == ' ' || line.back() == '\t'))
-                line.remove_suffix(1);
-
-            if (line.size() >= 9 && line.substr(0, 9) == "template ")
-                break;
-
-            if (line.size() >= 2 && line[0] == '/' && line[1] == '/')
-            {
-                // Line comment (// or ///)
-                out.push_back({curLine, 0, (int)line.size(), TT_COMMENT, 0});
-                pos = (nl == std::string::npos) ? src.size() : nl + 1;
-                if (nl != std::string::npos) ++curLine;
-            }
-            else if (line.size() >= 2 && line[0] == '/' && line[1] == '*')
-            {
-                // Block comment (/* */ or /** */)
-                size_t closePos = src.find("*/", pos + 2);
-                size_t blockEnd = (closePos != std::string::npos) ? closePos + 2 : src.size();
-                size_t bp = pos;
-                int bl = curLine;
-                while (bp < blockEnd)
-                {
-                    size_t bnl = src.find('\n', bp);
-                    bool hasNl = (bnl != std::string::npos && bnl < blockEnd);
-                    size_t blineEnd = hasNl ? bnl : blockEnd;
-                    int blineLen = (int)(blineEnd - bp);
-                    if (blineLen > 0) out.push_back({bl, 0, blineLen, TT_COMMENT, 0});
-                    if (hasNl) { bp = bnl + 1; ++bl; } else break;
-                }
-                curLine = bl;
-                pos = blockEnd;
-            }
-            else
-            {
-                pos = (nl == std::string::npos) ? src.size() : nl + 1;
-                if (nl != std::string::npos) ++curLine;
-            }
-        }
-        if (pos >= src.size()) break;
-
-        size_t templateLinePos = pos;
-        TemplateFunction func;
-        size_t bodyStartLine = 0;
-        std::string bodyText;
-        std::string headerText;
-        if (!compiler::parseOneTemplate(src, pos, func, &bodyStartLine, &bodyText,
-                              nullptr, nullptr, nullptr, &headerText))
-            break;
-        // Keep curLine in sync with pos after parseOneTemplate consumed the template
-        for (size_t i = templateLinePos; i < pos; ++i)
-            if (src[i] == '\n') ++curLine;
-
-        // Header tokens (line from sourceRange)
-        emitTemplateHeader(out, func, headerText, func.sourceRange.start.line);
-
-        // Body AST tokens
-        walkNodes(out, func.body);
-
-        // END keyword: body occupies lines [bodyStartLine .. bodyStartLine+bodyLines],
-        // where bodyLines = number of \n in bodyText. The END follows on the next line.
         int bodyLineCount = 0;
-        for (char c : bodyText) if (c == '\n') ++bodyLineCount;
-        int endLine = (int)bodyStartLine + 1 + bodyLineCount;
-        out.push_back({endLine, 0, 3, TT_KEYWORD, 0});
+        for (char c : tpl.bodyText) if (c == '\n') ++bodyLineCount;
+        int endLine = (int)tpl.bodyStartLine + 1 + bodyLineCount;
+        templateLineRanges.emplace_back(tpl.function.sourceRange.start.line, endLine);
 
-        // Plain text between directives as TT_STRING
-        fillGaps(out, src, (int)bodyStartLine, endLine);
+        emitTemplateHeader(out, tpl.function, tpl.headerText, tpl.function.sourceRange.start.line);
+        walkNodes(out, tpl.function.body);
+
+        out.push_back({endLine, 0, 3, TT_KEYWORD, 0});
+        fillGaps(out, src, (int)tpl.bodyStartLine, endLine);
     }
+
+    emitTopLevelCommentTokens(out, src, templateLineRanges);
 
     return encodeTokens(out);
 }

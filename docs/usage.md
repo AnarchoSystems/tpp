@@ -46,6 +46,7 @@ If `folder` is omitted, the current working directory is used.
 | Option | Short | Description |
 |---|---|---|
 | `--help` | `-h` | Print usage information and exit |
+| `--source-ranges` | — | Include `sourceRange` fields in the emitted IR for source mapping and IDE features |
 
 ### How It Works
 
@@ -177,7 +178,7 @@ namespace myns {
 tpp ./project | tpp2cpp impl -ns myns -i project_functions.h > project_implementation.cc
 ```
 
-Generates the `.cc` file with the function bodies. At the moment, this just serializes the input parameters and hands them to a `IR` rendered into the source. A data structure that makes it possible to render the template with native c++ code is planned for later (this should make it possible to render other languages as well).
+Generates the `.cc` file with native C++ implementations for the compiled template functions. The generated code renders directly from typed C++ values, including native handling for loops, conditionals, switch dispatch, recursive types, and policy application.
 
 ### Using Generated Code
 
@@ -197,6 +198,82 @@ std::string src = myns::Item::tpp_typedefs();
 
 ---
 
+## `tpp2java` — Java Code Generation Backend
+
+`tpp2java` reads intermediate representation JSON and emits Java source. It supports generating a single source file containing the types plus rendering functions, or a standalone runtime helper file.
+
+### Synopsis
+
+```bash
+tpp2java <command> [options]
+```
+
+The intermediate representation JSON is read from stdin by default, or from a file with `--input`.
+
+### Commands
+
+| Command | Description |
+|---|---|
+| `source` | Generate Java types and rendering functions |
+| `runtime` | Generate only the standalone runtime helpers class |
+
+### Options
+
+| Option | Description |
+|---|---|
+| `-h`, `--help` | Print usage information and exit |
+| `--input <file>` | Read intermediate representation from `<file>` instead of stdin |
+| `-ns <name>` | Use `<name>` as the generated Java class name |
+| `--extern-runtime` | Suppress inlining runtime helpers in generated source |
+
+### Example
+
+```bash
+tpp ./project | tpp2java source -ns Functions > Functions.java
+```
+
+This backend is used by the Java acceptance-test pipeline in `Test/MakeJavaTest/` and by `cmake/TppJavaHelpers.cmake`.
+
+---
+
+## `tpp2swift` — Swift Code Generation Backend
+
+`tpp2swift` reads intermediate representation JSON and emits Swift source. It supports generating a single source file containing the types plus rendering functions, or a standalone runtime helper file.
+
+### Synopsis
+
+```bash
+tpp2swift <command> [options]
+```
+
+The intermediate representation JSON is read from stdin by default, or from a file with `--input`.
+
+### Commands
+
+| Command | Description |
+|---|---|
+| `source` | Generate Swift types and rendering functions |
+| `runtime` | Generate only the standalone runtime helpers file |
+
+### Options
+
+| Option | Description |
+|---|---|
+| `-h`, `--help` | Print usage information and exit |
+| `--input <file>` | Read intermediate representation from `<file>` instead of stdin |
+| `-ns <name>` | Wrap generated code in an enum namespace |
+| `--extern-runtime` | Suppress inlining runtime helpers in generated source |
+
+### Example
+
+```bash
+tpp ./project | tpp2swift source -ns Functions > Functions.swift
+```
+
+This backend is used by the Swift acceptance-test pipeline in `Test/MakeSwiftTest/` and by `cmake/TppSwiftHelpers.cmake`.
+
+---
+
 ## C++ Library
 
 `lib_tpp` provides the full compiler and renderer as a linkable library. Use it when you want to compile and render templates at runtime — for example, to support user-defined templates, to load template updates without restarting, or to use tpp as a rendering engine inside a C++ application.
@@ -211,6 +288,7 @@ std::string src = myns::Item::tpp_typedefs();
 | `<tpp/Types.h>` | Type definitions (`StructDef`, `EnumDef`, `TypeRegistry`) |
 | `<tpp/Policy.h>` | Policy data model and registry |
 | `<tpp/RenderMapping.h>` | Source-to-output range tracking |
+| `<tpp/Tooling.h>` | Public source-analysis helpers used by IDE and tooling integrations |
 | `<tpp/Diagnostic.h>` | Diagnostic and Position types (LSP-compatible) |
 | `<tpp/ArgType.h>` | C++ type mapping helpers for `get_function<Args…>()` |
 
@@ -301,6 +379,33 @@ add_subdirectory(tpp)
 include(tpp/cmake/TppHelpers.cmake)
 ```
 
+### Project Configuration Options
+
+When embedding tpp as a subproject, the following cache variables control how much of the project is configured and whether third-party dependencies are fetched automatically:
+
+| Option | Default | Description |
+|---|---|---|
+| `TPP_APPLY_PROJECT_COMPILE_OPTIONS` | `ON` | Apply tpp's default compile options globally during configure |
+| `TPP_WARNINGS_AS_ERRORS` | top-level only | Treat warnings as errors in Debug builds when compile options are enabled |
+| `TPP_ENABLE_PEDANTIC` | `ON` | Include `-pedantic` in the project compile options |
+| `TPP_ENABLE_UNSIGNED_CHAR` | `ON` | Include `-funsigned-char` in the project compile options |
+| `TPP_ENABLE_PIPE` | `ON` | Include `-pipe` in the project compile options |
+| `TPP_CONFIGURE_TESTS` | top-level only | Configure the `Test/` directory and register CTest entries |
+| `TPP_FETCH_NLOHMANN_JSON` | `ON` | Fetch `nlohmann_json` with `FetchContent` |
+| `TPP_NLOHMANN_JSON_TARGET` | `nlohmann_json` | Target name to link when JSON support is provided externally |
+| `TPP_FETCH_GTEST` | top-level only | Fetch googletest with `FetchContent` |
+| `TPP_GTEST_MAIN_TARGET` | `gtest_main` | Target name to link when gtest main is provided externally |
+
+Example for an external consumer that provides its own dependencies and does not need tests:
+
+```bash
+cmake -S . -B build \
+  -DTPP_CONFIGURE_TESTS=OFF \
+  -DTPP_FETCH_NLOHMANN_JSON=OFF \
+  -DTPP_NLOHMANN_JSON_TARGET=nlohmann_json \
+  -DTPP_FETCH_GTEST=OFF
+```
+
 ### `tpp_add()` Signature
 
 ```cmake
@@ -345,6 +450,32 @@ The implementation `.cc` is added as a private source to `<target>`. The generat
 
 All four custom commands re-run automatically whenever any file in `SOURCE_DIR` changes.
 
+### `tpp_java_add()`
+
+The `cmake/TppJavaHelpers.cmake` module provides `tpp_java_add()` for generating and compiling Java acceptance tests.
+
+```cmake
+tpp_java_add(<target>
+  TEST_DIR <dir>
+  NAME     <name>
+)
+```
+
+It runs `tpp`, then `tpp2java source`, then `make-java-test`, and finally `javac` to compile the generated Java sources.
+
+### `tpp_swift_add()`
+
+The `cmake/TppSwiftHelpers.cmake` module provides `tpp_swift_add()` for generating and compiling Swift acceptance tests.
+
+```cmake
+tpp_swift_add(<target>
+  TEST_DIR <dir>
+  NAME     <name>
+)
+```
+
+It runs `tpp`, then `tpp2swift source`, then `make-swift-test`, and finally `swiftc` to compile the generated Swift sources.
+
 ### Using Generated Code
 
 ```cpp
@@ -360,11 +491,11 @@ void example(const myns::Item& item) {
 
 ## VS Code Extension
 
-The `tpp-language-support` extension provides a language-aware editing experience for `.tpp` and `tpp-config.json` files.
+The `tpp-language-support` extension provides a language-aware editing experience for `.tpp`, `.tpp.types`, and `tpp-config.json` files.
 
 ### Features
 
-- **Syntax highlighting** for `.tpp` template files and `.tpp` type definition files
+- **Syntax highlighting** for `.tpp` template files and `.tpp.types` type definition files
 - **LSP-powered diagnostics** — type errors, missing fields, undefined types, policy violations — shown as red underlines as you type
 - **Live preview panel** (`tpp: Open Render Preview`) — renders a template with sample input defined in `tpp-config.json` and updates the view in real time as you edit
 - **JSON schema validation** for `tpp-config.json` — autocompletion and error highlighting in the config file

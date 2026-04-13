@@ -124,7 +124,7 @@ tpp2cpp impl      --input project.json -i project_functions.h > project_implemen
 | Document | Contents |
 |---|---|
 | [Language Reference](docs/language.md) | Full language syntax: types, templates, expressions, loops, conditionals, switch, render via, policies, alignment, comments, escaping, tpp-config |
-| [Usage & Tooling](docs/usage.md) | CLI reference (`tpp`, `render-tpp`, `tpp2cpp`), C++ library API, CMake `tpp_add()` integration, VS Code extension |
+| [Usage & Tooling](docs/usage.md) | CLI reference (`tpp`, `render-tpp`, `tpp2cpp`, `tpp2java`, `tpp2swift`), C++ library API, CMake integration, VS Code extension |
 
 ---
 
@@ -142,6 +142,8 @@ cmake --build build
 Targets built:
 - `tpp` — the compiler CLI
 - `tpp2cpp` — the C++ code generation backend
+- `tpp2java` — the Java code generation backend
+- `tpp2swift` — the Swift code generation backend
 - `render-tpp` — the scripting rendering backend
 - `tpp-lsp` — the language server (for the VS Code extension)
 - `lib_tpp` — the C++ library

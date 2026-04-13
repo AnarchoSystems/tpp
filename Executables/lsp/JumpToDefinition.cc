@@ -1,7 +1,5 @@
 #include "JumpToDefinition.h"
-#include <tpp/Tokenizer.h>
-#include <tpp/TypedefParser.h>
-#include <tpp/TemplateParser.h>
+#include <tpp/Tooling.h>
 #include <cctype>
 
 namespace tpp
@@ -395,14 +393,14 @@ nlohmann::json jumpToDefinition(const std::string &uri,
     if (project.isTypeUri(uri))
     {
         std::string src = project.getContent(uri);
-        auto tokens = compiler::tokenize_typedefs(src);
+        auto tokens = tokenizeTypeSource(src);
         for (const auto &tok : tokens)
         {
-            if (tok.kind == TokKind::Eof) break;
-            if (tok.kind == TokKind::Ident &&
-                tok.line == line &&
-                tok.col <= character &&
-                character < tok.col + (int)tok.text.size())
+            if (tok.kind == TypeSourceTokenKind::Eof) break;
+            if (tok.kind == TypeSourceTokenKind::Ident &&
+                tok.range.start.line == line &&
+                tok.range.start.character <= character &&
+                character < tok.range.end.character)
             {
                 return resolveTypeName(tok.text, reg, project);
             }

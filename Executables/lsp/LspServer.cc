@@ -5,6 +5,7 @@
 #include "JumpToDefinition.h"
 #include "Autocomplete.h"
 #include "Preview.h"
+#include <tpp/Version.h>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -16,6 +17,13 @@ namespace tpp
 {
 
 namespace fs = std::filesystem;
+
+static std::string currentVersion()
+{
+    return std::to_string(TPP_VERSION_MAJOR) + "." +
+           std::to_string(TPP_VERSION_MINOR) + "." +
+           std::to_string(TPP_VERSION_PATCH);
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -186,7 +194,7 @@ nlohmann::json LspServer::onInitialize(const nlohmann::json &params)
                 {"triggerCharacters", nlohmann::json::array({"@", "."})}
             }}
         }},
-        {"serverInfo", {{"name", "tpp-lsp"}, {"version", "0.1.0"}}}
+        {"serverInfo", {{"name", "tpp-lsp"}, {"version", currentVersion()}}}
     };
 }
 

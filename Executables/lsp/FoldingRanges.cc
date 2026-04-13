@@ -1,6 +1,5 @@
 #include "FoldingRanges.h"
-#include <tpp/Tokenizer.h>
-#include <tpp/TemplateParser.h>
+#include <tpp/Tooling.h>
 
 namespace tpp
 {
@@ -11,9 +10,6 @@ using CommentNode      = compiler::CommentNode;
 using ForNode          = compiler::ForNode;
 using IfNode           = compiler::IfNode;
 using SwitchNode       = compiler::SwitchNode;
-using TemplateFunction = compiler::TemplateFunction;
-using TextNode         = compiler::TextNode;
-
 static nlohmann::json makeRange(int startLine, int endLine, const char *kind = "region")
 {
     return {{"startLine", startLine}, {"endLine", endLine}, {"kind", kind}};
@@ -102,6 +98,64 @@ static void collectFolds(std::vector<nlohmann::json> &out, const std::vector<AST
         collectFoldNode(out, n);
 }
 
+static bool lineIsWithinTemplate(const std::vector<std::pair<int, int>> &templateLineRanges,
+                                 int line)
+{
+    for (const auto &[startLine, endLine] : templateLineRanges)
+        if (line >= startLine && line <= endLine)
+            return true;
+    return false;
+}
+
+static void collectTopLevelCommentFolds(std::vector<nlohmann::json> &out, const std::string &src,
+                                        const std::vector<std::pair<int, int>> &templateLineRanges)
+{
+    int line = 0;
+    size_t pos = 0;
+    while (pos < src.size())
+    {
+        size_t lineEnd = src.find('\n', pos);
+        if (lineEnd == std::string::npos)
+            lineEnd = src.size();
+
+        std::string_view text(src.data() + pos, lineEnd - pos);
+        const size_t firstNonWhitespace = text.find_first_not_of(" \t\r");
+        if (firstNonWhitespace != std::string::npos && !lineIsWithinTemplate(templateLineRanges, line))
+        {
+            std::string_view trimmed = text.substr(firstNonWhitespace);
+            if (trimmed.size() >= 2 && trimmed[0] == '/' && trimmed[1] == '*')
+            {
+                size_t blockStart = pos + firstNonWhitespace;
+                size_t blockEnd = src.find("*/", blockStart + 2);
+                if (blockEnd == std::string::npos)
+                    blockEnd = src.size();
+                else
+                    blockEnd += 2;
+
+                int endLine = line;
+                for (size_t i = pos; i < blockEnd; ++i)
+                    if (src[i] == '\n')
+                        ++endLine;
+
+                if (endLine > line)
+                    out.push_back(makeRange(line, endLine, "comment"));
+
+                while (pos < blockEnd)
+                {
+                    if (src[pos] == '\n')
+                        ++line;
+                    ++pos;
+                }
+                continue;
+            }
+        }
+
+        pos = (lineEnd == src.size()) ? src.size() : lineEnd + 1;
+        if (lineEnd != src.size())
+            ++line;
+    }
+}
+
 // ── .tpp.types fold ranges ────────────────────────────────────────────────────
 static nlohmann::json foldsForTypes(const TppProject &project)
 {
@@ -133,58 +187,23 @@ static nlohmann::json foldsForTypes(const TppProject &project)
 static nlohmann::json foldsForTemplate(const std::string &src, const TppProject &project)
 {
     std::vector<nlohmann::json> folds;
-    size_t pos = 0;
-    int curLine = 0;
-
-    while (pos < src.size())
+    std::vector<ParsedTemplateSource> templates;
+    parseTemplateSource(src, templates);
+    std::vector<std::pair<int, int>> templateLineRanges;
+    for (const auto &tpl : templates)
     {
-        // Skip to next "template " header line, collecting block comment folds en route
-        while (pos < src.size())
-        {
-            size_t nl = src.find('\n', pos);
-            size_t lineEnd = (nl == std::string::npos) ? src.size() : nl;
-            std::string_view line(src.data() + pos, lineEnd - pos);
-            while (!line.empty() && (line.back() == '\r' || line.back() == ' ' || line.back() == '\t'))
-                line.remove_suffix(1);
-            if (line.size() >= 9 && line.substr(0, 9) == "template ")
-                break;
-
-            if (line.size() >= 2 && line[0] == '/' && line[1] == '*')
-            {
-                int startLine = curLine;
-                size_t closePos = src.find("*/", pos + 2);
-                size_t blockEnd = (closePos != std::string::npos) ? closePos + 2 : src.size();
-                // Count lines inside the block
-                for (size_t i = pos; i < blockEnd; ++i)
-                    if (src[i] == '\n') ++curLine;
-                if (curLine > startLine)
-                    folds.push_back(makeRange(startLine, curLine, "comment"));
-                pos = blockEnd;
-                continue;
-            }
-
-            pos = (nl == std::string::npos) ? src.size() : nl + 1;
-            if (nl != std::string::npos) ++curLine;
-        }
-        if (pos >= src.size()) break;
-
-        TemplateFunction func;
-        size_t bodyStartLine = 0;
-        std::string bodyText;
-        if (!compiler::parseOneTemplate(src, pos, func, &bodyStartLine, &bodyText))
-            break;
-
-        // Template-level fold: header line → END line
-        const int headerLine = func.sourceRange.start.line;
+        const int headerLine = tpl.function.sourceRange.start.line;
         int bodyLineCount = 0;
-        for (char c : bodyText) if (c == '\n') ++bodyLineCount;
-        const int endLine = (int)bodyStartLine + 1 + bodyLineCount;
+        for (char c : tpl.bodyText) if (c == '\n') ++bodyLineCount;
+        const int endLine = (int)tpl.bodyStartLine + 1 + bodyLineCount;
+        templateLineRanges.emplace_back(headerLine, endLine);
         if (endLine > headerLine)
             folds.push_back(makeRange(headerLine, endLine));
 
-        // Body-level folds (for/if/switch blocks)
-        collectFolds(folds, func.body);
+        collectFolds(folds, tpl.function.body);
     }
+
+    collectTopLevelCommentFolds(folds, src, templateLineRanges);
 
     nlohmann::json result = nlohmann::json::array();
     for (auto &f : folds) result.push_back(std::move(f));

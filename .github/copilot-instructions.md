@@ -11,11 +11,15 @@ tpp uses a **single compiler frontend / multiple backends** design. The `tpp` CL
 | Backend | Binary | Job |
 |---|---|---|
 | C++ code gen | `tpp2cpp` | Emits typed C++ struct/function headers from the intermediate representation |
+| Java code gen | `tpp2java` | Emits typed Java source from the intermediate representation |
+| Swift code gen | `tpp2swift` | Emits typed Swift source from the intermediate representation |
 | Script rendering | `render-tpp` | Renders a named template with a JSON input — for scripting/testing |
 | C++ runtime | `lib_tpp` | Full compiler + renderer as a linkable library |
 | Language server | `tpp-lsp` | Powers VS Code diagnostics and live preview |
 
 Because the compiler has already done all type-checking, each backend doesn't need to reimplement language logic. Generated C++ functions are compile-time safe — passing the wrong argument type is a C++ compile error.
+
+Maintenance note: when adding a backend or changing CLI flags, update this table, [README.md](../../README.md), and [docs/usage.md](../../docs/usage.md) together.
 
 ### Implementation Components
 

@@ -5,12 +5,14 @@ add_library(lib_tpp
     src/PolicyParser.cc
     src/Lowering.cc
     src/IRBuilder.cc
+    src/Tooling.cc
 )
 
-target_link_libraries(lib_tpp PUBLIC nlohmann_json)
+target_link_libraries(lib_tpp PUBLIC ${TPP_NLOHMANN_JSON_TARGET})
 
 target_include_directories(lib_tpp  PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
-                                    PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+                     PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
+                         ${CMAKE_CURRENT_BINARY_DIR})
 
 # Generate Version.h from version.json (avoids reconfigure on version bump).
 set(_version_json "${CMAKE_SOURCE_DIR}/version.json")
@@ -26,4 +28,3 @@ add_custom_command(
 )
 
 target_sources(lib_tpp PRIVATE ${_version_header})
-target_include_directories(lib_tpp PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
