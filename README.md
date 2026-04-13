@@ -130,6 +130,8 @@ tpp2cpp impl      --input project.json -i project_functions.h > project_implemen
 
 ## Building
 
+[![CI](https://github.com/AnarchoSystems/tpp/actions/workflows/ci.yml/badge.svg)](https://github.com/<owner>/tpp/actions/workflows/ci.yml)
+
 Requires C++17 and CMake ≥ 3.20.
 
 ```bash

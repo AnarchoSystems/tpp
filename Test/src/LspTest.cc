@@ -457,10 +457,12 @@ TEST_P(LspDefinitionTest, TargetLocation)
     auto check = [&](const nlohmann::json &loc)
     {
         EXPECT_EQ(loc.value("uri", ""), exp_uri);
-        if (spec_.expected_line >= 0)
+        if (spec_.expected_line >= 0) {
             EXPECT_EQ(loc["range"]["start"]["line"].get<int>(), spec_.expected_line);
-        if (spec_.expected_character >= 0)
+        }
+        if (spec_.expected_character >= 0) {
             EXPECT_EQ(loc["range"]["start"]["character"].get<int>(), spec_.expected_character);
+        }
     };
 
     if (result.is_array())
