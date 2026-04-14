@@ -471,6 +471,7 @@ static void emitTypeTokens(std::vector<RawToken> &out, const std::string &src,
             type = TT_OPERATOR;
             break;
         case TypeSourceTokenKind::Comma:
+            if (inEnum && depth == 1) { expectMemberName = true; }
             type = TT_OPERATOR;
             break;
         case TypeSourceTokenKind::LAngle: case TypeSourceTokenKind::RAngle:

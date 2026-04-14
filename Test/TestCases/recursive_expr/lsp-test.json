@@ -1,0 +1,15 @@
+{
+    "semantic_tokens": {
+        "file": "typedefs.tpp",
+        "expected_tokens": [
+            {"line": 6, "character": 0, "length": 4, "type": "keyword"},
+            {"line": 6, "character": 5, "length": 4, "type": "type"},
+            {"line": 8, "character": 4, "length": 3, "type": "enumMember"},
+            {"line": 8, "character": 8, "length": 3, "type": "keyword"},
+            {"line": 9, "character": 4, "length": 3, "type": "enumMember"},
+            {"line": 9, "character": 8, "length": 5, "type": "type"},
+            {"line": 10, "character": 4, "length": 3, "type": "enumMember"},
+            {"line": 10, "character": 8, "length": 5, "type": "type"}
+        ]
+    }
+}
