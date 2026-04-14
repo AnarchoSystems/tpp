@@ -79,7 +79,7 @@ If `folder` is omitted, the current working directory is used.
 Successful compilation emits a single JSON document on stdout:
 
 ```
-tpp ./my-project > my-project.json
+tpp . > my-project.json
 ```
 
 This JSON is the input consumed by all backends (`tpp2cpp`, `render-tpp`, etc.) and by the C++ library. For a full description of the IR schema, see the [IR Reference](ir.md).
@@ -118,7 +118,7 @@ The intermediate representation JSON is read from stdin.
 ### Example
 
 ```bash
-tpp ./my-project | render-tpp main '{"name": "World"}'
+tpp . | render-tpp main '{"name": "World"}'
 ```
 
 This is useful in shell pipelines, test scripts, and CI workflows where you want the compiled template behavior immediately, without generating or compiling host-language bindings first.
@@ -163,7 +163,7 @@ tpp2cpp produces three separate files that work together:
 #### Step 1: Types Header (`types`)
 
 ```bash
-tpp ./project | tpp2cpp types -ns myns > project_types.h
+tpp . | tpp2cpp types -ns myns > project_types.h
 ```
 
 Generates a header containing all C++ struct and enum definitions, with:
@@ -175,7 +175,7 @@ Generates a header containing all C++ struct and enum definitions, with:
 #### Step 2: Functions Header (`functions`)
 
 ```bash
-tpp ./project | tpp2cpp functions -ns myns -i project_types.h > project_functions.h
+tpp . | tpp2cpp functions -ns myns -i project_types.h > project_functions.h
 ```
 
 Generates a header declaring one C++ function per template:
@@ -191,7 +191,7 @@ namespace myns {
 #### Step 3: Implementation (`impl`)
 
 ```bash
-tpp ./project | tpp2cpp impl -ns myns -i project_functions.h > project_implementation.cc
+tpp . | tpp2cpp impl -ns myns -i project_functions.h > project_implementation.cc
 ```
 
 Generates the `.cc` file with native C++ implementations for the compiled template functions. The generated code renders directly from typed C++ values, including native handling for loops, conditionals, switch dispatch, recursive types, and policy application.
@@ -285,7 +285,7 @@ The intermediate representation JSON is read from stdin by default, or from a fi
 ### Example
 
 ```bash
-tpp ./project | tpp2swift source -ns Functions > Functions.swift
+tpp . | tpp2swift source -ns Functions > Functions.swift
 ```
 
 This backend is used by the Swift acceptance-test pipeline in `Test/MakeSwiftTest/` and by `cmake/TppSwiftHelpers.cmake`.
