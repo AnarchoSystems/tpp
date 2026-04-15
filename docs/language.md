@@ -358,21 +358,11 @@ A policy modifier on `@switch@` applies to all interpolations within all case bo
 
 Call another template function inline by name:
 
-```
-@functionName(arg)@
-```
+![](res/FunctionCall.png)
 
 The result is inserted at that position. This is the primary mechanism for composition and recursion:
 
-```
-template render_node(node: IntListNode)
-@node.value@@if node.next@, @render_node(node.next)@@end if@
-END
-
-template main(root: IntListNode)
-@render_node(root)@
-END
-```
+![](res/TemplateExpansionExample.png)
 
 ---
 
@@ -380,51 +370,27 @@ END
 
 `render … via` dispatches to a named template for each element of a collection:
 
-```
-@render collection via functionName | options@
-```
+![](res/RenderViaCollection.png)
 
 `functionName` is called once per element with that element as its argument. Options are the same as for `@for@` loops: `sep`, `precededBy`, `followedBy`, `enumerator`, `policy`.
 
-```
-template render_elem(item: Item)
-- @item.name@
-END
-
-template main(data: Data)
-@render data.items via render_elem | sep="\n"@
-END
-```
+![](res/RenderViaOptions.png)
 
 ### Polymorphic Dispatch
 
 When multiple overloads of `functionName` exist for different types, `render … via` selects the correct one at runtime based on the actual variant tag — enabling a clean visitor pattern:
 
-```
-template render_elem(i: int)
-@i@ is an integer
-END
+![](res/PolymorphicDispatch.png)
 
-template render_elem(s: string)
-"@s@" is a string
-END
+This works on individual enum instances as well:
 
-template render_elem(b: bool)
-@b@ is a boolean
-END
-
-template main(items: list<Item>)
-@render items via render_elem | sep="\n"@
-END
-```
+![](res/PolymorphicDispatchSingle.png)
 
 ### Render Via on a Switch
 
-`render … via` can also dispatch on a single variant value (no options):
+`render … via` can also dispatch on a single case:
 
-```
-@render variant_expr via functionName@
-```
+![](res/RenderViaCases.png)
 
 ---
 
@@ -501,19 +467,13 @@ Policies can be applied at four different scopes:
 
 Apply to a single interpolation:
 
-```
-@data.value | policy="escape-html"@
-```
+![](res/PolicyOnValue.png)
 
 #### Per Template
 
 Declare on a template: the policy applies in the entire template:
 
-```
-template render_safe(value: string | policy="escape-html")
-<td>@value@</td>
-END
-```
+![](res/PolicyOnTemplate.png)
 
 Even templates called *from within that template body* inherit that policy.
 
@@ -521,52 +481,35 @@ Even templates called *from within that template body* inherit that policy.
 
 Apply to all interpolations within a loop body, including through function calls made within the loop:
 
-```
-@for item in data.items | sep=", " policy="escape-html"@@item@@end for@
-```
+![](res/PolicyOnFor.png)
 
 #### Per Render Via
 
 Apply to all interpolations in the dispatched template:
 
-```
-@render data.values via render_item | sep="\n" policy="escape-html"@
-```
+![](res/PolicyOnRenderViaCollection.png)
 
 #### Per Switch
 
 Apply to all interpolations in all case bodies:
 
-```
-@switch item | policy="escape-html"@
-@case A(v)@A: @v@@end case@
-@case B(v)@B: @v@@end case@
-@end switch@
-```
+![](res/PolicyOnSwitch.png)
 
 ### Policy Scope Propagation
 
 Policies propagate *through* function calls. If a for loop declares `policy="escape-html"`, that policy is active when any template function is called from within the loop body — even if that function doesn't declare the policy itself:
 
-```
-template id(v: string)
-@v@
-END
-
-template main(data: Data)
-@for v in data.values | sep=", " policy="escape-html"@@id(v)@@end for@
-END
-```
+![](res/PolicyInheritance.png)
 
 The `escape-html` policy applies to `@v@` inside `id`, because it was inherited from the enclosing for loop scope.
 
 ### Overriding an Inherited Policy
 
+Policies from outer scopes are overridden if you set one in an inner scope.
+
 To opt out of an inherited policy at a specific interpolation, use `policy="none"`:
 
-```
-@for item in data.items | policy="escape-html"@@item | policy="none"@@end for@
-```
+![](res/PolicyOverrideNone.png)
 
 `policy="none"` explicitly removes the enclosing scope's policy for that expression.
 
@@ -596,23 +539,13 @@ A line that contains *only* structural directives and optional whitespace is a *
 
 A line that mixes literal text or expressions with directives is an **inline line**. It is emitted as-is, including any surrounding text:
 
-```
-Name: @item.name@        (inline — emits "Name: Alice\n")
-(@for v in values | sep=", "@  (inline — emits the paren and starts the loop)
-```
+![](res/InlineExample.png)
 
 ### Block Indentation
 
 When a block body is rendered, the **zero marker** — the leading whitespace of the first non-empty line in the body — is stripped from every body line. The body is then re-indented to the insertion column of the enclosing directive:
 
-```
-template main(items: list<string>)
-list:
-@for item in items | sep="\n"@
-    - @item@
-@end for@
-END
-```
+![](res/NoIndent.png)
 
 produces for example
 
@@ -624,15 +557,7 @@ list:
 
 but 
 
-```
-
-template main(items: list<string>)
-list:
-    @for item in items | sep="\n"@
-    - @item@
-    @end for@
-END
-```
+![](res/Indent.png)
 
 produces
 
@@ -649,11 +574,7 @@ list:
 
 To produce a literal `@` character in output, write `\@`:
 
-```
-template main()
-Email\@example.com
-END
-```
+![](res/EscapeAt.png)
 
 Output: `Email@example.com`
 

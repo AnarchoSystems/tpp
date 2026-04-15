@@ -235,49 +235,58 @@ nlohmann::json LspServer::onShutdown()
 void LspServer::onDidChangeWatchedFiles(const nlohmann::json &params,
                                          std::vector<nlohmann::json> &outNotifs)
 {
-    // Called when tpp-config.json is created or modified in the workspace.
-    // Create a new project for configs we haven't seen, or reload existing ones.
+    // Called when watched files change in the workspace.
     const auto &changes = params.value("changes", nlohmann::json::array());
     for (const auto &change : changes)
     {
         std::string uri = uriDecode(change.value("uri", ""));
         if (uri.empty()) continue;
         fs::path cfgPath = uriToFsPath(uri);
-        if (cfgPath.filename() != "tpp-config.json") continue;
+        const bool isConfigPath = cfgPath.filename() == "tpp-config.json";
 
-        // Check if we already have a project for this config.
-        TppProject *existing = nullptr;
-        for (auto &p : projects_)
-            if (fs::weakly_canonical(p->configPath()) == fs::weakly_canonical(cfgPath))
-                { existing = p.get(); break; }
-
-        if (existing)
+        bool handledExistingProject = false;
+        for (auto &project : projects_)
         {
-            existing->reloadConfig();
-            existing->recompile();
-            publishDiagnostics(*existing, outNotifs);
-        }
-        else
-        {
-            std::error_code ec;
-            if (!fs::exists(cfgPath, ec) || ec) continue;
-            auto project = std::make_unique<TppProject>(cfgPath);
+            if (!project->dependsOnWatchedPath(cfgPath))
+                continue;
 
-            // Migrate any standalone-buffer files that belong to this new project.
-            for (auto it = standaloneBuffer_.begin(); it != standaloneBuffer_.end(); )
-            {
-                if (project->ownsUri(it->first))
-                {
-                    project->setDirty(it->first, it->second);
-                    it = standaloneBuffer_.erase(it);
-                }
-                else ++it;
-            }
-
+            handledExistingProject = true;
+            auto oldUris = project->uris();
+            project->reloadConfig();
             project->recompile();
             publishDiagnostics(*project, outNotifs);
-            projects_.push_back(std::move(project));
+
+            for (const auto &oldUri : oldUris)
+            {
+                if (project->uris().count(oldUri) == 0)
+                {
+                    outNotifs.push_back(makeNotification("textDocument/publishDiagnostics",
+                                                         {{"uri", oldUri}, {"diagnostics", nlohmann::json::array()}}));
+                }
+            }
         }
+
+        if (handledExistingProject || !isConfigPath)
+            continue;
+
+        std::error_code ec;
+        if (!fs::exists(cfgPath, ec) || ec) continue;
+        auto project = std::make_unique<TppProject>(cfgPath);
+
+        // Migrate any standalone-buffer files that belong to this new project.
+        for (auto it = standaloneBuffer_.begin(); it != standaloneBuffer_.end(); )
+        {
+            if (project->ownsUri(it->first))
+            {
+                project->setDirty(it->first, it->second);
+                it = standaloneBuffer_.erase(it);
+            }
+            else ++it;
+        }
+
+        project->recompile();
+        publishDiagnostics(*project, outNotifs);
+        projects_.push_back(std::move(project));
     }
 }
 

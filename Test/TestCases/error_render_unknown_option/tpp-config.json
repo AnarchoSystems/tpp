@@ -1,0 +1,19 @@
+{
+    "types": [
+        "typedefs.tpp"
+    ],
+    "templates": [
+        "template.tpp"
+    ],
+    "previews": [
+        {
+            "template": "render_node",
+            "input": [
+                {
+                    "value": 1
+                }
+            ],
+            "name": "default"
+        }
+    ]
+}

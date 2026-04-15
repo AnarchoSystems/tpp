@@ -642,9 +642,8 @@ namespace tpp
                 else if constexpr (std::is_same_v<T, CallInstr>)
                 {
                     const FunctionDef *targetFunc = nullptr;
-                    auto fcIt = ctx.functionIndex.find(arg.functionName);
-                    if (fcIt != ctx.functionIndex.end() && !fcIt->second.empty())
-                        targetFunc = &ctx.functions[fcIt->second[0]];
+                    if (arg.functionIndex >= 0 && arg.functionIndex < static_cast<int>(ctx.functions.size()))
+                        targetFunc = &ctx.functions[arg.functionIndex];
                     if (targetFunc)
                     {
                         for (size_t i = 0; i < arg.arguments.size() && i < targetFunc->params.size(); ++i)

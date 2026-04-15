@@ -46,6 +46,9 @@ namespace tpp
         // All URIs (types + templates) belonging to this project.
         const std::set<std::string> &uris() const { return uris_; }
 
+        // Returns true if a changed on-disk path should invalidate this project.
+        bool dependsOnWatchedPath(const std::filesystem::path &path) const;
+
         // Returns true if the given URI is a type definition file (not a template).
         bool isTypeUri(const std::string &uri) const { return typeUris_.count(uri) > 0; }
 
@@ -61,6 +64,7 @@ namespace tpp
         std::vector<std::filesystem::path> policyFiles_;
         std::set<std::string> uris_;
         std::set<std::string> typeUris_;
+        std::set<std::string> policyUris_;
 
         std::map<std::string, std::string> dirtyBuffer_; // URI -> text
 

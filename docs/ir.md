@@ -280,6 +280,7 @@ Direct call to another template function.
 | Field | Type | Description |
 |---|---|---|
 | `functionName` | string | Name of the function to call |
+| `functionIndex` | int | Resolved callee index chosen at compile time |
 | `arguments` | array of [ExprInfo](#exprinfo) | Arguments (must match the callee's parameter types) |
 
 ### RenderViaInstr

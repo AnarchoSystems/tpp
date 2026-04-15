@@ -1,0 +1,15 @@
+[
+  {
+    "uri": "error_render_via_missing_struct_overload/template.tpp",
+    "diagnostics": [
+      {
+        "range": {
+          "start": {"line": 13, "character": 0},
+          "end": {"line": 13, "character": 41}
+        },
+        "message": "render-via function 'render_elem' must have an overload taking 'Item'",
+        "severity": "error"
+      }
+    ]
+  }
+]

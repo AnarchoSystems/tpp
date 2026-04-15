@@ -286,12 +286,15 @@ static void walkNode(std::vector<RawToken> &out, const ASTNode &node)
             }
             else
             {
-                // @expr | policy=...@ — expr as variable, tail as keyword
+                // @expr | policy=...@ — keep both interpolation delimiters variable-coloured
                 const std::string exprText = exprToText(arg.expr);
                 out.push_back({ln, start, 1 + (int)exprText.size(), TT_VARIABLE, 0});
                 const int tailStart = start + 1 + (int)exprText.size();
-                if (end > tailStart)
-                    out.push_back({ln, tailStart, end - tailStart, TT_KEYWORD, 0});
+                const int closingAt = end - 1;
+                if (closingAt > tailStart)
+                    out.push_back({ln, tailStart, closingAt - tailStart, TT_KEYWORD, 0});
+                if (end > closingAt)
+                    out.push_back({ln, closingAt, end - closingAt, TT_VARIABLE, 0});
             }
         }
         else if constexpr (std::is_same_v<T, std::shared_ptr<FunctionCallNode>>)
@@ -319,7 +322,7 @@ static void walkNode(std::vector<RawToken> &out, const ASTNode &node)
             {
                 out.push_back({ln, argCol, 1, TT_OPERATOR, 0}); // )
                 if (end > argCol + 1)
-                    out.push_back({ln, argCol + 1, end - (argCol + 1), TT_KEYWORD, 0}); // @
+                    out.push_back({ln, argCol + 1, end - (argCol + 1), TT_FUNCTION, 0}); // @
             }
         }
         else if constexpr (std::is_same_v<T, std::shared_ptr<ForNode>>)
@@ -526,6 +529,80 @@ static void fillGaps(std::vector<RawToken> &out, const std::string &src,
         ++curLine;
     }
     for (auto &t : gapTokens) out.push_back(std::move(t));
+}
+
+static std::map<int, std::vector<std::pair<int, int>>> buildCoveredSpans(const std::vector<RawToken> &out)
+{
+    std::map<int, std::vector<std::pair<int, int>>> covered;
+    for (const auto &[line, startChar, length, type, mods] : out)
+    {
+        (void)type;
+        (void)mods;
+        covered[line].emplace_back(startChar, startChar + length);
+    }
+
+    for (auto &[line, spans] : covered)
+    {
+        (void)line;
+        if (spans.empty())
+            continue;
+
+        std::sort(spans.begin(), spans.end());
+        std::vector<std::pair<int, int>> merged;
+        merged.push_back(spans.front());
+        for (size_t index = 1; index < spans.size(); ++index)
+        {
+            auto &[lastStart, lastEnd] = merged.back();
+            if (spans[index].first <= lastEnd)
+                lastEnd = std::max(lastEnd, spans[index].second);
+            else
+                merged.push_back(spans[index]);
+        }
+        spans = std::move(merged);
+    }
+
+    return covered;
+}
+
+static bool rangeFullyCovered(const std::map<int, std::vector<std::pair<int, int>>> &covered,
+                              int line,
+                              int start,
+                              int end)
+{
+    auto it = covered.find(line);
+    if (it == covered.end())
+        return false;
+
+    for (const auto &[coveredStart, coveredEnd] : it->second)
+        if (coveredStart <= start && coveredEnd >= end)
+            return true;
+
+    return false;
+}
+
+static void emitUncoveredStructuralDirectiveTokens(std::vector<RawToken> &out,
+                                                   const std::string &bodyText,
+                                                   int bodyStartLine)
+{
+    const auto directiveRanges = extractTemplateDirectiveRanges(bodyText, static_cast<size_t>(bodyStartLine));
+    const auto covered = buildCoveredSpans(out);
+
+    for (const auto &directiveRange : directiveRanges)
+    {
+        if (!directiveRange.structural)
+            continue;
+
+        const int tokenLine = directiveRange.range.start.line;
+        const int tokenStart = directiveRange.range.start.character;
+        const int tokenEnd = directiveRange.range.end.character;
+        if (tokenStart < 0 || tokenEnd <= tokenStart)
+            continue;
+
+        if (rangeFullyCovered(covered, tokenLine, tokenStart, tokenEnd))
+            continue;
+
+        out.push_back({tokenLine, tokenStart, tokenEnd - tokenStart, TT_KEYWORD, 0});
+    }
 }
 
 // ── .tpp.types semantic tokens ────────────────────────────────────────────────
@@ -748,6 +825,7 @@ static nlohmann::json tokensForTemplate(const std::string &src)
 
         emitTemplateHeader(out, tpl.function, tpl.headerText, tpl.function.sourceRange.start.line);
         walkNodes(out, tpl.function.body);
+        emitUncoveredStructuralDirectiveTokens(out, tpl.bodyText, static_cast<int>(tpl.bodyStartLine));
 
         out.push_back({endLine, 0, 3, TT_KEYWORD, 0});
         fillGaps(out, src, (int)tpl.bodyStartLine, endLine);

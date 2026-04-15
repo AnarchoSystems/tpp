@@ -81,7 +81,7 @@ export class PreviewPanel {
 
     // Re-render when tpp-config.json is saved (LSP reads it from disk, so on-save only)
     vscode.workspace.onDidSaveTextDocument(e => {
-      if (e.uri.toString().endsWith('tpp-config.json')) {
+      if (e.uri.toString().endsWith('.json')) {
         this._refresh();
       }
     }, null, this._disposables);

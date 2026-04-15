@@ -58,7 +58,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       { scheme: 'file', language: 'tpp-types' }
     ],
     synchronize: {
-      fileEvents: vscode.workspace.createFileSystemWatcher('**/*.{tpp,tpp.types}')
+      fileEvents: [
+        vscode.workspace.createFileSystemWatcher('**/*.tpp'),
+        vscode.workspace.createFileSystemWatcher('**/*.tpp.types'),
+        vscode.workspace.createFileSystemWatcher('**/*.json')
+      ]
     },
     outputChannel: outputChannel,
     revealOutputChannelOn: RevealOutputChannelOn.Error

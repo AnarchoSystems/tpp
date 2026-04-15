@@ -6,8 +6,8 @@ set -euo pipefail
 BUILD_DIR="$(cd "${1:?Usage: $0 <build-dir>}"; pwd)"
 REPO_ROOT="$(cd "$(dirname "$0")/.."; pwd)"
 VERSION_JSON="$REPO_ROOT/version.json"
-TPP_EXE="$BUILD_DIR/Executables/tpp/tpp"
-TEST_EXE="$BUILD_DIR/Test/tpp_acceptance_test"
+TPP_EXE="$BUILD_DIR/bin/tpp"
+TEST_EXE="$BUILD_DIR/bin/tpp_acceptance_test"
 TEST_DIR="$REPO_ROOT/Test"
 
 has_missing_snapshots=0
@@ -45,7 +45,7 @@ if [ -z "$BUMP" ] && [ "$has_missing_snapshots" -eq 0 ]; then
     else
         echo "=== Unknown test result — generating snapshots anyway ==="
     fi
-else
+elif [ -n "$BUMP" ]; then
     echo "=== Step 3: Bumping $BUMP version ==="
     cmake -DVERSION_JSON="$VERSION_JSON" -DBUMP="$BUMP" \
           -P "$REPO_ROOT/cmake/BumpVersion.cmake"

@@ -1,0 +1,19 @@
+{
+    "semantic_tokens": {
+        "file": "template.tpp",
+        "expected_tokens": [
+            {"line": 15, "character": 0, "length": 6, "type": "keyword"},
+            {"line": 15, "character": 6, "length": 6, "type": "enumMember"},
+            {"line": 15, "character": 12, "length": 1, "type": "operator"},
+            {"line": 15, "character": 13, "length": 3, "type": "variable"},
+            {"line": 15, "character": 16, "length": 1, "type": "operator"},
+            {"line": 15, "character": 17, "length": 1, "type": "keyword"},
+            {"line": 15, "character": 18, "length": 12, "type": "function"},
+            {"line": 15, "character": 30, "length": 1, "type": "operator"},
+            {"line": 15, "character": 31, "length": 3, "type": "variable"},
+            {"line": 15, "character": 34, "length": 1, "type": "operator"},
+            {"line": 15, "character": 35, "length": 1, "type": "function"},
+            {"line": 15, "character": 36, "length": 10, "type": "keyword"}
+        ]
+    }
+}

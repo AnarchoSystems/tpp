@@ -133,4 +133,28 @@ bool parseTemplateSource(const std::string &src,
     return true;
 }
 
+std::vector<TemplateDirectiveRange> extractTemplateDirectiveRanges(const std::string &bodyText,
+                                                                   size_t bodyStartLine)
+{
+    std::vector<TemplateDirectiveRange> ranges;
+    const auto templateLines = compiler::parseTemplateLines(bodyText);
+    for (size_t lineIndex = 0; lineIndex < templateLines.size(); ++lineIndex)
+    {
+        const auto &line = templateLines[lineIndex];
+        for (const auto &segment : line.segments)
+        {
+            if (!segment.isDirective)
+                continue;
+
+            ranges.push_back({
+                {{static_cast<int>(bodyStartLine + lineIndex), segment.startCol - 1},
+                 {static_cast<int>(bodyStartLine + lineIndex), segment.endCol + 1}},
+                compiler::isStructuralDirective(segment.info)
+            });
+        }
+    }
+
+    return ranges;
+}
+
 }

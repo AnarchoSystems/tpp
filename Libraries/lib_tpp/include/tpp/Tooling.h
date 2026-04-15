@@ -47,6 +47,12 @@ namespace tpp
         Range headerRange{};
     };
 
+    struct TemplateDirectiveRange
+    {
+        Range range;
+        bool structural = false;
+    };
+
     std::vector<TypeSourceToken> tokenizeTypeSource(const std::string &src);
 
     bool parseTemplateSource(const std::string &src,
@@ -55,4 +61,7 @@ namespace tpp
     bool parseTemplateSource(const std::string &src,
                              std::vector<ParsedTemplateSource> &templates,
                              std::vector<Diagnostic> &diagnostics);
+
+    std::vector<TemplateDirectiveRange> extractTemplateDirectiveRanges(const std::string &bodyText,
+                                                                       size_t bodyStartLine = 0);
 }

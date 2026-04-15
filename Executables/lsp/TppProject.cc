@@ -8,6 +8,21 @@ namespace tpp
 
     namespace fs = std::filesystem;
 
+    static bool hasSuffix(const std::string &value, const std::string &suffix)
+    {
+        return value.size() >= suffix.size() &&
+               value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
+    }
+
+    static fs::path normalizePath(const fs::path &path)
+    {
+        std::error_code ec;
+        fs::path normalized = fs::weakly_canonical(path, ec);
+        if (ec)
+            normalized = path.lexically_normal();
+        return normalized;
+    }
+
     TppProject::TppProject(fs::path configPath)
         : configPath_(std::move(configPath))
         , root_(configPath_.parent_path())
@@ -22,6 +37,7 @@ namespace tpp
         policyFiles_.clear();
         uris_.clear();
         typeUris_.clear();
+        policyUris_.clear();
 
         std::ifstream f(configPath_);
         if (!f)
@@ -49,6 +65,7 @@ namespace tpp
 
         for (const auto &p : typeFiles_)    { uris_.insert(pathToUri(p)); typeUris_.insert(pathToUri(p)); }
         for (const auto &p : templateFiles_) uris_.insert(pathToUri(p));
+        for (const auto &p : policyFiles_)  { uris_.insert(pathToUri(p)); policyUris_.insert(pathToUri(p)); }
 
         return true;
     }
@@ -59,6 +76,20 @@ namespace tpp
         compiler_.clear_templates();
         compiler_.clear_policies();
         diagnostics_.clear();
+
+        auto makePolicyDiagnostic = [](const std::string &message)
+        {
+            return Diagnostic{
+                {{0, 0}, {0, 0}},
+                message,
+                DiagnosticSeverity::Error,
+                std::nullopt,
+                std::string("tpp"),
+                {},
+                std::nullopt,
+                {}
+            };
+        };
 
         // Process type files
         for (const auto &path : typeFiles_)
@@ -93,15 +124,25 @@ namespace tpp
         // Load replacement policies
         for (const auto &path : policyFiles_)
         {
+            std::string uri = pathToUri(path);
+            auto &diags = diagnostics_[uri];
             std::string text = readFile(path);
-            if (text.empty()) continue;
+            if (text.empty())
+            {
+                diags.push_back(makePolicyDiagnostic("policy file not found or empty"));
+                continue;
+            }
             try
             {
                 nlohmann::json pj = nlohmann::json::parse(text);
                 std::string err;
-                compiler_.add_policy(pj, err); // silently ignore invalid policies
+                if (!compiler_.add_policy(pj, err))
+                    diags.push_back(makePolicyDiagnostic(err));
             }
-            catch (...) {}
+            catch (const std::exception &e)
+            {
+                diags.push_back(makePolicyDiagnostic(std::string("invalid JSON: ") + e.what()));
+            }
         }
 
         IR newOutput;
@@ -123,6 +164,38 @@ namespace tpp
     bool TppProject::ownsUri(const std::string &uri) const
     {
         return uris_.count(uri) > 0;
+    }
+
+    bool TppProject::dependsOnWatchedPath(const fs::path &path) const
+    {
+        fs::path normalizedPath = normalizePath(path);
+        if (normalizedPath == normalizePath(configPath_))
+            return true;
+
+        auto isKnownDependency = [&](const std::vector<fs::path> &paths)
+        {
+            return std::any_of(paths.begin(), paths.end(), [&](const fs::path &candidate)
+            {
+                return normalizePath(candidate) == normalizedPath;
+            });
+        };
+
+        if (isKnownDependency(typeFiles_) ||
+            isKnownDependency(templateFiles_) ||
+            isKnownDependency(policyFiles_))
+            return true;
+
+        fs::path normalizedRoot = normalizePath(root_);
+        auto rootString = normalizedRoot.string();
+        auto pathString = normalizedPath.string();
+        if (pathString.size() < rootString.size() ||
+            pathString.compare(0, rootString.size(), rootString) != 0)
+            return false;
+
+        std::string fileName = normalizedPath.filename().string();
+        return normalizedPath.extension() == ".tpp" ||
+               normalizedPath.extension() == ".json" ||
+               hasSuffix(fileName, ".tpp.types");
     }
 
     std::string TppProject::readFile(const fs::path &path) const

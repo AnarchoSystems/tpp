@@ -23,6 +23,7 @@
 #include <fstream>
 #include <map>
 #include <optional>
+#include <cstdlib>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -137,6 +138,13 @@ static std::string readFileStr(const std::filesystem::path &p)
     std::ifstream f(p);
     return std::string(std::istreambuf_iterator<char>(f),
                        std::istreambuf_iterator<char>());
+}
+
+static void writeFileStr(const std::filesystem::path &p, const std::string &content)
+{
+    std::filesystem::create_directories(p.parent_path());
+    std::ofstream out(p);
+    out << content;
 }
 
 // Relative source URL ("testname/file.tpp") → absolute file:// URI.
@@ -305,6 +313,88 @@ INSTANTIATE_TEST_SUITE_P(LspTests, LspDiagnosticsTest,
                          ::testing::ValuesIn(GetDiagnosticTestCases()),
                          [](const testing::TestParamInfo<LspDiagnosticsTest::ParamType> &info)
                          { return info.param.name; });
+
+TEST(LspWatchTest, PolicyChangesReloadProjectAndPublishPolicyDiagnostics)
+{
+    namespace fs = std::filesystem;
+
+    fs::path tempDir = fs::temp_directory_path() / fs::path("tpp-lsp-policy-watch-XXXXXX");
+    std::string tempTemplate = tempDir.string();
+    std::vector<char> tempBuffer(tempTemplate.begin(), tempTemplate.end());
+    tempBuffer.push_back('\0');
+    char *createdDir = mkdtemp(tempBuffer.data());
+    ASSERT_NE(createdDir, nullptr);
+    tempDir = fs::path(createdDir);
+
+    const fs::path configPath = tempDir / "tpp-config.json";
+    const fs::path templatePath = tempDir / "template.tpp";
+    const fs::path policyPath = tempDir / "policies" / "escape-html.policy.json";
+
+    writeFileStr(configPath,
+        "{\n"
+        "    \"types\": [],\n"
+        "    \"templates\": [\"template.tpp\"],\n"
+        "    \"replacement-policies\": [\"policies/*.policy.json\"],\n"
+        "    \"previews\": [{\"template\": \"main\", \"input\": {\"v\": \"<x>\"}}]\n"
+        "}\n");
+    writeFileStr(templatePath,
+        "template main(v: string)\n"
+        "@v | policy=\"escape-html\"@\n"
+        "END\n");
+    writeFileStr(policyPath, "{\"tag\":123}\n");
+
+    tpp_test::LspClient client(TPP_LSP_EXE);
+    client.initialize(fileUri(tempDir));
+
+    auto openNotifications = client.didOpen(fileUri(templatePath), readFileStr(templatePath));
+    auto actual = lspDiagsFromNotifs(openNotifications);
+
+    const std::string templateUri = fileUri(templatePath);
+    const std::string policyUri = fileUri(policyPath);
+
+    auto byUri = [&](const std::vector<tpp::DiagnosticLSPMessage> &messages, const std::string &uri)
+        -> const std::vector<tpp::Diagnostic>*
+    {
+        for (const auto &message : messages)
+            if (message.uri == uri)
+                return &message.diagnostics;
+        return nullptr;
+    };
+
+    const auto *templateDiags = byUri(actual, templateUri);
+    ASSERT_NE(templateDiags, nullptr);
+    ASSERT_EQ(templateDiags->size(), 1u);
+    EXPECT_NE((*templateDiags)[0].message.find("unknown policy 'escape-html'"), std::string::npos);
+
+    const auto *policyDiags = byUri(actual, policyUri);
+    ASSERT_NE(policyDiags, nullptr);
+    ASSERT_EQ(policyDiags->size(), 1u);
+    EXPECT_NE((*policyDiags)[0].message.find("missing required string field 'tag'"), std::string::npos);
+
+    writeFileStr(policyPath,
+        "{\n"
+        "    \"tag\": \"escape-html\",\n"
+        "    \"replacements\": [{\"find\": \"<\", \"replace\": \"&lt;\"}]\n"
+        "}\n");
+
+    auto changeNotifications = client.didChangeWatchedFiles(nlohmann::json::array({
+        {
+            {"uri", fileUri(policyPath)},
+            {"type", 2}
+        }
+    }));
+    auto changed = lspDiagsFromNotifs(changeNotifications);
+
+    const auto *clearedTemplateDiags = byUri(changed, templateUri);
+    EXPECT_EQ(clearedTemplateDiags, nullptr);
+
+    const auto *clearedPolicyDiags = byUri(changed, policyUri);
+    EXPECT_EQ(clearedPolicyDiags, nullptr);
+
+    client.shutdown();
+    std::error_code ec;
+    fs::remove_all(tempDir, ec);
+}
 
 // ── LspTokenTest ─────────────────────────────────────────────────────────────
 // Parameterised on LspTokenSpec (discovered from per-case lsp-test.json).

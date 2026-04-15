@@ -34,6 +34,9 @@ public:
     std::vector<nlohmann::json> didOpen(const std::string &uri,
                                          const std::string &content);
 
+    // Send workspace/didChangeWatchedFiles and return resulting notifications.
+    std::vector<nlohmann::json> didChangeWatchedFiles(const nlohmann::json &changes);
+
     // Send a generic request and return the response's "result" field.
     // Any notifications that arrive while waiting for the response are
     // silently discarded.  On an LSP error response, returns {"error": msg}.

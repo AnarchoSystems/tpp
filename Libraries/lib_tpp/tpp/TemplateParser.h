@@ -59,6 +59,7 @@ namespace tpp::compiler
         std::string followedBy;
         std::string precededBy;
         std::string policy;
+        std::vector<std::tuple<std::string,int,int>> parseErrors; // {message, start, end}
     };
 
     // Alignment cell marker: @&@
@@ -142,7 +143,8 @@ namespace tpp::compiler
         // lineIndex is the 0-based index of this line within the body (added to bodyStartLine).
         std::vector<ASTNode> parseInline(const std::vector<LineSeg> &segs,
                                          size_t startPos = 0,
-                                         int lineIndex = 0);
+                                         int lineIndex = 0,
+                                         Range *outEndRange = nullptr);
 
         Range makeRange(int lineIndex, const LineSeg &seg) const
         {

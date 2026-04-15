@@ -97,14 +97,50 @@ namespace tpp::compiler
         return InstrExpr{flattenExpr(e), resolveExprType(e, env)};
     }
 
+    static TypeRef normalizeCallArgumentType(const TypeRef &type)
+    {
+        if (auto optionalType = std::get_if<std::shared_ptr<OptionalType>>(&type))
+            return (*optionalType)->innerType;
+        return type;
+    }
+
+    static int resolveFunctionOverloadIndex(const std::vector<TemplateFunction> &functions,
+                                            const std::string &name,
+                                            const std::vector<InstrExpr> &arguments)
+    {
+        for (size_t i = 0; i < functions.size(); ++i)
+        {
+            const auto &function = functions[i];
+            if (function.name != name || function.params.size() != arguments.size())
+                continue;
+
+            bool matches = true;
+            for (size_t argIndex = 0; argIndex < arguments.size(); ++argIndex)
+            {
+                if (!(function.params[argIndex].type == normalizeCallArgumentType(arguments[argIndex].resolvedType)))
+                {
+                    matches = false;
+                    break;
+                }
+            }
+
+            if (matches)
+                return static_cast<int>(i);
+        }
+
+        return -1;
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // AST → Instruction lowering
     // ═══════════════════════════════════════════════════════════════════
 
     static std::vector<Instruction> lowerNodes(const std::vector<ASTNode> &nodes, TypeEnv &env,
+                                               const std::vector<TemplateFunction> &functions,
                                                const std::map<std::string, int> &funcIndex);
 
     static std::vector<Instruction> lowerNodes(const std::vector<ASTNode> &nodes, TypeEnv &env,
+                                               const std::vector<TemplateFunction> &functions,
                                                const std::map<std::string, int> &funcIndex)
     {
         std::vector<Instruction> out;
@@ -147,7 +183,7 @@ namespace tpp::compiler
                     if (!arg->enumeratorName.empty())
                         env.push(arg->enumeratorName, TypeRef{IntType{}});
 
-                    auto body = lowerNodes(arg->body, env, funcIndex);
+                    auto body = lowerNodes(arg->body, env, functions, funcIndex);
 
                     if (!arg->enumeratorName.empty())
                         env.pop();
@@ -171,8 +207,8 @@ namespace tpp::compiler
                 else if constexpr (std::is_same_v<T, std::shared_ptr<IfNode>>)
                 {
                     InstrExpr condExpr = lowerExpr(arg->condExpr, env);
-                    auto thenBody = lowerNodes(arg->thenBody, env, funcIndex);
-                    auto elseBody = lowerNodes(arg->elseBody, env, funcIndex);
+                    auto thenBody = lowerNodes(arg->thenBody, env, functions, funcIndex);
+                    auto elseBody = lowerNodes(arg->elseBody, env, functions, funcIndex);
 
                     auto n = std::make_shared<IfInstr>();
                     n->condExpr = std::move(condExpr);
@@ -222,7 +258,7 @@ namespace tpp::compiler
                         else if (!c.bindingName.empty())
                             env.push(c.bindingName, TypeRef{StringType{}});
 
-                        ci.body = lowerNodes(c.body, env, funcIndex);
+                        ci.body = lowerNodes(c.body, env, functions, funcIndex);
 
                         if (!c.bindingName.empty())
                             env.pop();
@@ -243,10 +279,9 @@ namespace tpp::compiler
                 {
                     auto ci = std::make_shared<CallInstr>();
                     ci->functionName = arg->functionName;
-                    auto it = funcIndex.find(arg->functionName);
-                    ci->functionIndex = (it != funcIndex.end()) ? it->second : -1;
                     for (const auto &a : arg->arguments)
                         ci->arguments.push_back(lowerExpr(a, env));
+                    ci->functionIndex = resolveFunctionOverloadIndex(functions, arg->functionName, ci->arguments);
                     out.push_back(std::move(ci));
                 }
                 else if constexpr (std::is_same_v<T, std::shared_ptr<RenderViaNode>>)
@@ -301,7 +336,7 @@ namespace tpp::compiler
             ifn.policy = fn.policy;
             ifn.doc = fn.doc;
             ifn.sourceRange = fn.sourceRange;
-            ifn.body = lowerNodes(fn.body, env, funcIndex);
+            ifn.body = lowerNodes(fn.body, env, functions, funcIndex);
 
             out.push_back(std::move(ifn));
         }

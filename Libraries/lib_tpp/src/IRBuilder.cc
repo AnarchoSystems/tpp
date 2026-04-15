@@ -145,6 +145,7 @@ static Instruction convert_instruction(const compiler::Instruction &instr)
         {
             CallInstr out;
             out.functionName = arg->functionName;
+            out.functionIndex = arg->functionIndex;
             for (const auto &a : arg->arguments)
                 out.arguments.push_back(convert_expr(a));
             return Instruction{Instruction::Value{std::in_place_index<6>, std::move(out)}};

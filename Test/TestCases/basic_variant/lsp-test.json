@@ -1,0 +1,8 @@
+{
+    "semantic_tokens": {
+        "file": "template.tpp",
+        "expected_tokens": [
+            {"line": 17, "character": 12, "length": 9, "type": "keyword"}
+        ]
+    }
+}

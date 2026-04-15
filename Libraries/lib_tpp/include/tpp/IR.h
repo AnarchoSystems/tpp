@@ -149,10 +149,11 @@ struct SwitchInstr
 struct CallInstr
 {
     std::string functionName;
+    int functionIndex;
     std::vector<ExprInfo> arguments;
     static std::string tpp_typedefs() noexcept
     {
-        return "/// Direct function call.\nstruct CallInstr\n{\n    functionName : string;\n    arguments : list<ExprInfo>;\n}";
+        return "/// Direct function call.\nstruct CallInstr\n{\n    functionName : string;\n    functionIndex : int;\n    arguments : list<ExprInfo>;\n}";
     }
 };
 /// Render-via: call a function for each element in a collection or single enum.
@@ -581,12 +582,14 @@ inline void to_json(nlohmann::json& j, const SwitchInstr& v)
 inline void from_json(const nlohmann::json& j, CallInstr& v)
 {
     j.at("functionName").get_to(v.functionName);
+    j.at("functionIndex").get_to(v.functionIndex);
     j.at("arguments").get_to(v.arguments);
 }
 inline void to_json(nlohmann::json& j, const CallInstr& v)
 {
     j = nlohmann::json{};
     j["functionName"] = v.functionName;
+    j["functionIndex"] = v.functionIndex;
     j["arguments"] = v.arguments;
 }
 inline void from_json(const nlohmann::json& j, RenderViaInstr& v)

@@ -1,0 +1,4 @@
+struct IntListNode
+{
+    value : int;
+}

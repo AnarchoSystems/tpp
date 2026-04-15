@@ -215,8 +215,9 @@ namespace tpp::compiler
             // Bare flag (no '=')
             if (p >= optPart.size() || optPart[p] != '=')
             {
+                const bool knownKey = allowedStringKeys.count(key) != 0 || allowedIdentKeys.count(key) != 0;
                 if (allowedFlags.count(key) == 0)
-                    return ParseError{allowedFlags.empty()
+                    return ParseError{knownKey
                         ? "expected '=' after option key '" + key + "'"
                         : "unknown option '" + key + "'", (int)keyStart, (int)p};
                 if (seen.count(key))
@@ -523,13 +524,23 @@ namespace tpp::compiler
             }
             if (!optPart.empty())
             {
+                const size_t renderPrefixLen = 7;
+                std::string optRaw = t.substr(renderPrefixLen + pipe + 1);
+                size_t lead = 0;
+                while (lead < optRaw.size() && std::isspace(static_cast<unsigned char>(optRaw[lead])))
+                    ++lead;
+                const int optOffset = static_cast<int>(renderPrefixLen + pipe + 1 + lead);
+
                 std::map<std::string, std::string> values;
                 if (auto err = parseDirectiveOptions(optPart, {"sep", "followedBy", "precededBy", "policy"}, {}, values))
-                    return ErrorDirective{err->message, err->start, err->end};
-                d.sep = values["sep"];
-                d.followedBy = values["followedBy"];
-                d.precededBy = values["precededBy"];
-                d.policy = values["policy"];
+                    d.parseErrors.emplace_back(err->message, optOffset + err->start, optOffset + err->end);
+                else
+                {
+                    d.sep = values["sep"];
+                    d.followedBy = values["followedBy"];
+                    d.precededBy = values["precededBy"];
+                    d.policy = values["policy"];
+                }
             }
             return d;
         }
@@ -673,7 +684,8 @@ namespace tpp::compiler
 
     std::vector<ASTNode> ASTBuilder::parseInline(const std::vector<LineSeg> &segs,
                                                   size_t startPos,
-                                                  int lineIndex)
+                                                  int lineIndex,
+                                                  Range *outEndRange)
     {
         std::vector<ASTNode> nodes;
         size_t pos = startPos;
@@ -872,6 +884,8 @@ namespace tpp::compiler
         };
 
         nodes = recurse();
+        if (outEndRange)
+            *outEndRange = lastTerminatorRange;
         return nodes;
     }
 
@@ -995,69 +1009,109 @@ namespace tpp::compiler
                         ++pos;
                         while (pos < lines.size())
                         {
-                            if (lines[pos].isBlockLine)
+                            bool done = false;
+                            bool advancedLine = false;
+
+                            for (size_t segIndex = 0; segIndex < lines[pos].segments.size(); ++segIndex)
                             {
-                                bool done = false;
-                                for (auto &s2 : lines[pos].segments)
+                                auto &s2 = lines[pos].segments[segIndex];
+                                if (!s2.isDirective)
+                                    continue;
+
+                                if (std::holds_alternative<EndSwitchDirective>(s2.info))
                                 {
-                                    if (!s2.isDirective)
-                                        continue;
-                                    if (std::holds_alternative<EndSwitchDirective>(s2.info))
-                                    {
-                                        switchNode->endRange = makeRange((int)pos, s2);
-                                        ++pos;
-                                        done = true;
-                                        break;
-                                    }
-                                    if (auto *cd = std::get_if<CaseDirective>(&s2.info))
-                                    {
-                                        CaseNode cn;
-                                        cn.tag = cd->tag;
-                                        cn.bindingName = cd->binding;
-                                        cn.sourceRange = makeRange((int)pos, s2);
-                                        ++pos;
-                                        Range caseEndRange{};
-                                        cn.body = parseBlock(tl.indent, &caseEndRange);
-                                        cn.endRange = caseEndRange;
-                                        switchNode->cases.push_back(std::move(cn));
-                                        break;
-                                    }
-                                    if (std::holds_alternative<DefaultDirective>(s2.info))
-                                    {
-                                        CaseNode cn;
-                                        cn.sourceRange = makeRange((int)pos, s2);
-                                        ++pos;
-                                        Range caseEndRange{};
-                                        cn.body = parseBlock(tl.indent, &caseEndRange);
-                                        cn.endRange = caseEndRange;
-                                        switchNode->cases.push_back(std::move(cn));
-                                        break;
-                                    }
-                                    if (auto *rd = std::get_if<RenderDirective>(&s2.info))
-                                    {
-                                        CaseNode cn;
-                                        cn.tag = rd->exprText;
-                                        cn.bindingName = "__payload";
-                                        cn.sourceRange = makeRange((int)pos, s2);
-                                        auto callNode = std::make_shared<FunctionCallNode>();
-                                        callNode->functionName = rd->func;
-                                        callNode->arguments.push_back(Variable{"__payload"});
-                                        cn.body.push_back(std::move(callNode));
-                                        switchNode->cases.push_back(std::move(cn));
-                                        ++pos;
-                                        break;
-                                    }
-                                    // ErrorDirective or unrecognized on a block line inside switch: skip
+                                    switchNode->endRange = makeRange((int)pos, s2);
                                     ++pos;
+                                    done = true;
                                     break;
                                 }
-                                if (done)
+
+                                const bool hasTrailingInlineSegments = segIndex + 1 < lines[pos].segments.size();
+
+                                if (auto *cd = std::get_if<CaseDirective>(&s2.info))
+                                {
+                                    CaseNode cn;
+                                    cn.tag = cd->tag;
+                                    cn.bindingName = cd->binding;
+                                    cn.sourceRange = makeRange((int)pos, s2);
+
+                                    if (hasTrailingInlineSegments)
+                                    {
+                                        Range caseEndRange{};
+                                        cn.body = parseInline(lines[pos].segments, segIndex + 1, (int)pos, &caseEndRange);
+                                        cn.endRange = caseEndRange;
+                                        cn.body.push_back(TextNode{"\n"});
+                                        switchNode->cases.push_back(std::move(cn));
+                                        ++pos;
+                                        advancedLine = true;
+                                    }
+                                    else
+                                    {
+                                        ++pos;
+                                        Range caseEndRange{};
+                                        cn.body = parseBlock(tl.indent, &caseEndRange);
+                                        cn.endRange = caseEndRange;
+                                        switchNode->cases.push_back(std::move(cn));
+                                        advancedLine = true;
+                                    }
                                     break;
+                                }
+
+                                if (std::holds_alternative<DefaultDirective>(s2.info))
+                                {
+                                    CaseNode cn;
+                                    cn.sourceRange = makeRange((int)pos, s2);
+
+                                    if (hasTrailingInlineSegments)
+                                    {
+                                        Range caseEndRange{};
+                                        cn.body = parseInline(lines[pos].segments, segIndex + 1, (int)pos, &caseEndRange);
+                                        cn.endRange = caseEndRange;
+                                        cn.body.push_back(TextNode{"\n"});
+                                        switchNode->cases.push_back(std::move(cn));
+                                        ++pos;
+                                        advancedLine = true;
+                                    }
+                                    else
+                                    {
+                                        ++pos;
+                                        Range caseEndRange{};
+                                        cn.body = parseBlock(tl.indent, &caseEndRange);
+                                        cn.endRange = caseEndRange;
+                                        switchNode->cases.push_back(std::move(cn));
+                                        advancedLine = true;
+                                    }
+                                    break;
+                                }
+
+                                if (auto *rd = std::get_if<RenderDirective>(&s2.info))
+                                {
+                                    CaseNode cn;
+                                    cn.tag = rd->exprText;
+                                    cn.bindingName = "__payload";
+                                    cn.sourceRange = makeRange((int)pos, s2);
+                                    auto callNode = std::make_shared<FunctionCallNode>();
+                                    callNode->functionName = rd->func;
+                                    callNode->arguments.push_back(Variable{"__payload"});
+                                    cn.body.push_back(std::move(callNode));
+                                    switchNode->cases.push_back(std::move(cn));
+                                    ++pos;
+                                    advancedLine = true;
+                                    break;
+                                }
+
+                                if (lines[pos].isBlockLine)
+                                {
+                                    ++pos;
+                                    advancedLine = true;
+                                    break;
+                                }
                             }
-                            else
-                            {
+
+                            if (done)
+                                break;
+                            if (!advancedLine)
                                 ++pos;
-                            }
                         }
                         nodes.push_back(std::move(switchNode));
                     }
@@ -1224,8 +1278,6 @@ namespace tpp::compiler
         }
         if (auto opt = std::get_if<std::shared_ptr<OptionalType>>(&type))
             return resolveStructFromType((*opt)->innerType, types);
-        if (auto list = std::get_if<std::shared_ptr<ListType>>(&type))
-            return resolveStructFromType((*list)->elementType, types);
         return nullptr;
     }
 
@@ -1298,6 +1350,17 @@ namespace tpp::compiler
         return overloads.size() == 1 && overloads[0]->params.size() == 1 && overloads[0]->params[0].type == enumType;
     }
 
+    static bool hasDirectRenderViaOverload(const std::vector<const TemplateFunction *> &overloads,
+                                           const TypeRef &argType)
+    {
+        for (const auto *overload : overloads)
+        {
+            if (overload->params.size() == 1 && overload->params[0].type == argType)
+                return true;
+        }
+        return false;
+    }
+
     static bool renderViaVariantCovered(const std::vector<const TemplateFunction *> &overloads,
                                         const TypeRef &enumType,
                                         const VariantDef &variant)
@@ -1319,6 +1382,26 @@ namespace tpp::compiler
         }
 
         return false;
+    }
+
+    static std::string typeRefToString(const TypeRef &type)
+    {
+        return std::visit([&](const auto &arg) -> std::string
+        {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, StringType>)
+                return "string";
+            else if constexpr (std::is_same_v<T, IntType>)
+                return "int";
+            else if constexpr (std::is_same_v<T, BoolType>)
+                return "bool";
+            else if constexpr (std::is_same_v<T, NamedType>)
+                return arg.name;
+            else if constexpr (std::is_same_v<T, std::shared_ptr<ListType>>)
+                return "list<" + typeRefToString(arg->elementType) + ">";
+            else
+                return "optional<" + typeRefToString(arg->innerType) + ">";
+        }, type);
     }
 
     static bool lookupVariableType(const std::string &name,
@@ -1877,6 +1960,8 @@ namespace tpp::compiler
                 }
                 else if (auto *d = std::get_if<RenderDirective>(&seg.info))
                 {
+                    for (const auto &[msg, s, e] : d->parseErrors)
+                        addTemplateDiagnostic(diags, bodyStartLine, li, seg, msg, s, e);
                     validatePolicyTag(d->policy, li, seg);
                     const EnumDef *switchEnum = findNearestSwitchEnum(frames, types);
                     const VariantDef *variant = findEnumVariant(switchEnum, d->exprText);
@@ -1888,6 +1973,7 @@ namespace tpp::compiler
                                 continue;
                             if (it->switchCaseTags.count("") != 0)
                                 addTemplateDiagnostic(diags, bodyStartLine, li, seg, "default branch must be the last branch in a switch");
+                            it->switchCaseTags.insert(d->exprText);
                             break;
                         }
                         continue; // Pointfree variant visitor inside switch: @render Tag via fn@
@@ -1909,10 +1995,17 @@ namespace tpp::compiler
                     }
 
                     const EnumDef *renderEnum = resolveEnumFromType(renderElemType, types);
-                    if (!renderEnum)
-                        continue;
-
                     auto overloads = findTemplateOverloads(allFunctions, d->func);
+                    if (!renderEnum)
+                    {
+                        if (!hasDirectRenderViaOverload(overloads, renderElemType))
+                        {
+                            addTemplateDiagnostic(diags, bodyStartLine, li, seg,
+                                                  "render-via function '" + d->func + "' must have an overload taking '" + typeRefToString(renderElemType) + "'");
+                        }
+                        continue;
+                    }
+
                     std::vector<std::string> missing;
                     for (const auto &renderVariant : renderEnum->variants)
                     {

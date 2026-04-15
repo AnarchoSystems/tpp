@@ -12,7 +12,7 @@ END
 
 template main(items: list<Item>)
 @for item in items | sep="\n"@
-@switch item@
+@switch item | checkExhaustive@
 @render Integer via render_integer@
 @render Str via render_string@
 @render Bool via render_bool@

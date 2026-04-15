@@ -107,6 +107,7 @@ struct SwitchInstr
 struct CallInstr
 {
     functionName : string;
+    functionIndex : int;
     arguments : list<ExprInfo>;
 }
 
