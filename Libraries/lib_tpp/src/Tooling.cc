@@ -127,8 +127,18 @@ bool parseTemplateSource(const std::string &src,
             return pos != prevPos;
         }
 
-        templates.push_back({std::move(function), bodyStartLine, std::move(bodyText),
-                             std::move(headerText), headerRange});
+        ParsedTemplateSource parsed;
+        parsed.name = std::move(function.name);
+        parsed.params = std::move(function.params);
+        parsed.body = std::move(function.body);
+        parsed.policy = std::move(function.policy);
+        parsed.doc = std::move(function.doc);
+        parsed.sourceRange = function.sourceRange;
+        parsed.bodyStartLine = bodyStartLine;
+        parsed.bodyText = std::move(bodyText);
+        parsed.headerText = std::move(headerText);
+        parsed.headerRange = headerRange;
+        templates.push_back(std::move(parsed));
     }
     return true;
 }

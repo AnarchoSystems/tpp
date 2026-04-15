@@ -2,6 +2,8 @@
 
 `tpp` is a C++17 template engine. It parses type definitions (structs, variants, enums) and template sources (`.tpp`) that use `@…@` delimiters for expressions and control flow (`@if@`, `@for@`, `@switch@`, `@comment@`, `@end for@`, etc.), then renders them against JSON input.
 
+Start here if you are not sure which repo asset to use: `.github/AGENT-DISPATCH.md`.
+
 ## Architecture
 
 ### Backend Model
@@ -20,6 +22,7 @@ tpp uses a **single compiler frontend / multiple backends** design. The `tpp` CL
 Because the compiler has already done all type-checking, each backend doesn't need to reimplement language logic. Generated C++ functions are compile-time safe — passing the wrong argument type is a C++ compile error.
 
 Maintenance note: when adding a backend or changing CLI flags, update this table, [README.md](../../README.md), and [docs/usage.md](../../docs/usage.md) together.
+For the full multi-file sync rules, use `.github/MAINTENANCE-CHECKLIST.md`.
 
 ### Implementation Components
 
@@ -42,10 +45,7 @@ All logic lives in the `tpp` namespace.
 
 → See `.github/skills/test/SKILL.md` for the full procedure.
 
-**Quick reference:**
-- Build: use `Build_CMakeTools` (VS Code CMake Tools). Only fall back to `cd build && make -j4` when that tool is unavailable.
-- Test: use `RunCtest_CMakeTools`. Build directory is `build/`; test binary is `build/Test/lib_cpp_test`.
-- CMake standard: C++17, min CMake 3.20.
+Keep this section as a pointer only. The authoritative workflow lives in `.github/skills/test/SKILL.md`.
 
 ## Code Style
 
@@ -58,12 +58,16 @@ All logic lives in the `tpp` namespace.
 
 → See `.github/skills/add-acceptance-test/SKILL.md` for the full procedure.
 
+→ For result-file schemas, see `.github/skills/add-acceptance-test/references/expected-formats.md`.
+
 **Quick reference:**
 - Each test is a self-contained directory under `Test/TestCases/<name>/`.
-- Required files: a `tpp-config.json`, at least one template file, an `input.json`, and one expected-result file (`expected_output.txt`, `expected_diagnostics.json`, or `expected_errors.json`).
+- Required files: a `tpp-config.json`, at least one template file, and one expected-result file. Runtime input lives in `tpp-config.json` under `previews[0].input`.
 - No test registration needed — the test runner auto-discovers subdirectories.
 - `error_` prefix in directory name signals an expected failure test.
 - **No trailing newline** in `expected_output.txt` — `Program::run()` strips the final newline.
+
+Use `.github/instructions/tpp-language.instructions.md` for the authoritative syntax reference when editing `.tpp` or `.tpp.types` files. Use `docs/language.md` for user-facing explanation and examples.
 
 ## Key Pitfalls
 

@@ -1,6 +1,7 @@
 #include <tpp/Compiler.h>
 #include <tpp/IR.h>
 #include <tpp/IRBuilder.h>
+#include "tpp/PublicIRConverter.h"
 #include <tpp/Lowering.h>
 #include <tpp/TemplateParser.h>
 #include <tpp/TypedefParser.h>
@@ -2533,13 +2534,19 @@ namespace tpp
             if (hasErrors)
                 return false;
 
-            // Lower AST to instruction IR, then convert to generated IR
+            // Lower AST directly to public IR functions
             std::string lowerError;
-            std::vector<compiler::InstructionFunction> instructionFunctions;
-            compiler::lowerToInstructions(pendingFunctions, types,
-                                instructionFunctions, lowerError);
+            std::vector<FunctionDef> irFunctions;
+            compiler::lowerToFunctions(pendingFunctions, types,
+                                       irFunctions, includeSourceRanges,
+                                       lowerError);
 
-            output = build_ir(types, instructionFunctions, policies_,
+            auto irStructs = to_public_structs(types.structs, includeSourceRanges);
+            auto irEnums = to_public_enums(types.enums, includeSourceRanges);
+            auto irPolicies = to_public_policies(policies_);
+
+            output = build_ir(std::move(irStructs), std::move(irEnums),
+                              std::move(irFunctions), std::move(irPolicies),
                               rawTypedefs, includeSourceRanges);
 
             // Retain AST-level functions for LSP consumers

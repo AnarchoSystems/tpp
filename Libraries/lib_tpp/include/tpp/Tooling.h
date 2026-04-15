@@ -40,7 +40,12 @@ namespace tpp
 
     struct ParsedTemplateSource
     {
-        compiler::TemplateFunction function;
+        std::string name;
+        std::vector<compiler::ParamDef> params;
+        std::vector<compiler::ASTNode> body;
+        std::string policy;
+        std::string doc;
+        Range sourceRange{};
         size_t bodyStartLine = 0;
         std::string bodyText;
         std::string headerText;

@@ -35,7 +35,6 @@ using ForNode           = compiler::ForNode;
 using IfNode            = compiler::IfNode;
 using SwitchNode        = compiler::SwitchNode;
 using RenderViaNode     = compiler::RenderViaNode;
-using TemplateFunction  = compiler::TemplateFunction;
 using TypeRegistry      = compiler::TypeRegistry;
 
 // Each raw token: {line, startChar, length, tokenType, modifiers}
@@ -411,7 +410,7 @@ static void walkNodes(std::vector<RawToken> &out, const std::vector<ASTNode> &no
 // Emit: "template" as keyword, "main" as function, param names as parameter,
 // type names as type, and punctuation as operator.
 static void emitTemplateHeader(std::vector<RawToken> &out,
-                                const TemplateFunction &func,
+                                const ParsedTemplateSource &tpl,
                                 const std::string &headerText,
                                 int line)
 {
@@ -420,16 +419,16 @@ static void emitTemplateHeader(std::vector<RawToken> &out,
 
     // Function name
     const int nameStart = 9;
-    out.push_back({line, nameStart, (int)func.name.size(), TT_FUNCTION, 0});
+    out.push_back({line, nameStart, (int)tpl.name.size(), TT_FUNCTION, 0});
 
     // Find '(' after name
-    int col = (int)(nameStart + func.name.size());
+    int col = (int)(nameStart + tpl.name.size());
     if (col < (int)headerText.size() && headerText[col] == '(')
     {
         out.push_back({line, col, 1, TT_OPERATOR, 0}); // '('
         ++col;
         bool first = true;
-        for (const auto &param : func.params)
+        for (const auto &param : tpl.params)
         {
             if (!first)
             {
@@ -821,10 +820,10 @@ static nlohmann::json tokensForTemplate(const std::string &src)
         int bodyLineCount = 0;
         for (char c : tpl.bodyText) if (c == '\n') ++bodyLineCount;
         int endLine = (int)tpl.bodyStartLine + 1 + bodyLineCount;
-        templateLineRanges.emplace_back(tpl.function.sourceRange.start.line, endLine);
+        templateLineRanges.emplace_back(tpl.sourceRange.start.line, endLine);
 
-        emitTemplateHeader(out, tpl.function, tpl.headerText, tpl.function.sourceRange.start.line);
-        walkNodes(out, tpl.function.body);
+        emitTemplateHeader(out, tpl, tpl.headerText, tpl.sourceRange.start.line);
+        walkNodes(out, tpl.body);
         emitUncoveredStructuralDirectiveTokens(out, tpl.bodyText, static_cast<int>(tpl.bodyStartLine));
 
         out.push_back({endLine, 0, 3, TT_KEYWORD, 0});

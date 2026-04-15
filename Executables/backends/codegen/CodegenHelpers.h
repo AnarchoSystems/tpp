@@ -9,9 +9,151 @@
 #include "CodegenTypes.h"
 #include <nlohmann/json.hpp>
 #include <algorithm>
+#include <cstdlib>
+#include <fstream>
+#include <iostream>
+#include <iterator>
+#include <map>
 #include <sstream>
 
 namespace codegen {
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Shared backend CLI helpers
+// ═══════════════════════════════════════════════════════════════════════════════
+
+template <typename Mode>
+struct ParsedBackendCommandLine
+{
+    Mode mode;
+    std::string inputFile;
+    std::string namespaceName;
+    bool externalRuntime = false;
+    std::vector<std::string> includes;
+};
+
+template <typename Mode>
+inline ParsedBackendCommandLine<Mode> parseBackendCommandLine(
+    int argc,
+    char *argv[],
+    const std::map<std::string, Mode> &commands,
+    void (*printUsage)(),
+    bool allowIncludes = false)
+{
+    int cmdIndex = 0;
+    for (int i = 1; i < argc; ++i)
+    {
+        std::string arg = argv[i];
+        if (arg == "-h" || arg == "--help")
+        {
+            printUsage();
+            std::exit(EXIT_SUCCESS);
+        }
+        if (!arg.empty() && arg[0] != '-')
+        {
+            cmdIndex = i;
+            break;
+        }
+        if (arg == "-ns" || arg == "--input" || (allowIncludes && arg == "-i"))
+            ++i;
+    }
+
+    if (cmdIndex == 0)
+    {
+        printUsage();
+        std::exit(EXIT_FAILURE);
+    }
+
+    auto commandIt = commands.find(argv[cmdIndex]);
+    if (commandIt == commands.end())
+    {
+        std::cerr << "Unknown command: " << argv[cmdIndex] << "\nUse -h for usage info.\n";
+        std::exit(EXIT_FAILURE);
+    }
+
+    ParsedBackendCommandLine<Mode> result;
+    result.mode = commandIt->second;
+
+    for (int i = 1; i < argc; ++i)
+    {
+        if (i == cmdIndex)
+            continue;
+
+        std::string arg = argv[i];
+        if (arg == "-ns")
+        {
+            if (i + 1 >= argc)
+            {
+                std::cerr << "-ns requires a name argument\n";
+                std::exit(EXIT_FAILURE);
+            }
+            result.namespaceName = argv[++i];
+        }
+        else if (arg == "--input")
+        {
+            if (i + 1 >= argc)
+            {
+                std::cerr << "--input requires a file argument\n";
+                std::exit(EXIT_FAILURE);
+            }
+            result.inputFile = argv[++i];
+        }
+        else if (allowIncludes && arg == "-i")
+        {
+            if (i + 1 >= argc)
+            {
+                std::cerr << "-i requires a file argument\n";
+                std::exit(EXIT_FAILURE);
+            }
+            result.includes.push_back(argv[++i]);
+        }
+        else if (arg == "--extern-runtime")
+        {
+            result.externalRuntime = true;
+        }
+        else
+        {
+            std::cerr << "Unknown option: " << arg << "\nUse -h for usage info.\n";
+            std::exit(EXIT_FAILURE);
+        }
+    }
+
+    return result;
+}
+
+inline std::string readTextInputOrExit(const std::string &inputFile)
+{
+    if (!inputFile.empty())
+    {
+        std::ifstream inputStream(inputFile);
+        if (!inputStream.is_open())
+        {
+            std::cerr << "Could not open input file: " << inputFile << std::endl;
+            std::exit(EXIT_FAILURE);
+        }
+        return std::string(std::istreambuf_iterator<char>(inputStream), std::istreambuf_iterator<char>());
+    }
+
+    return std::string(std::istreambuf_iterator<char>(std::cin), std::istreambuf_iterator<char>());
+}
+
+inline tpp::IR parseIRJsonOrExit(const std::string &inputJson)
+{
+    try
+    {
+        return nlohmann::json::parse(inputJson).get<tpp::IR>();
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << "Failed to parse input JSON: " << e.what() << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+}
+
+inline tpp::IR loadIRInputOrExit(const std::string &inputFile)
+{
+    return parseIRJsonOrExit(readTextInputOrExit(inputFile));
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Type → template context helpers
@@ -779,6 +921,34 @@ struct BuildFunctionsConfig
     std::string staticModifier;
     bool callNeedsTry = false;
     std::vector<std::string> includes;
+
+    static BuildFunctionsConfig forCpp(const std::vector<std::string> &includes = {})
+    {
+        BuildFunctionsConfig cfg;
+        cfg.nullLiteral = "std::nullopt";
+        cfg.staticModifier = "";
+        cfg.callNeedsTry = false;
+        cfg.includes = includes;
+        return cfg;
+    }
+
+    static BuildFunctionsConfig forJava()
+    {
+        BuildFunctionsConfig cfg;
+        cfg.nullLiteral = "null";
+        cfg.staticModifier = "static ";
+        cfg.callNeedsTry = false;
+        return cfg;
+    }
+
+    static BuildFunctionsConfig forSwift(const std::string &namespaceName, bool hasPolicies)
+    {
+        BuildFunctionsConfig cfg;
+        cfg.nullLiteral = "nil";
+        cfg.staticModifier = namespaceName.empty() ? "" : "static ";
+        cfg.callNeedsTry = hasPolicies;
+        return cfg;
+    }
 };
 
 inline RenderFunctionsInput buildFunctionsContext(

@@ -65,105 +65,18 @@ void printUsage()
 
 tpp2cpp::tpp2cpp(int argc, char *argv[])
 {
-    std::string inputFileName;
-
-    // First pass: find the subcommand (first non-option argument)
-    int cmdIndex = 0;
-    for (int i = 1; i < argc; ++i)
-    {
-        std::string arg = argv[i];
-        if (arg == "-h" || arg == "--help")
-        {
-            printUsage();
-            exit(EXIT_SUCCESS);
-        }
-        if (arg[0] != '-')
-        {
-            cmdIndex = i;
-            break;
-        }
-        // Skip value for options that take one
-        if (arg == "-ns" || arg == "-i" || arg == "--input")
-            ++i;
-    }
-
-    if (cmdIndex == 0)
-    {
-        printUsage();
-        exit(EXIT_FAILURE);
-    }
-
-    std::string cmd = argv[cmdIndex];
     static const std::map<std::string, Mode> commands = {
         {"types", Mode::Types},
         {"functions", Mode::Functions},
         {"impl", Mode::Implementation},
         {"runtime", Mode::Runtime}
     };
-    auto it = commands.find(cmd);
-    if (it == commands.end())
-    {
-        std::cerr << "Unknown command: " << cmd << "\nUse -h for usage info.\n";
-        exit(EXIT_FAILURE);
-    }
-    mode = it->second;
-
-    // Second pass: parse options (skip the subcommand)
-    for (int i = 1; i < argc; ++i)
-    {
-        if (i == cmdIndex) continue;
-        std::string arg = argv[i];
-        if (arg == "-ns")
-        {
-            if (i + 1 >= argc) { std::cerr << "-ns requires a name argument\n"; exit(EXIT_FAILURE); }
-            namespaceName = argv[++i];
-        }
-        else if (arg == "-i")
-        {
-            if (i + 1 >= argc) { std::cerr << "-i requires a file argument\n"; exit(EXIT_FAILURE); }
-            includes.push_back(argv[++i]);
-        }
-        else if (arg == "--input")
-        {
-            if (i + 1 >= argc) { std::cerr << "--input requires a file argument\n"; exit(EXIT_FAILURE); }
-            inputFileName = argv[++i];
-        }
-        else if (arg == "--extern-runtime")
-        {
-            externalRuntime = true;
-        }
-        else
-        {
-            std::cerr << "Unknown option: " << arg << "\nUse -h for usage info.\n";
-            exit(EXIT_FAILURE);
-        }
-    }
-
-    // Read input from file or stdin
-    std::string inputJson;
-    if (!inputFileName.empty())
-    {
-        std::ifstream inputFile(inputFileName);
-        if (!inputFile.is_open())
-        {
-            std::cerr << "Could not open input file: " << inputFileName << std::endl;
-            exit(EXIT_FAILURE);
-        }
-        inputJson.assign((std::istreambuf_iterator<char>(inputFile)), std::istreambuf_iterator<char>());
-    }
-    else
-    {
-        inputJson.assign((std::istreambuf_iterator<char>(std::cin)), std::istreambuf_iterator<char>());
-    }
-    try
-    {
-        input = nlohmann::json::parse(inputJson).get<tpp::IR>();
-    }
-    catch (const std::exception &e)
-    {
-        std::cerr << "Failed to parse input JSON: " << e.what() << std::endl;
-        exit(EXIT_FAILURE);
-    }
+    auto cli = codegen::parseBackendCommandLine(argc, argv, commands, printUsage, true);
+    namespaceName = std::move(cli.namespaceName);
+    mode = cli.mode;
+    externalRuntime = cli.externalRuntime;
+    includes = std::move(cli.includes);
+    input = codegen::loadIRInputOrExit(cli.inputFile);
 }
 
 static nlohmann::json to_render_cpp_type_input(const tpp::IR &iRep,
@@ -283,10 +196,6 @@ static codegen::RenderFunctionsInput buildFunctionsContext(
     const std::vector<std::string> &includes,
     const std::string &namespaceName)
 {
-    codegen::BuildFunctionsConfig bfCfg;
-    bfCfg.nullLiteral = "std::nullopt";
-    bfCfg.staticModifier = "";
-    bfCfg.callNeedsTry = false;
-    bfCfg.includes = includes;
-    return codegen::buildFunctionsContext(ir, functionPrefix, namespaceName, bfCfg);
+    return codegen::buildFunctionsContext(
+        ir, functionPrefix, namespaceName, codegen::BuildFunctionsConfig::forCpp(includes));
 }

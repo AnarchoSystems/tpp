@@ -192,7 +192,7 @@ static nlohmann::json foldsForTemplate(const std::string &src, const TppProject 
     std::vector<std::pair<int, int>> templateLineRanges;
     for (const auto &tpl : templates)
     {
-        const int headerLine = tpl.function.sourceRange.start.line;
+        const int headerLine = tpl.sourceRange.start.line;
         int bodyLineCount = 0;
         for (char c : tpl.bodyText) if (c == '\n') ++bodyLineCount;
         const int endLine = (int)tpl.bodyStartLine + 1 + bodyLineCount;
@@ -200,7 +200,7 @@ static nlohmann::json foldsForTemplate(const std::string &src, const TppProject 
         if (endLine > headerLine)
             folds.push_back(makeRange(headerLine, endLine));
 
-        collectFolds(folds, tpl.function.body);
+        collectFolds(folds, tpl.body);
     }
 
     collectTopLevelCommentFolds(folds, src, templateLineRanges);

@@ -1,5 +1,7 @@
 # tpp Language Reference
 
+This page is the user-facing explanation of the language. For the authoritative agent/developer syntax reference used when editing `.tpp` and `.tpp.types` files, see `.github/instructions/tpp-language.instructions.md`.
+
 tpp is a **typed template language designed to be compiled**, not just interpreted. You define the shape of your data once, write templates against that schema, and let the compiler verify field access, optional handling, variant dispatch, and policy usage before any output is produced.
 
 That distinction matters. In tpp, templates are not throwaway text snippets hanging off dynamic values. They are checked program artifacts that can be rendered directly, converted into backend-neutral IR, and compiled into typed code for multiple target languages.

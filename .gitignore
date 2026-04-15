@@ -23,4 +23,5 @@ vscode-extension/node_modules/
 vscode-extension/*.vsix
 
 # dev
-showcase/
+tmp/
+temp/

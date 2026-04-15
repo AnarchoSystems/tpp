@@ -16,9 +16,8 @@
 #include <tpp/IR.h>
 #include <CodegenHelpers.h>
 #include "swift_defs_functions.h"
-#include <fstream>
 #include <iostream>
-#include <sstream>
+#include <map>
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Build RenderFunctionsInput context from instruction IR
@@ -28,12 +27,19 @@ static codegen::RenderFunctionsInput buildFunctionsContext(
     const tpp::IR &ir, const std::string &functionPrefix,
     const std::string &namespaceName)
 {
-    codegen::BuildFunctionsConfig bfCfg;
-    bfCfg.nullLiteral = "nil";
-    bfCfg.staticModifier = namespaceName.empty() ? "" : "static ";
-    bfCfg.callNeedsTry = !ir.policies.empty();
-    return codegen::buildFunctionsContext(ir, functionPrefix, namespaceName, bfCfg);
+    return codegen::buildFunctionsContext(
+        ir,
+        functionPrefix,
+        namespaceName,
+        codegen::BuildFunctionsConfig::forSwift(namespaceName, !ir.policies.empty()));
 }
+
+enum class Mode
+{
+    Source,
+    Runtime,
+    RuntimeShared
+};
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Main
@@ -57,87 +63,26 @@ static void printUsage()
 
 int main(int argc, char *argv[])
 {
-    std::string inputFile;
-    std::string namespaceName;
-    bool runtimeMode = false;
-    bool sharedRuntimeMode = false;
-    bool externalRuntime = false;
+    static const std::map<std::string, Mode> commands = {
+        {"source", Mode::Source},
+        {"runtime", Mode::Runtime},
+        {"runtime-shared", Mode::RuntimeShared},
+    };
+    auto cli = codegen::parseBackendCommandLine(argc, argv, commands, printUsage);
 
-    // Find the subcommand (first non-option argument)
-    int cmdIndex = 0;
-    for (int i = 1; i < argc; ++i)
-    {
-        std::string arg = argv[i];
-        if (arg == "-h" || arg == "--help") { printUsage(); return EXIT_SUCCESS; }
-        if (arg[0] != '-') { cmdIndex = i; break; }
-        if (arg == "-ns" || arg == "--input") ++i;  // skip value
-    }
-
-    if (cmdIndex == 0)
-    {
-        printUsage();
-        return EXIT_FAILURE;
-    }
-
-    std::string cmd = argv[cmdIndex];
-    if (cmd == "source") { runtimeMode = false; }
-    else if (cmd == "runtime") { runtimeMode = true; }
-    else if (cmd == "runtime-shared") { sharedRuntimeMode = true; }
-    else { std::cerr << "Unknown command: " << cmd << "\nUse -h for usage info.\n"; return EXIT_FAILURE; }
-
-    // Parse options (skip subcommand)
-    for (int i = 1; i < argc; ++i)
-    {
-        if (i == cmdIndex) continue;
-        std::string arg = argv[i];
-        if (arg == "--input")
-        {
-            if (i + 1 >= argc) { std::cerr << "--input requires a file argument\n"; return EXIT_FAILURE; }
-            inputFile = argv[++i];
-        }
-        else if (arg == "-ns")
-        {
-            if (i + 1 >= argc) { std::cerr << "-ns requires a name argument\n"; return EXIT_FAILURE; }
-            namespaceName = argv[++i];
-        }
-        else if (arg == "--extern-runtime")
-        {
-            externalRuntime = true;
-        }
-        else
-        {
-            std::cerr << "Unknown option: " << arg << "\nUse -h for usage info.\n";
-            return EXIT_FAILURE;
-        }
-    }
-
-    if (sharedRuntimeMode)
+    if (cli.mode == Mode::RuntimeShared)
     {
         std::cout << codegen::render_swift_shared_runtime();
         return EXIT_SUCCESS;
     }
 
-    // Read IR JSON
-    std::string inputJsonStr;
-    if (!inputFile.empty())
-    {
-        std::ifstream f(inputFile);
-        if (!f.is_open()) { std::cerr << "Could not open: " << inputFile << "\n"; return EXIT_FAILURE; }
-        inputJsonStr.assign(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
-    }
-    else
-    {
-        inputJsonStr.assign(std::istreambuf_iterator<char>(std::cin), std::istreambuf_iterator<char>());
-    }
-
-    tpp::IR ir;
-    try { ir = nlohmann::json::parse(inputJsonStr).get<tpp::IR>(); }
-    catch (const std::exception &e) { std::cerr << "Failed to parse IR JSON: " << e.what() << "\n"; return EXIT_FAILURE; }
+    std::string namespaceName = cli.namespaceName;
+    tpp::IR ir = codegen::loadIRInputOrExit(cli.inputFile);
 
     // Function prefix: "render_" when no namespace, "" when namespace set
     std::string functionPrefix = namespaceName.empty() ? "render_" : "";
 
-    if (runtimeMode)
+    if (cli.mode == Mode::Runtime)
     {
         auto funcCtx = buildFunctionsContext(ir, functionPrefix, namespaceName);
         std::cout << codegen::render_swift_runtime(funcCtx);
@@ -153,7 +98,7 @@ int main(int argc, char *argv[])
 
     // Generate rendering functions from instruction IR
     auto funcCtx = buildFunctionsContext(ir, functionPrefix, namespaceName);
-    if (externalRuntime)
+    if (cli.externalRuntime)
         funcCtx.externalRuntime = true;
 
     std::cout << codegen::render_swift_functions(funcCtx);

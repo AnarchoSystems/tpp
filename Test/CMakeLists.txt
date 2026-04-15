@@ -45,8 +45,12 @@ endforeach()
 configure_file(TestCases.h.in ${CMAKE_CURRENT_BINARY_DIR}/TestCases.h @ONLY)
 
 # ── LSP test spec: per-case lsp-test.json → LspTestSpec.h ────────────────────
-# Just discover which test cases have each LSP section; data is loaded and
-# parsed at runtime in LspTest.cc.
+# `lsp-test.json` is a test artifact checked into individual TestCases/
+# directories. Configure-time discovery only records which cases provide each
+# LSP section; the full JSON is still loaded at runtime in LspTest.cc.
+# Supported sections are `semantic_tokens`, `folding_ranges`, and
+# `go_to_definition`. Keep the schemas in sync with
+# `.github/skills/add-acceptance-test/references/expected-formats.md`.
 
 set(LSP_TOKEN_CASE_NAMES "")
 set(LSP_FOLDING_CASE_NAMES "")

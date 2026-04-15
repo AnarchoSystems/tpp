@@ -4,6 +4,7 @@ add_library(lib_tpp
     src/Rendering.cc
     src/PolicyParser.cc
     src/Lowering.cc
+    src/PublicIRConverter.cc
     src/IRBuilder.cc
     src/Tooling.cc
 )
