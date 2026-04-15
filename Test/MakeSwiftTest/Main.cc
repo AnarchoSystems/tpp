@@ -68,16 +68,23 @@ static std::vector<std::filesystem::path> expandPattern(const std::filesystem::p
 // TypeRef → Swift type name
 // ═══════════════════════════════════════════════════════════════════════════════
 
-static std::string typeKindToSwiftType(const tpp::TypeKind &t)
+static std::string qualifySwiftTypeName(const std::string &name, const std::string &namespaceName)
+{
+    if (namespaceName.empty())
+        return name;
+    return namespaceName + "." + name;
+}
+
+static std::string typeKindToSwiftType(const tpp::TypeKind &t, const std::string &namespaceName = "")
 {
     switch (t.value.index())
     {
     case 0: return "String";
     case 1: return "Int";
     case 2: return "Bool";
-    case 3: return std::get<3>(t.value);
-    case 4: return "[" + typeKindToSwiftType(*std::get<4>(t.value)) + "]";
-    case 5: return typeKindToSwiftType(*std::get<5>(t.value)) + "?";
+    case 3: return qualifySwiftTypeName(std::get<3>(t.value), namespaceName);
+    case 4: return "[" + typeKindToSwiftType(*std::get<4>(t.value), namespaceName) + "]";
+    case 5: return typeKindToSwiftType(*std::get<5>(t.value), namespaceName) + "?";
     default: return "Any";
     }
 }
@@ -107,13 +114,14 @@ static std::string swiftStringLiteral(const std::string &s)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 static std::string buildSwiftDecodeLine(const std::string &name, const tpp::TypeKind &type,
-                                        const std::string &jsonLiteral)
+                                        const std::string &jsonLiteral,
+                                        const std::string &namespaceName = "")
 {
-    std::string swiftType = typeKindToSwiftType(type);
+    std::string swiftType = typeKindToSwiftType(type, namespaceName);
 
     if (type.value.index() == 5)
     {
-        std::string innerType = typeKindToSwiftType(*std::get<5>(type.value));
+        std::string innerType = typeKindToSwiftType(*std::get<5>(type.value), namespaceName);
         return "let " + name + ": " + swiftType + " = " + jsonLiteral +
                ".data(using: .utf8).flatMap { try? JSONDecoder().decode(" +
                innerType + ".self, from: $0) }";
@@ -131,13 +139,25 @@ static std::string buildSwiftDecodeLine(const std::string &name, const tpp::Type
 
 int main(int argc, char *argv[])
 {
-    if (argc != 2)
+    bool fragmentMode = false;
+    std::string namespaceName;
+    std::string runnerName;
+    int argIndex = 1;
+    if (argc >= 5 && std::string(argv[1]) == "--fragment")
     {
-        std::cerr << "Usage: make-swift-test <input_folder>" << std::endl;
+        fragmentMode = true;
+        namespaceName = argv[2];
+        runnerName = argv[3];
+        argIndex = 4;
+    }
+
+    if (argc != argIndex + 1)
+    {
+        std::cerr << "Usage: make-swift-test [--fragment <namespace> <runner>] <input_folder>" << std::endl;
         return EXIT_FAILURE;
     }
 
-    std::filesystem::path testDir(argv[1]);
+    std::filesystem::path testDir(argv[argIndex]);
     std::string testName = testDir.filename().string();
 
     // Read and parse tpp-config.json
@@ -220,6 +240,8 @@ int main(int argc, char *argv[])
     // Build SwiftTestDef
     SwiftTestDef defs;
     defs.testName = testName;
+    defs.namespaceName = namespaceName;
+    defs.runnerName = runnerName;
     defs.expectedOutputLiteral = swiftStringLiteral(expectedRaw);
 
     const auto &params = mainFunction->params;
@@ -246,7 +268,7 @@ int main(int argc, char *argv[])
         std::string jsonLit = swiftStringLiteral(value.dump());
         SwiftTestParam p;
         p.name = params[0].name;
-        p.parseLine = buildSwiftDecodeLine(p.name, *params[0].type, jsonLit);
+        p.parseLine = buildSwiftDecodeLine(p.name, *params[0].type, jsonLit, namespaceName);
         defs.params.push_back(p);
         callArgs = p.name;
     }
@@ -257,7 +279,7 @@ int main(int argc, char *argv[])
             std::string jsonLit = swiftStringLiteral(inputJson[i].dump());
             SwiftTestParam p;
             p.name = params[i].name;
-            p.parseLine = buildSwiftDecodeLine(p.name, *params[i].type, jsonLit);
+            p.parseLine = buildSwiftDecodeLine(p.name, *params[i].type, jsonLit, namespaceName);
             defs.params.push_back(p);
             if (i > 0) callArgs += ", ";
             callArgs += p.name;
@@ -266,6 +288,9 @@ int main(int argc, char *argv[])
     defs.callArgs = callArgs;
     defs.hasPolicies = !ir.policies.empty();
 
-    std::cout << render_test(defs);
+    if (fragmentMode)
+        std::cout << render_fragment(defs);
+    else
+        std::cout << render_test(defs);
     return EXIT_SUCCESS;
 }

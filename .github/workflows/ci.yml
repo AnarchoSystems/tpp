@@ -24,7 +24,7 @@ jobs:
           swift-version: '5.10'
 
       - name: Configure
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DTPP_ENABLE_TEST_CPP_UNITY=OFF
 
       - name: Build
         run: cmake --build build -j$(nproc)

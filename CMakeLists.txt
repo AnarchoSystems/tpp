@@ -42,6 +42,8 @@ if(_tpp_is_top_level)
 endif()
 
 option(TPP_CONFIGURE_TESTS "Configure the Test directory" ${_tpp_is_top_level})
+option(TPP_ENABLE_TEST_CPP_UNITY "Enable unity build for generated C++ acceptance-test sources" ${TPP_CONFIGURE_TESTS})
+set(TPP_TEST_CPP_UNITY_BUCKETS "8" CACHE STRING "Number of unity buckets for generated C++ acceptance-test sources")
 option(TPP_FETCH_NLOHMANN_JSON "Fetch nlohmann_json with FetchContent" ON)
 set(TPP_NLOHMANN_JSON_TARGET "nlohmann_json" CACHE STRING "Target name to link for nlohmann_json when it is provided externally")
 option(TPP_FETCH_GTEST "Fetch googletest with FetchContent" ${_tpp_is_top_level})

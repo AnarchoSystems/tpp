@@ -4,8 +4,9 @@
 //   tpp2swift <command> [options]
 //
 // Commands:
-//   source   Generate Swift types + rendering functions
-//   runtime  Generate only the standalone runtime helpers file
+//   source          Generate Swift types + rendering functions
+//   runtime         Generate only the standalone runtime helpers file
+//   runtime-shared  Generate only the shared runtime helpers/types
 //
 // Options:
 //   --input <file>    Read IR JSON from file instead of stdin
@@ -43,8 +44,9 @@ static void printUsage()
     std::cout << "Usage: tpp2swift <command> [options]\n"
                  "\n"
                  "Commands:\n"
-                 "  source   Generate Swift types + rendering functions\n"
-                 "  runtime  Generate only the standalone runtime helpers file\n"
+                 "  source          Generate Swift types + rendering functions\n"
+                 "  runtime         Generate only the standalone runtime helpers file\n"
+                 "  runtime-shared  Generate only the shared runtime helpers/types\n"
                  "\n"
                  "Options:\n"
                  "  --input <file>    Read IR JSON from file instead of stdin\n"
@@ -58,6 +60,7 @@ int main(int argc, char *argv[])
     std::string inputFile;
     std::string namespaceName;
     bool runtimeMode = false;
+    bool sharedRuntimeMode = false;
     bool externalRuntime = false;
 
     // Find the subcommand (first non-option argument)
@@ -79,6 +82,7 @@ int main(int argc, char *argv[])
     std::string cmd = argv[cmdIndex];
     if (cmd == "source") { runtimeMode = false; }
     else if (cmd == "runtime") { runtimeMode = true; }
+    else if (cmd == "runtime-shared") { sharedRuntimeMode = true; }
     else { std::cerr << "Unknown command: " << cmd << "\nUse -h for usage info.\n"; return EXIT_FAILURE; }
 
     // Parse options (skip subcommand)
@@ -105,6 +109,12 @@ int main(int argc, char *argv[])
             std::cerr << "Unknown option: " << arg << "\nUse -h for usage info.\n";
             return EXIT_FAILURE;
         }
+    }
+
+    if (sharedRuntimeMode)
+    {
+        std::cout << codegen::render_swift_shared_runtime();
+        return EXIT_SUCCESS;
     }
 
     // Read IR JSON
@@ -136,7 +146,10 @@ int main(int argc, char *argv[])
 
     // Build codegen context and render types
     codegen::CodegenInput ctx = codegen::buildCodegenInput(ir);
-    std::cout << codegen::render_swift_source(ctx) << '\n';
+    if (namespaceName.empty())
+        std::cout << codegen::render_swift_source(ctx) << '\n';
+    else
+        std::cout << codegen::render_swift_namespaced_source(ctx, namespaceName) << '\n';
 
     // Generate rendering functions from instruction IR
     auto funcCtx = buildFunctionsContext(ir, functionPrefix, namespaceName);

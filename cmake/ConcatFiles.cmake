@@ -1,0 +1,20 @@
+if(NOT DEFINED OUT)
+    message(FATAL_ERROR "ConcatFiles.cmake requires OUT")
+endif()
+
+if(NOT DEFINED INPUTS)
+    message(FATAL_ERROR "ConcatFiles.cmake requires INPUTS")
+endif()
+
+get_filename_component(_out_dir "${OUT}" DIRECTORY)
+file(MAKE_DIRECTORY "${_out_dir}")
+file(WRITE "${OUT}" "")
+
+foreach(_input IN LISTS INPUTS)
+    file(READ "${_input}" _content)
+    file(APPEND "${OUT}" "${_content}")
+    if(NOT _content MATCHES "\n$")
+        file(APPEND "${OUT}" "\n")
+    endif()
+    file(APPEND "${OUT}" "\n")
+endforeach()

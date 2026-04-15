@@ -69,32 +69,39 @@ static std::vector<std::filesystem::path> expandPattern(const std::filesystem::p
 // TypeKind → Java type name
 // ═══════════════════════════════════════════════════════════════════════════════
 
-static std::string typeKindToJavaBoxedType(const tpp::TypeKind &t);
+static std::string typeKindToJavaBoxedType(const tpp::TypeKind &t, const std::string &namespaceName = "");
 
-static std::string typeKindToJavaType(const tpp::TypeKind &t)
+static std::string qualifyJavaTypeName(const std::string &name, const std::string &namespaceName)
+{
+    if (namespaceName.empty())
+        return name;
+    return namespaceName + "." + name;
+}
+
+static std::string typeKindToJavaType(const tpp::TypeKind &t, const std::string &namespaceName = "")
 {
     switch (t.value.index())
     {
     case 0: return "String";   // Str
     case 1: return "int";      // Int
     case 2: return "boolean";  // Bool
-    case 3: return std::get<3>(t.value); // Named
-    case 4: return "java.util.List<" + typeKindToJavaBoxedType(*std::get<4>(t.value)) + ">"; // List
-    case 5: return typeKindToJavaType(*std::get<5>(t.value)); // Optional
+    case 3: return qualifyJavaTypeName(std::get<3>(t.value), namespaceName); // Named
+    case 4: return "java.util.List<" + typeKindToJavaBoxedType(*std::get<4>(t.value), namespaceName) + ">"; // List
+    case 5: return typeKindToJavaType(*std::get<5>(t.value), namespaceName); // Optional
     default: return "Object";
     }
 }
 
-static std::string typeKindToJavaBoxedType(const tpp::TypeKind &t)
+static std::string typeKindToJavaBoxedType(const tpp::TypeKind &t, const std::string &namespaceName)
 {
     switch (t.value.index())
     {
     case 0: return "String";   // Str
     case 1: return "Integer";  // Int
     case 2: return "Boolean";  // Bool
-    case 3: return std::get<3>(t.value); // Named
-    case 4: return "java.util.List<" + typeKindToJavaBoxedType(*std::get<4>(t.value)) + ">"; // List
-    case 5: return typeKindToJavaBoxedType(*std::get<5>(t.value)); // Optional
+    case 3: return qualifyJavaTypeName(std::get<3>(t.value), namespaceName); // Named
+    case 4: return "java.util.List<" + typeKindToJavaBoxedType(*std::get<4>(t.value), namespaceName) + ">"; // List
+    case 5: return typeKindToJavaBoxedType(*std::get<5>(t.value), namespaceName); // Optional
     default: return "Object";
     }
 }
@@ -124,7 +131,8 @@ static std::string javaStringLiteral(const std::string &s)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 static std::string buildParseLine(const std::string &name, const tpp::TypeKind &type,
-                                  const std::string &jsonLiteral)
+                                  const std::string &jsonLiteral,
+                                  const std::string &namespaceName = "")
 {
     switch (type.value.index())
     {
@@ -135,11 +143,11 @@ static std::string buildParseLine(const std::string &name, const tpp::TypeKind &
     case 2: // Bool
         return "boolean " + name + " = (Boolean) new org.json.JSONTokener(" + jsonLiteral + ").nextValue();";
     case 3: { // Named
-        auto &n = std::get<3>(type.value);
-        return n + " " + name + " = " + n + ".fromJson(new org.json.JSONObject(" + jsonLiteral + "));";
+        const auto qualified = qualifyJavaTypeName(std::get<3>(type.value), namespaceName);
+        return qualified + " " + name + " = " + qualified + ".fromJson(new org.json.JSONObject(" + jsonLiteral + "));";
     }
     case 4: { // List
-        std::string jt = typeKindToJavaType(type);
+        std::string jt = typeKindToJavaType(type, namespaceName);
         const auto &elemType = *std::get<4>(type.value);
         std::string elemExpr;
         switch (elemType.value.index())
@@ -147,7 +155,7 @@ static std::string buildParseLine(const std::string &name, const tpp::TypeKind &
         case 0: elemExpr = "_arr.getString(_i)"; break;
         case 1: elemExpr = "_arr.getInt(_i)"; break;
         case 2: elemExpr = "_arr.getBoolean(_i)"; break;
-        case 3: elemExpr = std::get<3>(elemType.value) + ".fromJson(_arr.getJSONObject(_i))"; break;
+        case 3: elemExpr = qualifyJavaTypeName(std::get<3>(elemType.value), namespaceName) + ".fromJson(_arr.getJSONObject(_i))"; break;
         default: elemExpr = "_arr.get(_i)"; break;
         }
         return jt + " " + name + " = new java.util.ArrayList<>(); "
@@ -155,7 +163,7 @@ static std::string buildParseLine(const std::string &name, const tpp::TypeKind &
                "for (int _i = 0; _i < _arr.length(); _i++) { " + name + ".add(" + elemExpr + "); } }";
     }
     default:
-        return typeKindToJavaType(type) + " " + name + " = null;";
+        return typeKindToJavaType(type, namespaceName) + " " + name + " = null;";
     }
 }
 
@@ -165,13 +173,25 @@ static std::string buildParseLine(const std::string &name, const tpp::TypeKind &
 
 int main(int argc, char *argv[])
 {
-    if (argc != 2)
+    bool fragmentMode = false;
+    std::string namespaceName;
+    std::string runnerClassName;
+    int argIndex = 1;
+    if (argc >= 5 && std::string(argv[1]) == "--fragment")
     {
-        std::cerr << "Usage: make-java-test <input_folder>" << std::endl;
+        fragmentMode = true;
+        namespaceName = argv[2];
+        runnerClassName = argv[3];
+        argIndex = 4;
+    }
+
+    if (argc != argIndex + 1)
+    {
+        std::cerr << "Usage: make-java-test [--fragment <namespace> <runner>] <input_folder>" << std::endl;
         return EXIT_FAILURE;
     }
 
-    std::filesystem::path testDir(argv[1]);
+    std::filesystem::path testDir(argv[argIndex]);
     std::string testName = testDir.filename().string();
 
     // Read and parse tpp-config.json
@@ -251,6 +271,8 @@ int main(int argc, char *argv[])
     // Build JavaTestDef
     JavaTestDef defs;
     defs.testName = testName;
+    defs.namespaceName = namespaceName;
+    defs.runnerClassName = runnerClassName;
     defs.expectedOutputLiteral = javaStringLiteral(expectedRaw);
 
     const auto &params = mainFunc->params;
@@ -277,7 +299,7 @@ int main(int argc, char *argv[])
         std::string jsonLit = javaStringLiteral(value.dump());
         JavaTestParam p;
         p.name = params[0].name;
-        p.parseLine = buildParseLine(p.name, *params[0].type, jsonLit);
+        p.parseLine = buildParseLine(p.name, *params[0].type, jsonLit, namespaceName);
         defs.params.push_back(p);
         callArgs = p.name;
     }
@@ -288,7 +310,7 @@ int main(int argc, char *argv[])
             std::string jsonLit = javaStringLiteral(inputJson[i].dump());
             JavaTestParam p;
             p.name = params[i].name;
-            p.parseLine = buildParseLine(p.name, *params[i].type, jsonLit);
+            p.parseLine = buildParseLine(p.name, *params[i].type, jsonLit, namespaceName);
             defs.params.push_back(p);
             if (i > 0) callArgs += ", ";
             callArgs += p.name;
@@ -296,6 +318,9 @@ int main(int argc, char *argv[])
     }
     defs.callArgs = callArgs;
 
-    std::cout << render_test(defs);
+    if (fragmentMode)
+        std::cout << render_fragment(defs);
+    else
+        std::cout << render_test(defs);
     return EXIT_SUCCESS;
 }

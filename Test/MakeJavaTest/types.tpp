@@ -9,6 +9,8 @@ struct JavaTestParam
 struct JavaTestDef
 {
     testName : string;
+    namespaceName : string;
+    runnerClassName : string;
     params : list<JavaTestParam>;
     expectedOutputLiteral : string;
     callArgs : string;

@@ -4,8 +4,10 @@
 //   tpp2java <command> [options]
 //
 // Commands:
-//   source   Generate Java types + rendering functions
-//   runtime  Generate only the standalone runtime helpers class
+//   source          Generate Java types + rendering functions
+//   runtime         Generate only the standalone runtime helpers class
+//   runtime-shared  Generate only the shared runtime helpers/types
+//   bundle          Generate a namespaced Java wrapper with types + functions
 //
 // Options:
 //   --input <file>    Read IR JSON from file instead of stdin
@@ -43,8 +45,10 @@ static void printUsage()
     std::cout << "Usage: tpp2java <command> [options]\n"
                  "\n"
                  "Commands:\n"
-                 "  source   Generate Java types + rendering functions\n"
-                 "  runtime  Generate only the standalone runtime helpers class\n"
+                 "  source          Generate Java types + rendering functions\n"
+                 "  runtime         Generate only the standalone runtime helpers class\n"
+                 "  runtime-shared  Generate only the shared runtime helpers/types\n"
+                 "  bundle          Generate a namespaced Java wrapper with types + functions\n"
                  "\n"
                  "Options:\n"
                  "  --input <file>    Read IR JSON from file instead of stdin\n"
@@ -58,6 +62,8 @@ int main(int argc, char *argv[])
     std::string inputFile;
     std::string namespaceName;
     bool runtimeMode = false;
+    bool sharedRuntimeMode = false;
+    bool bundleMode = false;
     bool externalRuntime = false;
 
     // Find the subcommand (first non-option argument)
@@ -79,6 +85,8 @@ int main(int argc, char *argv[])
     std::string cmd = argv[cmdIndex];
     if (cmd == "source") { runtimeMode = false; }
     else if (cmd == "runtime") { runtimeMode = true; }
+    else if (cmd == "runtime-shared") { sharedRuntimeMode = true; }
+    else if (cmd == "bundle") { bundleMode = true; }
     else { std::cerr << "Unknown command: " << cmd << "\nUse -h for usage info.\n"; return EXIT_FAILURE; }
 
     // Parse options (skip subcommand)
@@ -105,6 +113,12 @@ int main(int argc, char *argv[])
             std::cerr << "Unknown option: " << arg << "\nUse -h for usage info.\n";
             return EXIT_FAILURE;
         }
+    }
+
+    if (sharedRuntimeMode)
+    {
+        std::cout << codegen::reindent(codegen::render_java_shared_runtime(), 4) << std::endl;
+        return EXIT_SUCCESS;
     }
 
     // Read IR JSON
@@ -136,12 +150,24 @@ int main(int argc, char *argv[])
 
     // Build codegen context and render types
     codegen::CodegenInput ctx = codegen::buildCodegenInput(ir);
-    std::cout << codegen::render_java_source(ctx);
 
     // Generate rendering functions from instruction IR
     auto funcCtx = buildFunctionsContext(ir, functionPrefix, namespaceName);
     if (externalRuntime)
         funcCtx.externalRuntime = true;
+
+    if (bundleMode)
+    {
+        if (namespaceName.empty())
+        {
+            std::cerr << "bundle requires -ns <name>\n";
+            return EXIT_FAILURE;
+        }
+        std::cout << codegen::reindent(codegen::render_java_bundle(ctx, funcCtx), 4) << std::endl;
+        return EXIT_SUCCESS;
+    }
+
+    std::cout << codegen::render_java_source(ctx);
 
     std::cout << codegen::reindent(codegen::render_java_functions(funcCtx), 4);
 

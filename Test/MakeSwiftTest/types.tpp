@@ -9,6 +9,8 @@ struct SwiftTestParam
 struct SwiftTestDef
 {
     testName : string;
+    namespaceName : string;
+    runnerName : string;
     params : list<SwiftTestParam>;
     expectedOutputLiteral : string;
     callArgs : string;
