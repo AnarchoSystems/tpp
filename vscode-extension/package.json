@@ -2,7 +2,7 @@
   "name": "tpp-language-support",
   "displayName": "tpp Template Language Support",
   "description": "Language support for tpp template files (.tpp, .tpp.types) with LSP backend.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "AnarchoSystems",
   "engines": {
     "vscode": "^1.85.0"
@@ -67,12 +67,16 @@
       "properties": {
         "tpp.lspServerPath": {
           "type": "string",
-          "default": "",
-          "description": "Path to the tpp-lsp binary (required). Absolute path or relative to the workspace root. Build it with: cmake -B build && cmake --build build --target tpp-lsp"
+          "default": "build/bin/tpp-lsp",
+          "description": "Path to the tpp-lsp binary. Defaults to build/bin/tpp-lsp relative to the workspace root. Override it if your language server binary lives elsewhere. Build it with: cmake -S . -B build && cmake --build build --target tpp-lsp",
         },
         "tpp.trace.server": {
           "type": "string",
-          "enum": ["off", "messages", "verbose"],
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
           "default": "off",
           "description": "Trace LSP communication between VS Code and the tpp language server. View in Output → tpp Language Server."
         }

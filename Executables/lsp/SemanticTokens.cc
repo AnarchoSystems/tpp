@@ -1,6 +1,8 @@
 #include "SemanticTokens.h"
 #include "LspDefinitions.h"
 #include <tpp/Tooling.h>
+#include <algorithm>
+#include <string_view>
 #include <vector>
 #include <tuple>
 
@@ -60,6 +62,116 @@ static nlohmann::json encodeTokens(std::vector<RawToken> &tokens)
         prevStartChar = startChar;
     }
     return {{"data", data}};
+}
+
+static int utf16ColumnForUtf8Prefix(std::string_view text, int byteCount)
+{
+    byteCount = std::clamp(byteCount, 0, static_cast<int>(text.size()));
+    int utf16Column = 0;
+    int index = 0;
+
+    while (index < byteCount)
+    {
+        const unsigned char lead = static_cast<unsigned char>(text[index]);
+        int seqLen = 1;
+        uint32_t codePoint = lead;
+
+        if ((lead & 0x80) == 0)
+        {
+            seqLen = 1;
+            codePoint = lead;
+        }
+        else if ((lead & 0xE0) == 0xC0 && index + 1 < byteCount)
+        {
+            seqLen = 2;
+            codePoint = ((lead & 0x1F) << 6) |
+                        (static_cast<unsigned char>(text[index + 1]) & 0x3F);
+        }
+        else if ((lead & 0xF0) == 0xE0 && index + 2 < byteCount)
+        {
+            seqLen = 3;
+            codePoint = ((lead & 0x0F) << 12) |
+                        ((static_cast<unsigned char>(text[index + 1]) & 0x3F) << 6) |
+                        (static_cast<unsigned char>(text[index + 2]) & 0x3F);
+        }
+        else if ((lead & 0xF8) == 0xF0 && index + 3 < byteCount)
+        {
+            seqLen = 4;
+            codePoint = ((lead & 0x07) << 18) |
+                        ((static_cast<unsigned char>(text[index + 1]) & 0x3F) << 12) |
+                        ((static_cast<unsigned char>(text[index + 2]) & 0x3F) << 6) |
+                        (static_cast<unsigned char>(text[index + 3]) & 0x3F);
+        }
+
+        utf16Column += (codePoint > 0xFFFF) ? 2 : 1;
+        index += seqLen;
+    }
+
+    return utf16Column;
+}
+
+static std::vector<std::string_view> splitLines(std::string_view src)
+{
+    std::vector<std::string_view> lines;
+    size_t lineStart = 0;
+
+    while (lineStart <= src.size())
+    {
+        size_t lineEnd = src.find('\n', lineStart);
+        if (lineEnd == std::string_view::npos)
+        {
+            lines.push_back(src.substr(lineStart));
+            break;
+        }
+
+        lines.push_back(src.substr(lineStart, lineEnd - lineStart));
+        lineStart = lineEnd + 1;
+
+        if (lineStart == src.size())
+        {
+            lines.push_back(std::string_view{});
+            break;
+        }
+    }
+
+    if (lines.empty())
+        lines.push_back(std::string_view{});
+
+    return lines;
+}
+
+static void convertTokenColumnsToUtf16(std::vector<RawToken> &tokens, const std::string &src)
+{
+    const auto lines = splitLines(src);
+
+    for (auto &[line, startChar, length, type, mods] : tokens)
+    {
+        (void)type;
+        (void)mods;
+
+        if (line < 0 || line >= static_cast<int>(lines.size()))
+            continue;
+
+        const std::string_view lineText = lines[line];
+        const int lineBytes = static_cast<int>(lineText.size());
+        const bool extendsPastLine = startChar + length > lineBytes;
+        const int byteStart = std::clamp(startChar, 0, lineBytes);
+        const int byteEnd = std::clamp(startChar + length, byteStart, lineBytes);
+
+        const int utf16Start = utf16ColumnForUtf8Prefix(lineText, byteStart);
+        const int utf16End = utf16ColumnForUtf8Prefix(lineText, byteEnd);
+
+        startChar = utf16Start;
+        if (!extendsPastLine)
+            length = utf16End - utf16Start;
+    }
+
+    tokens.erase(std::remove_if(tokens.begin(), tokens.end(),
+                                [](const RawToken &tok)
+                                {
+                                    return std::get<2>(tok) <= 0;
+                                }),
+                 tokens.end());
 }
 
 // ── Helper: emit a token if the range is valid ────────────────────────────────
@@ -184,7 +296,8 @@ static void walkNode(std::vector<RawToken> &out, const ASTNode &node)
         }
         else if constexpr (std::is_same_v<T, std::shared_ptr<FunctionCallNode>>)
         {
-            // @funcName(arg1, arg2)@ — @funcName as function, args as variable, )@ as function
+            // @funcName(arg1, arg2)@ — @funcName as function, punctuation as operators,
+            // closing @ as keyword so it doesn't fall through as plain text.
             const int ln    = arg->sourceRange.start.line;
             const int start = arg->sourceRange.start.character;
             const int end   = arg->sourceRange.end.character;
@@ -203,7 +316,11 @@ static void walkNode(std::vector<RawToken> &out, const ASTNode &node)
                 { out.push_back({ln, argCol, (int)argText.size(), TT_VARIABLE, 0}); argCol += (int)argText.size(); }
             }
             if (end > argCol)
-                out.push_back({ln, argCol, end - argCol, TT_FUNCTION, 0}); // )@
+            {
+                out.push_back({ln, argCol, 1, TT_OPERATOR, 0}); // )
+                if (end > argCol + 1)
+                    out.push_back({ln, argCol + 1, end - (argCol + 1), TT_KEYWORD, 0}); // @
+            }
         }
         else if constexpr (std::is_same_v<T, std::shared_ptr<ForNode>>)
         {
@@ -606,6 +723,7 @@ static nlohmann::json tokensForTypes(const std::string &src, const TypeRegistry 
     if (src.empty()) return {{"data", nlohmann::json::array()}};
     std::vector<RawToken> out;
     emitTypeTokens(out, src, reg);
+    convertTokenColumnsToUtf16(out, src);
     return encodeTokens(out);
 }
 
@@ -636,6 +754,8 @@ static nlohmann::json tokensForTemplate(const std::string &src)
     }
 
     emitTopLevelCommentTokens(out, src, templateLineRanges);
+
+    convertTokenColumnsToUtf16(out, src);
 
     return encodeTokens(out);
 }

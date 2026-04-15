@@ -181,7 +181,7 @@ tpp . | tpp2cpp functions -ns myns -i project_types.h > project_functions.h
 Generates a header declaring one C++ function per template:
 
 ```cpp
-// generated
+// generated example
 namespace myns {
     std::string render_item(const Item& item);
     std::string main(const Document& doc);
@@ -525,7 +525,8 @@ The extension is not yet published to the VS Code Marketplace. Install it manual
 1. **Build the tpp-lsp binary** (the language server backend):
 
    ```bash
-   cmake -B build && cmake --build build --target tpp-lsp
+  cmake -S . -B build
+  cmake --build build --target tpp-lsp
    ```
 
 2. **Build the extension** (requires Node.js):
@@ -538,25 +539,29 @@ The extension is not yet published to the VS Code Marketplace. Install it manual
 
 3. **Install the `.vsix`** (optional, for persistent install):
 
-   ```bash
-   cd vscode-extension
-   npx vsce package    # produces tpp-language-support-*.vsix
-   code --install-extension tpp-language-support-*.vsix
-   ```
+  ```bash
+  cd vscode-extension
+  npm run package     # produces tpp-language-support-*.vsix
+  code --install-extension tpp-language-support-*.vsix
+  ```
 
    Or, for development, open the `vscode-extension` folder in VS Code and press **F5** to launch an Extension Development Host.
 
 ### Configuration
 
-In your VS Code `settings.json`, point the extension at the language server binary:
+By default, the extension looks for the language server at `build/bin/tpp-lsp` relative to the workspace root.
+
+The repository generates `.envrc` during CMake configure, so if you use direnv you can approve it once with `direnv allow` after the first configure.
+
+If you need a different location, set it explicitly in your VS Code `settings.json`:
 
 ```json
 {
-  "tpp.lspServerPath": "/path/to/build/bin/tpp-lsp"
+  "tpp.lspServerPath": "build/bin/tpp-lsp"
 }
 ```
 
-The path may be absolute or relative to the workspace root. The setting is **required** — the extension will not activate without it.
+The path may be absolute or relative to the workspace root.
 
 ### Trace Logging
 

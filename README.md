@@ -22,14 +22,13 @@ tpp separates concerns cleanly:
 
 ```
   .tpp type defs  ──┐
-                    ├──▶  tpp (compiler)  ──▶  compiler-output.json
-  .tpp templates  ──┘                               │
-                                                    ├──▶  tpp2cpp   → C++ types + functions
-                                                                                                        ├──▶  tpp2java  → Java source
-                                                                                                        ├──▶  tpp2swift → Swift source
-                                                    ├──▶  render-tpp → rendered output (scripting)
-                                                                                                        ├──▶  lib_tpp   → C++ runtime API
-                                                                                                        └──▶  tpp-lsp   → diagnostics, definitions, preview
+                    ├──▶ lib_tpp (C++ library) ──▶ tpp (compiler)  ──▶  compiler-output.json
+  .tpp templates  ──┘                                                       │
+                            │                                               ├──▶  tpp2cpp   → C++ types + functions
+                            │                                               ├──▶  tpp2java  → Java source
+                            │                                               ├──▶  tpp2swift → Swift source
+                            │                                               └──▶  render-tpp → rendered output (scripting)
+                            └──▶ tpp-lsp   → diagnostics, definitions, preview 
 ```
 
 The `tpp` compiler frontend emits a **self-contained JSON document** that describes the compiled types, compiled template ASTs, and registered policies. Every backend consumes that document. Because the compiler has already done all the hard work — type checking, field validation, AST construction — each backend has an easy, focused job.
@@ -38,24 +37,34 @@ This is the architectural center of the project: language logic is implemented o
 
 ### Typed Templates → Type-Safe C++ Functions
 
-When you declare types and use them in templates, `tpp2cpp` can generate C++ code:
+When you declare types and use them in templates, `tpp2cpp` can generate C++ code. Say, you have this project (declared in a file called `tpp-config.json`):
 
-```
-// types.tpp
-struct Item {
-    name  : string;
-    count : int;
+```json
+{
+    "templates": [
+        "template.tpp"
+    ],
+    "types": [
+        "types.tpp"
+    ]
 }
+````
+
+Now, define this struct
+
+![](docs/res/ItemStruct.png)
+
+and this template:
+
+![](docs/res/RenderItemTemplate.png)
+
+Then
+
+```bash
+tpp . | tpp2cpp -functions > project_functions.h
 ```
 
-```
-// template.tpp
-template render_item(item: Item)
-- @item.name@: @item.count@
-END
-```
-
-Generates:
+generates
 
 ```cpp
 // generated: project_functions.h
@@ -101,30 +110,58 @@ See [What's the Point of Typing?](docs/language.md#whats-the-point-of-typing) fo
 
 ---
 
+## Configure and Build
+
+[![CI](https://github.com/AnarchoSystems/tpp/actions/workflows/ci.yml/badge.svg)](https://github.com/AnarchoSystems/tpp/actions/workflows/ci.yml)
+
+If you just want a working local build, configure once and build everything:
+
+```bash
+cmake -S . -B build
+cmake --build build
+```
+
+What those two commands do:
+
+- `cmake -S . -B build` configures the project, checks your compiler, generates the build system in `build/`, and writes a matching `.envrc`
+- `cmake --build build` compiles all default targets, including the CLIs, the C++ library, the language server, and the test binaries
+
+Requirements:
+
+- a C++17-capable compiler
+- CMake 3.20 or newer
+
+After a full build, the main artifacts you will typically care about are:
+
+- `tpp` — the compiler frontend
+- `tpp2cpp` — the C++ code generation backend
+- `tpp2java` — the Java code generation backend
+- `tpp2swift` — the Swift code generation backend
+- `render-tpp` — the direct rendering backend for scripts and tests
+- `tpp-lsp` — the language server used by the VS Code extension
+- `lib_tpp` — the C++ library for embedding the compiler and renderer
+
+All executables are written to `build/bin/`, so tools like `direnv` only need to add a single directory to `PATH`.
+
+The `.envrc` file is generated during configure and is intentionally not committed. After the first configure, run `direnv allow` once to approve it for this checkout.
+
+If you are working in VS Code with the CMake Tools extension, the equivalent workflow is simply: configure the project once, then build the default target. That is the preferred developer workflow for this repository.
+
+---
+
 ## Quick Start
 
-This assumes you have built this cmake project.
+This assumes you have already built the project. If not, use the configure/build steps above first.
 
 **1. Define your types** (`types.tpp`):
 
-```
-struct Item
-{
-    name  : string;
-    count : int;
-    note  : optional<string>;
-}
-```
+![](docs/res/ComplexItemStruct.png)
 
 **2. Write your template** (`template.tpp`):
 
-```
-template main(items: list<Item>)
-@for item in items | sep="\n"@- @item.name@ (@item.count@)@if item.note@ — @item.note@@end if@@end for@
-END
-```
+![](docs/res/ManyItemsTemplate.png)
 
-**3. Configure the project** (`tpp-config.json`):
+**3. Configure the tpp project** (`tpp-config.json`):
 
 ```json
 {
@@ -135,8 +172,10 @@ END
 
 **4. Compile and render**:
 
+This step assumes that tpp and render-tpp are on your PATH, for example by using direnv.
+
 ```bash
-tpp . | render-tpp main '{"items": [{"name": "Apples", "count": 4}, {"name": "Figs", "count": 1, "note": "fresh"}]}'
+tpp . | render-tpp main '[{"name": "Apples", "count": 4}, {"name": "Figs", "count": 1, "note": "fresh"}]'; echo
 ```
 
 Output:
@@ -167,41 +206,70 @@ If you want the short version: read the README for the model, [docs/language.md]
 
 ---
 
-## Building
-
-[![CI](https://github.com/AnarchoSystems/tpp/actions/workflows/ci.yml/badge.svg)](https://github.com/AnarchoSystems/tpp/actions/workflows/ci.yml)
-
-Requires C++17 and CMake ≥ 3.20.
-
-```bash
-cmake -B build
-cmake --build build
-```
-
-Targets built:
-- `tpp` — the compiler CLI
-- `tpp2cpp` — the C++ code generation backend
-- `tpp2java` — the Java code generation backend
-- `tpp2swift` — the Swift code generation backend
-- `render-tpp` — the scripting rendering backend
-- `tpp-lsp` — the language server (for the VS Code extension)
-- `lib_tpp` — the C++ library
-
-Run the test suite:
-
-```bash
-ctest --test-dir build --output-on-failure
-```
-
----
-
-## VS Code Extension
+## Building The VS Code Extension
 
 The `tpp-language-support` extension provides syntax highlighting, error diagnostics as you type, and a live preview panel.
 
-**To set it up:**
-1. Build `tpp-lsp` (see above)
-2. Build the extension (`cd vscode-extension && npm install && npm run compile`)
-3. Set `tpp.lspServerPath` in your VS Code settings to the path of the built `tpp-lsp` binary
+It is not published on the VS Code Marketplace yet, so installation is currently manual.
+
+### Build the Language Server
+
+The extension depends on the `tpp-lsp` binary. The simplest path is to build the whole repository once:
+
+```bash
+cmake -S . -B build
+cmake --build build
+```
+
+If you only want the language server target, this is enough:
+
+```bash
+cmake -S . -B build
+cmake --build build --target tpp-lsp
+```
+
+With the current CMake layout, the binary is produced at:
+
+```text
+build/bin/tpp-lsp
+```
+
+### Build the Extension
+
+The extension itself lives in `vscode-extension/` and requires Node.js:
+
+```bash
+cd vscode-extension
+npm install
+npm run compile
+```
+
+That produces the bundled extension entrypoint at `vscode-extension/out/extension.js`.
+
+### Install the Extension
+
+For a normal local install, package it as a `.vsix` and install that package into VS Code:
+
+```bash
+cd vscode-extension
+npm run package
+code --install-extension tpp-language-support-*.vsix
+```
+
+If you are developing the extension itself, you can also open `vscode-extension/` in VS Code and press `F5` to launch an Extension Development Host instead of installing a packaged build.
+
+### Configure VS Code
+
+By default, the extension looks for the language server at `build/bin/tpp-lsp`, which matches the repository's default local build layout.
+
+If your `tpp-lsp` binary lives somewhere else, override `tpp.lspServerPath` in your VS Code settings:
+
+```json
+{
+    "tpp.lspServerPath": "build/bin/tpp-lsp"
+}
+```
+
+The setting accepts either an absolute path or a workspace-relative path.
 
 See [Usage & Tooling → VS Code Extension](docs/usage.md#vs-code-extension) for full installation and configuration instructions.

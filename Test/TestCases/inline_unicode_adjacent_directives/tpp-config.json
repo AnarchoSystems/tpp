@@ -1,0 +1,21 @@
+{
+    "types": [
+        "typedefs.tpp"
+    ],
+    "templates": [
+        "template.tpp"
+    ],
+    "previews": [
+        {
+            "template": "main",
+            "input": [
+                {
+                    "name": "tea",
+                    "count": 1,
+                    "note": "oolong"
+                }
+            ],
+            "name": "default"
+        }
+    ]
+}

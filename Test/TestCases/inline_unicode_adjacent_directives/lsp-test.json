@@ -1,0 +1,35 @@
+{
+    "semantic_tokens": {
+        "file": "template.tpp",
+        "expected_tokens": [
+            {"line": 0, "character": 0, "length": 8, "type": "keyword"},
+            {"line": 0, "character": 9, "length": 4, "type": "function"},
+            {"line": 0, "character": 14, "length": 5, "type": "parameter"},
+            {"line": 0, "character": 21, "length": 4, "type": "type"},
+            {"line": 0, "character": 25, "length": 1, "type": "operator"},
+            {"line": 0, "character": 26, "length": 4, "type": "type"},
+            {"line": 0, "character": 30, "length": 1, "type": "operator"},
+            {"line": 0, "character": 31, "length": 1, "type": "operator"},
+            {"line": 1, "character": 0, "length": 5, "type": "keyword"},
+            {"line": 1, "character": 5, "length": 4, "type": "variable"},
+            {"line": 1, "character": 9, "length": 4, "type": "keyword"},
+            {"line": 1, "character": 13, "length": 5, "type": "variable"},
+            {"line": 1, "character": 18, "length": 12, "type": "keyword"},
+            {"line": 1, "character": 32, "length": 11, "type": "variable"},
+            {"line": 1, "character": 45, "length": 12, "type": "variable"},
+            {"line": 1, "character": 58, "length": 4, "type": "keyword"},
+            {"line": 1, "character": 62, "length": 9, "type": "variable"},
+            {"line": 1, "character": 71, "length": 1, "type": "keyword"},
+            {"line": 1, "character": 75, "length": 11, "type": "variable"},
+            {"line": 1, "character": 86, "length": 8, "type": "keyword"},
+            {"line": 1, "character": 94, "length": 9, "type": "keyword"},
+            {"line": 2, "character": 0, "length": 3, "type": "keyword"}
+        ]
+    },
+    "folding_ranges": {
+        "file": "template.tpp",
+        "expected": [
+            {"startLine": 0, "endLine": 2}
+        ]
+    }
+}

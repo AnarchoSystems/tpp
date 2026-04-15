@@ -6,6 +6,20 @@ project(Tpp)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(TPP_DIRENV_FILE "${CMAKE_SOURCE_DIR}/.envrc")
+set(TPP_DIRENV_BIN_DIR "${CMAKE_BINARY_DIR}/bin")
+set(TPP_DIRENV_CACHE_FILE "${CMAKE_BINARY_DIR}/CMakeCache.txt")
+
+set(TPP_RUNTIME_OUTPUT_DIR "${CMAKE_BINARY_DIR}/bin")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${TPP_RUNTIME_OUTPUT_DIR}")
+
+if(CMAKE_CONFIGURATION_TYPES)
+  foreach(_tpp_config ${CMAKE_CONFIGURATION_TYPES})
+    string(TOUPPER "${_tpp_config}" _tpp_config_upper)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${_tpp_config_upper} "${TPP_RUNTIME_OUTPUT_DIR}")
+  endforeach()
+endif()
+
 message(STATUS "Building arm 64Bit")
 
 include(FetchContent)
@@ -17,6 +31,14 @@ include(ProjectOptions)
 set(_tpp_is_top_level OFF)
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
   set(_tpp_is_top_level ON)
+endif()
+
+if(_tpp_is_top_level)
+  configure_file(
+    "${CMAKE_SOURCE_DIR}/cmake/envrc.in"
+    "${TPP_DIRENV_FILE}"
+    @ONLY
+  )
 endif()
 
 option(TPP_CONFIGURE_TESTS "Configure the Test directory" ${_tpp_is_top_level})

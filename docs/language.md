@@ -36,7 +36,7 @@ END
 becomes a genuine C++ function:
 
 ```cpp
-// generated
+// generated example
 std::string render_item(const Item& item);
 ```
 
@@ -93,40 +93,13 @@ Type definitions live in files declared as `"types"` in `tpp-config.json`. They 
 
 A struct is an ordered collection of named, typed fields:
 
-```
-struct Point
-{
-    x : int;
-    y : int;
-}
-
-struct Person
-{
-    name   : string;
-    age    : int;
-    active : bool;
-}
-```
+![](res/PointPersonExample.png)
 
 ### Enums (Variants)
 
 An enum is a tagged union. Each tag may optionally carry a payload:
 
-```
-enum StepArgument
-{
-    None,
-    DocString(string),
-    DataTable(list<list<string>>)
-};
-
-enum Shape
-{
-    Circle(float),
-    Square(float),
-    Triangle
-};
-```
+![](res/EnumExample.png)
 
 Tags with a payload use `TagName(Type)`. Bare tags have no payload.
 
@@ -165,30 +138,12 @@ Accessing an optional field in a template without guarding it is a **compile err
 
 Types may reference themselves. To prevent infinite types, structs must break the recursion by making the recursive fields optional `optional<T>`:
 
-```
-struct IntListNode
-{
-    value : int;
-    next  : optional<IntListNode>;
-}
-```
+![](res/RecursionExample1.png)
 
 For enums, it suffices that a tag exists that does not recursively contain the enum type itself:
 
-```
-struct BinOp
-{
-    left : Expr;
-    right : Expr;
-}
 
-enum Expr
-{
-    Num(int),
-    Add(BinOp),
-    Mul(BinOp)
-}
-```
+![](res/RecursionExample2.png)
 
 The compiler detects cycles automatically and marks the necessary fields as recursive. In generated C++ code, recursive fields become `std::unique_ptr<T>`.
 
@@ -196,24 +151,7 @@ The compiler detects cycles automatically and marks the necessary fields as recu
 
 You can attach documentation to types and fields using `///` single-line doc comments or `/** */` block doc comments:
 
-```
-/// A person with a name and age.
-struct Person
-{
-    /// The person's full name.
-    name : string;
-    /// The person's age in years.
-    age  : int;
-}
-
-/**
- * A step in a scenario.
- */
-struct Step
-{
-    name : string;
-}
-```
+![](res/DocExample.png)
 
 Doc comment text is preserved in the intermediate representation and attached to generated C++ types.
 
@@ -223,39 +161,17 @@ Doc comment text is preserved in the intermediate representation and attached to
 
 Templates are defined with the `template` keyword and terminated with `END`:
 
-```
-template greet(name: string)
-Hello, @name@!
-END
-```
+![](res/MinimalTemplateExample.png)
 
 A template file may contain any number of `template` declarations. The entry point for rendering is conventionally named `main`, but any template can be called or rendered directly via the API.
 
 ### Multiple Parameters
 
-```
-template render_point(label: string, p: Point)
-@label@: (@p.x@, @p.y@)
-END
-```
+![](res/MultiParamExample.png)
 
 ### Multiple Templates in One File
 
-```
-template header(title: string)
-=== @title@ ===
-END
-
-template footer()
---- end ---
-END
-
-template main(doc: Document)
-@header(doc.title)@
-@doc.body@
-@footer()@
-END
-```
+![](res/TemplateCallExample.png)
 
 ### Comments in Template Files
 
@@ -277,16 +193,7 @@ END
 
 Use `@comment@` … `@end comment@` to suppress a block of text entirely. Everything between the markers is stripped from the rendered output:
 
-```
-template main()
-before
-@comment@
-This entire section is suppressed.
-It won't appear in the output.
-@end comment@
-after
-END
-```
+![](res/CommentInTemplate.png)
 
 **Output:**
 ```
@@ -302,19 +209,9 @@ after
 
 A `@expr@` interpolation renders the value of a variable or field path at that position in the output:
 
-```
-@name@
-@item.label@
-@step.argument@
-@matrix.rows@
-```
+![](res/ExprExample.png)
 
-Field access uses `.`. Paths may be arbitrarily deep:
-
-```
-@scenario.steps@     (a list)
-@feature.name@       (a string)
-```
+Field access uses `.`. Paths may be arbitrarily deep.
 
 Expressions may also include a policy modifier — see [Policies](#policies).
 
@@ -324,11 +221,7 @@ Expressions may also include a policy modifier — see [Policies](#policies).
 
 Iterate over a `list<T>` field:
 
-```
-@for item in collection | options@
-  body
-@end for@
-```
+![](res/ForExample.png)
 
 The body is rendered once per element. `item` names the loop variable; `collection` is a field path that must resolve to a `list<T>`.
 
@@ -348,17 +241,13 @@ All options are optional and appear after the `|`, space-separated:
 
 **Example — separator and preceded/followed:**
 
-```
-@for item in data.items | precededBy="[" sep=", " followedBy="]"@@item@@end for@
-```
+![](res/ComplexForExample.png)
 
 Given `["a", "b", "c"]`, this produces `[a, b, c]`.
 
 **Example — enumerator:**
 
-```
-@for item in data.items | enumerator=idx sep="\n"@[@idx@] @item@@end for@
-```
+![](res/EnumeratorExample.png)
 
 Produces:
 ```
@@ -371,9 +260,7 @@ Produces:
 
 The `align` option turns your for loop body into a column-aligned table. Use `@&@` (the *alignment cell marker*) inside the body to separate columns:
 
-```
-@for row in t.rows | align sep="\n"@@row.name@ @&@@row.type@ @&@@row.value@@end for@
-```
+![](res/AlignmentExample.png)
 
 The compiler collects all rows, computes the maximum width of each column, and pads each cell accordingly. All columns are left-aligned by default.
 
@@ -388,9 +275,7 @@ visible bool   true
 
 Pass a string to `align` to control alignment per column: `l` (left), `r` (right), `c` (center):
 
-```
-@for item in l.items | align="rl" sep="\n"@@item.label@ @&@@item.count@@end for@
-```
+![](res/AlignSpec.png)
 
 `"rl"` means: right-align column 1, left-align column 2. The spec length must equal the number of `@&@` separators plus one.
 
@@ -403,9 +288,7 @@ bananas 3
 
 Three-column example with `align="rll"`:
 
-```
-@for row in t.rows | align="rll" sep="\n"@@row.name@ @&@@row.type@ @&@@row.value@@end for@
-```
+![](res/ThreeColAlign.png)
 
 Output:
 ```
@@ -413,35 +296,15 @@ Output:
 longname string true
 ```
 
-### Compact Inline Form
-
-When a loop body fits on a single line, write it without any block whitespace:
-
-```
-(@for v in args | sep=", "@@v@@end for@)
-```
-
-The parser handles adjacent closing/opening delimiters naturally — `@@` between `@v@` and `@end for@` is two normal delimiters back to back, not an error.
-
 ### Nested Loops
 
-```
-@for row in rows@
-{@for cell in row | sep=", "@@cell@@end for@},
-@end for@
-```
+![](res/NestedFor.png)
 
 ---
 
 ## Conditionals
 
-```
-@if condition@
-  true branch
-@else@
-  false branch
-@end if@
-```
+![](res/Condition.png)
 
 `@else@` is optional.
 
@@ -449,21 +312,13 @@ The parser handles adjacent closing/opening delimiters naturally — `@@` betwee
 
 If `condition` resolves to a `bool` field, the true branch renders when the field is `true`:
 
-```
-@if item.active@
-  active!
-@end if@
-```
+![](res/Active.png)
 
 ### Optional Guards
 
 If `condition` resolves to an `optional<T>` field, the true branch renders when the field is *present*. Inside the true branch, the field is considered **guarded** and can be accessed without restriction:
 
-```
-@if article.summary@
-  Summary: @article.summary@
-@end if@
-```
+![](res/OptionalGuard.png)
 
 Accessing an optional field outside a guard is a **compile error**. The compiler tracks which optionals are known-present at every point in the template body.
 
@@ -471,11 +326,7 @@ Accessing an optional field outside a guard is a **compile error**. The compiler
 
 Prefix with `not` to invert the condition:
 
-```
-@if not item.active@
-  (inactive)
-@end if@
-```
+![](res/Negation.png)
 
 > **Compile-time guard rule:** Accessing an optional field in the `@else@` branch of `@if field@` — where the field is known *not* to be present — is also a compile error. The compiler enforces the guard in both directions.
 
@@ -485,16 +336,7 @@ Prefix with `not` to invert the condition:
 
 Dispatch on an enum variant:
 
-```
-@switch item@
-@case TagName@
-  body for bare tag
-@end case@
-@case TagName(binding)@
-  @binding@ holds the payload
-@end case@
-@end switch@
-```
+![](res/Switch.png)
 
 Unmatched tags produce no output by default.
 
@@ -502,34 +344,13 @@ Unmatched tags produce no output by default.
 
 Add `checkExhaustive` as a bare flag to require a `@case@` for every variant tag. The compiler reports an error if any tag is unhandled:
 
-```
-@switch shape | checkExhaustive@
-@case Circle(r)@
-  circle with radius @r@
-@end case@
-@case Square(side)@
-  square with side @side@
-@end case@
-@case Triangle@
-  triangle
-@end case@
-@end switch@
-```
+![](res/CheckExhaustive.png)
 
 ### Policy Scope on Switch
 
 A policy modifier on `@switch@` applies to all interpolations within all case bodies:
 
-```
-@switch item | policy="escape-html"@
-@case A(val)@
-  A: @val@
-@end case@
-@case B(val)@
-  B: @val@
-@end case@
-@end switch@
-```
+![](res/PolicyExample.png)
 
 ---
 

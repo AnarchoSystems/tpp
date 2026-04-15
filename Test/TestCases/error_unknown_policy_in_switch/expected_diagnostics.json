@@ -1,0 +1,15 @@
+[
+  {
+    "uri": "error_unknown_policy_in_switch/template.tpp",
+    "diagnostics": [
+      {
+        "range": {
+          "start": {"line": 1, "character": 23},
+          "end": {"line": 1, "character": 34}
+        },
+        "message": "unknown policy 'escape-html'",
+        "severity": "error"
+      }
+    ]
+  }
+]

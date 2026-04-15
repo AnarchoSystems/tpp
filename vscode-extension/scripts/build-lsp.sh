@@ -8,11 +8,11 @@ BUILD_DIR="${REPO_ROOT}/build"
 OUT_LSP_DIR="${SCRIPT_DIR}/../out/lsp"
 
 echo "Configuring cmake for tpp-lsp..."
-cmake -B "${BUILD_DIR}" -S "${REPO_ROOT}" -DTPP_BUILD_LSP=ON
+cmake -S "${REPO_ROOT}" -B "${BUILD_DIR}"
 
 echo "Building tpp-lsp..."
-cmake --build "${BUILD_DIR}" --target tpp-lsp -j4
+cmake --build "${BUILD_DIR}" --parallel 4 --target tpp-lsp
 
 mkdir -p "${OUT_LSP_DIR}"
-cp "${BUILD_DIR}/Executables/lsp/tpp-lsp" "${OUT_LSP_DIR}/tpp-lsp"
+cp "${BUILD_DIR}/bin/tpp-lsp" "${OUT_LSP_DIR}/tpp-lsp"
 echo "tpp-lsp copied to ${OUT_LSP_DIR}/tpp-lsp"

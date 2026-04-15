@@ -21,9 +21,8 @@ The test runner (`Acceptance.cc`) discovers all subdirectories automatically —
 
 | File | Purpose |
 |---|---|
-| `tpp-config.json` | Declares which `.tpp` files are type definitions and which are templates. |
+| `tpp-config.json` | Declares types, templates, and preview input data used by the test harness. |
 | `template.tpp` | Template source. Must contain a `template main(...)` function ending with `END`. |
-| `input.json` | JSON object with runtime input data. Use `{}` when `main` takes no parameters. |
 | `expected_output.txt` **or** `expected_errors.json` **or** `expected_diagnostics.json` | The expected result — see [formats reference](./references/expected-formats.md). |
 
 **Multiple source files are allowed.** List type files under `"types"` and template files under `"templates"` in `tpp-config.json`. Files are processed in the order they appear in the config (types before templates). This lets you split types or templates across several files.
@@ -34,18 +33,35 @@ The test runner (`Acceptance.cc`) discovers all subdirectories automatically —
 Follow the naming convention above. The directory name becomes the test name in CTest output.
 
 ### Step 2 — Write `tpp-config.json`
-Declare which `.tpp` files contain type definitions and which are templates. Use `"types": []` when no custom types are needed.
+Declare which `.tpp` files contain type definitions and which are templates, and add a preview entry whose `input` object is used by the acceptance tests. Use `"types": []` when no custom types are needed.
 
 ```json
 {
     "types": ["typedefs.tpp"],
-    "templates": ["template.tpp"]
+    "templates": ["template.tpp"],
+    "previews": [
+        {
+            "template": "main",
+            "input": {"p": {"x": 3, "y": 7}},
+            "name": "default"
+        }
+    ]
 }
 ```
 
 If the test needs no types:
 ```json
-{"types": [], "templates": ["template.tpp"]}
+{
+    "types": [],
+    "templates": ["template.tpp"],
+    "previews": [
+        {
+            "template": "main",
+            "input": {},
+            "name": "default"
+        }
+    ]
+}
 ```
 
 Type files are plain `.tpp` files — the config, not the file extension, determines their role.
@@ -71,12 +87,22 @@ template main(p: Point)
 END
 ```
 
-### Step 5 — Write `input.json`
-Provide a JSON object matching the parameters of `main`. Use `{}` for no parameters.
+### Step 5 — Add preview input to `tpp-config.json`
+Put the runtime input for the test in `previews[0].input`. Use `{}` when `main` takes no parameters.
 
 ```json
-{"p": {"x": 3, "y": 7}}
+{
+    "previews": [
+        {
+            "template": "main",
+            "input": {"p": {"x": 3, "y": 7}},
+            "name": "default"
+        }
+    ]
+}
 ```
+
+The acceptance harness reads the first preview entry, so keep the test input in `previews[0]`.
 
 ### Step 6 — Write the expected result file
 Choose **exactly one** of the three formats:

@@ -1491,11 +1491,32 @@ namespace tpp::compiler
                                           const std::vector<TemplateLine> &templateLines,
                                           size_t bodyStartLine,
                                           const TypeRegistry &types,
+                                          const PolicyRegistry &policies,
                                           std::vector<Diagnostic> &diags,
                                           const std::vector<TemplateFunction> &allFunctions,
                                           int headerLine = 0,
                                           const std::string &headerText = "")
     {
+        auto validatePolicyTag = [&](const std::string &tag,
+                                     size_t lineIndex,
+                                     const LineSeg &seg)
+        {
+            if (tag.empty() || tag == "none" || policies.find(tag) != nullptr)
+                return;
+
+            const std::string needle = "policy=\"" + tag + "\"";
+            size_t p = seg.text.find(needle);
+            int start = 0;
+            int end = 0;
+            if (p != std::string::npos)
+            {
+                start = (int)p + 8;
+                end = start + (int)tag.size();
+            }
+            addTemplateDiagnostic(diags, bodyStartLine, lineIndex, seg,
+                                  "unknown policy '" + tag + "'", start, end);
+        };
+
         // Validate parameter types; track params whose type is undefined so body
         // expressions rooted in them can be suppressed (avoiding duplicate / misleading errors).
         std::set<std::string> undefinedTypeVars;
@@ -1517,6 +1538,23 @@ namespace tpp::compiler
                 diags.push_back(std::move(d));
                 undefinedTypeVars.insert(param.name);
             }
+        }
+
+        if (!f.policy.empty() && f.policy != "none" && policies.find(f.policy) == nullptr)
+        {
+            int col = 0;
+            if (!headerText.empty())
+            {
+                std::string needle = "policy=\"" + f.policy + "\"";
+                size_t p = headerText.find(needle);
+                if (p != std::string::npos)
+                    col = (int)p + 8;
+            }
+            Diagnostic d;
+            d.range = {{headerLine, col}, {headerLine, col + (int)f.policy.size()}};
+            d.message = "unknown policy '" + f.policy + "'";
+            d.severity = DiagnosticSeverity::Error;
+            diags.push_back(std::move(d));
         }
 
         std::vector<ValidationFrame> frames;
@@ -1559,6 +1597,7 @@ namespace tpp::compiler
 
                 if (auto *d = std::get_if<ExprDirective>(&seg.info))
                 {
+                    validatePolicyTag(d->policy, li, seg);
                     std::string path = expressionToPath(d->expr);
                     // Skip expressions rooted in a param with an undefined type (already reported).
                     if (undefinedTypeVars.count(path.substr(0, path.find('.'))) == 0)
@@ -1581,6 +1620,7 @@ namespace tpp::compiler
                 }
                 else if (auto *d = std::get_if<ForDirective>(&seg.info))
                 {
+                    validatePolicyTag(d->policy, li, seg);
                     for (const auto &[msg, s, e] : d->parseErrors)
                         addTemplateDiagnostic(diags, bodyStartLine, li, seg, msg, s, e);
                     if (!validatePathExpressionType(d->collectionText, frames, types, activeNarrowing, activeAbsent, false, exprType, err))
@@ -1749,6 +1789,7 @@ namespace tpp::compiler
                 }
                 else if (auto *d = std::get_if<SwitchDirective>(&seg.info))
                 {
+                    validatePolicyTag(d->policy, li, seg);
                     std::string switchPath = expressionToPath(d->expr);
                     if (!validatePathExpressionType(switchPath, frames, types, activeNarrowing, activeAbsent, false, exprType, err))
                         addTemplateDiagnostic(diags, bodyStartLine, li, seg, err);
@@ -1836,6 +1877,7 @@ namespace tpp::compiler
                 }
                 else if (auto *d = std::get_if<RenderDirective>(&seg.info))
                 {
+                    validatePolicyTag(d->policy, li, seg);
                     const EnumDef *switchEnum = findNearestSwitchEnum(frames, types);
                     const VariantDef *variant = findEnumVariant(switchEnum, d->exprText);
                     if (switchEnum && variant)
@@ -2377,6 +2419,7 @@ namespace tpp
                         pendingValidation.templateLines,
                         pendingValidation.bodyStartLine,
                         types,
+                        policies_,
                         *pendingValidation.diagnostics,
                         pendingFunctions,
                         (int)pendingValidation.bodyStartLine - 1,

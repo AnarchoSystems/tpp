@@ -13,6 +13,7 @@ import { findTppConfigs } from './configScanner';
 
 let client: LanguageClient | undefined;
 let outputChannel: vscode.OutputChannel | undefined;
+const DEFAULT_LSP_PATH = 'build/bin/tpp-lsp';
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   outputChannel = vscode.window.createOutputChannel('tpp Language Server');
@@ -20,20 +21,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   // ── Resolve LSP binary path ────────────────────────────────────────────────
   const config = vscode.workspace.getConfiguration('tpp');
-  let lspPath = config.get<string>('lspServerPath', '');
+  const configuredLspPath = config.get<string>('lspServerPath');
+  let lspPath = configuredLspPath?.trim() || DEFAULT_LSP_PATH;
 
   if (!lspPath) {
-    outputChannel!.appendLine('[tpp] ERROR: tpp.lspServerPath is not set.');
-    vscode.window.showErrorMessage(
-      'tpp: Set "tpp.lspServerPath" in settings.json to the path of the tpp-lsp binary.',
-      'Open Settings'
-    ).then(choice => {
-      if (choice === 'Open Settings') {
-        vscode.commands.executeCommand('workbench.action.openSettings', 'tpp.lspServerPath');
-      }
-    });
-    return;
-  } else if (!path.isAbsolute(lspPath)) {
+    lspPath = DEFAULT_LSP_PATH;
+  }
+
+ if (!path.isAbsolute(lspPath)) {
     // Workspace-relative
     const folders = vscode.workspace.workspaceFolders;
     if (folders && folders.length > 0) {
@@ -46,7 +41,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   if (!fs.existsSync(lspPath)) {
     outputChannel!.appendLine('[tpp] ERROR: LSP binary not found.');
     vscode.window.showWarningMessage(
-      `tpp: LSP binary not found at "${lspPath}". Check the "tpp.lspServerPath" setting.`
+      `tpp: LSP binary not found at "${lspPath}". Build tpp-lsp or override the "tpp.lspServerPath" setting.`
     );
     return;
   }
