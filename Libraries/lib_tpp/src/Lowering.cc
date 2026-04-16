@@ -275,7 +275,6 @@ namespace tpp::compiler
                     {
                         tpp::CaseInstr caseInstr;
                         caseInstr.tag = c.tag;
-                        caseInstr.bindingName = c.bindingName;
 
                         std::optional<TypeRef> payloadType;
                         if (enumDef)
@@ -293,20 +292,60 @@ namespace tpp::compiler
                         if (payloadType.has_value())
                             caseInstr.payloadType = std::make_unique<tpp::TypeKind>(lowerPublicType(*payloadType));
 
-                        if (!c.bindingName.empty() && payloadType.has_value())
-                            env.push(c.bindingName, *payloadType);
-                        else if (!c.bindingName.empty())
-                            env.push(c.bindingName, TypeRef{StringType{}});
+                        if (c.isSyntheticRenderCase)
+                        {
+                            tpp::CallInstr callInstr;
+                            if (!c.body.empty())
+                            {
+                                if (auto *callNode = std::get_if<std::shared_ptr<FunctionCallNode>>(&c.body.front()))
+                                {
+                                    if (*callNode)
+                                        callInstr.functionName = (*callNode)->functionName;
+                                }
+                            }
+
+                            std::vector<TypeRef> argumentTypes;
+                            if (payloadType.has_value())
+                            {
+                                tpp::ExprInfo payloadExpr;
+                                payloadExpr.path = switchInstr->expr.path + "." + c.tag;
+                                payloadExpr.type = std::make_unique<tpp::TypeKind>(lowerPublicType(*payloadType));
+                                callInstr.arguments.push_back(std::move(payloadExpr));
+                                argumentTypes.push_back(*payloadType);
+                            }
+                            callInstr.functionIndex = resolveFunctionOverloadIndex(functions, callInstr.functionName, argumentTypes);
+
+                            auto body = std::make_unique<std::vector<tpp::Instruction>>();
+                            body->push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<6>, std::move(callInstr)}});
+                            caseInstr.body = std::move(body);
+                        }
+                        else
+                        {
+                            caseInstr.bindingName = c.bindingName;
+
+                            if (!c.bindingName.empty() && payloadType.has_value())
+                                env.push(c.bindingName, *payloadType);
+                            else if (!c.bindingName.empty())
+                                env.push(c.bindingName, TypeRef{StringType{}});
+
+                            caseInstr.body = std::make_unique<std::vector<tpp::Instruction>>(lowerPublicNodes(c.body, env, functions, funcIndex));
+
+                            if (!c.bindingName.empty())
+                                env.pop();
+                        }
+
+                        cases->push_back(std::move(caseInstr));
+                    }
+
+                    if (arg->defaultCase)
+                    {
+                        const auto &c = *arg->defaultCase;
+                        tpp::CaseInstr caseInstr;
+                        caseInstr.tag = c.tag;
+                        caseInstr.bindingName = c.bindingName;
 
                         caseInstr.body = std::make_unique<std::vector<tpp::Instruction>>(lowerPublicNodes(c.body, env, functions, funcIndex));
-
-                        if (!c.bindingName.empty())
-                            env.pop();
-
-                        if (c.tag.empty())
-                            switchInstr->defaultCase = std::make_unique<tpp::CaseInstr>(std::move(caseInstr));
-                        else
-                            cases->push_back(std::move(caseInstr));
+                        switchInstr->defaultCase = std::make_unique<tpp::CaseInstr>(std::move(caseInstr));
                     }
 
                     switchInstr->cases = std::move(cases);

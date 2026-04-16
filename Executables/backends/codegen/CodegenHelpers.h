@@ -194,6 +194,20 @@ inline std::string stringLiteral(const std::string &s)
     return result + "\"";
 }
 
+inline bool isSyntheticSwitchRenderCase(const tpp::SwitchInstr &switchInstr, const tpp::CaseInstr &caseInstr)
+{
+    if (!caseInstr.bindingName.empty() || !caseInstr.payloadType || !caseInstr.body)
+        return false;
+    if (caseInstr.body->size() != 1)
+        return false;
+
+    const auto *callInstr = std::get_if<tpp::CallInstr>(&caseInstr.body->front().value);
+    if (!callInstr || callInstr->arguments.size() != 1)
+        return false;
+
+    return callInstr->arguments[0].path == switchInstr.expr.path + "." + caseInstr.tag;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Re-indent generated code based on brace nesting
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -554,6 +568,11 @@ inline Instruction convertInstruction(
                     caseSb = "_blk" + std::to_string(caseScopeId);
                 }
 
+                const bool syntheticRenderCase = isSyntheticSwitchRenderCase(*arg, c);
+                const std::string syntheticBindingName = syntheticRenderCase
+                    ? "_case_payload" + std::to_string(caseScopeId)
+                    : std::string{};
+
                 auto caseBody = std::make_unique<std::vector<Instruction>>();
                 for (const auto &bi : *c.body)
                     caseBody->push_back(convertInstruction(bi, caseSb, pol, scope, ir, cfg));
@@ -577,8 +596,8 @@ inline Instruction convertInstruction(
                 CaseData caseData;
                 caseData.tag = c.tag;
                 caseData.tagLit = stringLiteral(c.tag);
-                caseData.bindingName = c.bindingName;
-                caseData.hasBinding = !c.bindingName.empty();
+                caseData.bindingName = syntheticRenderCase ? syntheticBindingName : c.bindingName;
+                caseData.hasBinding = syntheticRenderCase || !c.bindingName.empty();
                 caseData.body = std::move(caseBody);
                 caseData.scopeId = caseScopeId;
                 caseData.isFirst = first;
@@ -592,6 +611,18 @@ inline Instruction convertInstruction(
                     for (const auto &ev : enumDef->variants)
                         if (ev.tag == c.tag && ev.payload)
                         { caseData.payloadType = std::make_unique<TypeKind>(typeKindToContext(*ev.payload)); break; }
+                }
+
+                if (syntheticRenderCase && !caseData.body->empty())
+                {
+                    if (auto *callData = std::get_if<CallData>(&caseData.body->front().value))
+                    {
+                        if (!callData->args.empty())
+                        {
+                            callData->args[0].path = syntheticBindingName;
+                            callData->args[0].isRecursive = isRecursivePayload;
+                        }
+                    }
                 }
 
                 casesVec->push_back(std::move(caseData));

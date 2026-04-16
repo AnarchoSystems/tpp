@@ -1069,7 +1069,7 @@ namespace tpp::compiler
                                         cn.body = parseInline(lines[pos].segments, segIndex + 1, (int)pos, &caseEndRange);
                                         cn.endRange = caseEndRange;
                                         cn.body.push_back(TextNode{"\n"});
-                                        switchNode->cases.push_back(std::move(cn));
+                                        switchNode->defaultCase = std::move(cn);
                                         ++pos;
                                         advancedLine = true;
                                     }
@@ -1079,7 +1079,7 @@ namespace tpp::compiler
                                         Range caseEndRange{};
                                         cn.body = parseBlock(tl.indent, &caseEndRange);
                                         cn.endRange = caseEndRange;
-                                        switchNode->cases.push_back(std::move(cn));
+                                        switchNode->defaultCase = std::move(cn);
                                         advancedLine = true;
                                     }
                                     break;
@@ -1089,11 +1089,10 @@ namespace tpp::compiler
                                 {
                                     CaseNode cn;
                                     cn.tag = rd->exprText;
-                                    cn.bindingName = "__payload";
+                                    cn.isSyntheticRenderCase = true;
                                     cn.sourceRange = makeRange((int)pos, s2);
                                     auto callNode = std::make_shared<FunctionCallNode>();
                                     callNode->functionName = rd->func;
-                                    callNode->arguments.push_back(Variable{"__payload"});
                                     cn.body.push_back(std::move(callNode));
                                     switchNode->cases.push_back(std::move(cn));
                                     ++pos;
@@ -1260,6 +1259,7 @@ namespace tpp::compiler
         bool optionalGuardNegated = false;
         std::optional<TypeRef> switchExprType;
         bool switchCheckExhaustive = false;
+        bool switchHasDefault = false;
         std::set<std::string> switchCaseTags;
         bool hasAlign = false; // true when this For frame has the align option
         std::string alignSpec;    // the align spec string (e.g. "rl"); empty = bare 'align'
@@ -1854,9 +1854,9 @@ namespace tpp::compiler
                         if (it->kind != ScopeKind::Switch)
                             continue;
                         foundSwitch = true;
-                        if (it->switchCaseTags.count("") != 0)
+                        if (it->switchHasDefault)
                             duplicateDefault = true;
-                        it->switchCaseTags.insert("");
+                        it->switchHasDefault = true;
                         break;
                     }
                     if (!foundSwitch)
@@ -1900,7 +1900,7 @@ namespace tpp::compiler
                                 std::vector<std::string> missing;
                                 for (const auto &variant : switchEnum->variants)
                                 {
-                                    if (it->switchCaseTags.count(variant.tag) == 0 && it->switchCaseTags.count("") == 0)
+                                    if (it->switchCaseTags.count(variant.tag) == 0 && !it->switchHasDefault)
                                         missing.push_back(variant.tag);
                                 }
                                 if (!missing.empty())
@@ -1930,7 +1930,7 @@ namespace tpp::compiler
                     {
                         if (it->kind == ScopeKind::Switch)
                         {
-                            if (it->switchCaseTags.count("") != 0)
+                            if (it->switchHasDefault)
                                 addTemplateDiagnostic(diags, bodyStartLine, li, seg, "default branch must be the last branch in a switch");
                             it->switchCaseTags.insert(d->tag);
                             break;
@@ -1972,7 +1972,7 @@ namespace tpp::compiler
                         {
                             if (it->kind != ScopeKind::Switch)
                                 continue;
-                            if (it->switchCaseTags.count("") != 0)
+                            if (it->switchHasDefault)
                                 addTemplateDiagnostic(diags, bodyStartLine, li, seg, "default branch must be the last branch in a switch");
                             it->switchCaseTags.insert(d->exprText);
                             break;

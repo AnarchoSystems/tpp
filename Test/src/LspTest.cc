@@ -16,6 +16,7 @@
 #include "TestUtils.h"
 #include "LspTestSpec.h"
 #include "LspDefinitions.h"
+#include <tpp/Tooling.h>
 
 #include <gtest/gtest.h>
 #include <tpp/Diagnostic.h>
@@ -394,6 +395,37 @@ TEST(LspWatchTest, PolicyChangesReloadProjectAndPublishPolicyDiagnostics)
     client.shutdown();
     std::error_code ec;
     fs::remove_all(tempDir, ec);
+}
+
+TEST(ToolingTest, ParseTemplateSourceSkipsCommentsAndIndentedHeaders)
+{
+    const std::string src =
+        "/// doc comment ignored by tooling source scan\n"
+        "/* block comment before template\n"
+        "   template not_a_header()\n"
+        "*/\n"
+        "    template main(v: string)\n"
+        "@v@\n"
+        "END\n"
+        "// line comment between templates\n"
+        "template second()\n"
+        "ok\n"
+        "END\n";
+
+    std::vector<tpp::ParsedTemplateSource> templates;
+    std::vector<tpp::Diagnostic> diagnostics;
+
+    EXPECT_TRUE(tpp::parseTemplateSource(src, templates, diagnostics));
+    ASSERT_TRUE(diagnostics.empty()) << nlohmann::json(diagnostics).dump(2);
+    ASSERT_EQ(templates.size(), 2u);
+
+    EXPECT_EQ(templates[0].name, "main");
+    EXPECT_EQ(templates[0].headerText, "template main(v: string)");
+    EXPECT_EQ(templates[0].sourceRange.start.line, 4);
+
+    EXPECT_EQ(templates[1].name, "second");
+    EXPECT_EQ(templates[1].headerText, "template second()");
+    EXPECT_EQ(templates[1].sourceRange.start.line, 8);
 }
 
 // ── LspTokenTest ─────────────────────────────────────────────────────────────

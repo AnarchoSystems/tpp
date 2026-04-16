@@ -9,44 +9,81 @@ namespace tpp
 
 namespace {
 
-static bool isTemplateHeaderLine(std::string_view line)
+static std::string trim(std::string_view text)
 {
-    while (!line.empty() && (line.back() == '\r' || line.back() == ' ' || line.back() == '\t'))
-        line.remove_suffix(1);
-    return line.size() >= 9 && line.substr(0, 9) == "template ";
+    while (!text.empty() && std::isspace(static_cast<unsigned char>(text.front())))
+        text.remove_prefix(1);
+    while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back())))
+        text.remove_suffix(1);
+    return std::string(text);
 }
 
-static size_t skipToNextTemplateHeader(const std::string &src, size_t pos)
+static bool startsWith(std::string_view text, std::string_view prefix)
+{
+    return text.size() >= prefix.size() && text.substr(0, prefix.size()) == prefix;
+}
+
+static bool advanceToNextTemplateStart(const std::string &src,
+                                       size_t &pos,
+                                       std::vector<Diagnostic> *diagnostics)
 {
     while (pos < src.size())
     {
+        while (pos < src.size() && std::isspace(static_cast<unsigned char>(src[pos])))
+            ++pos;
+        if (pos >= src.size())
+            return false;
+
+        const size_t lineStart = pos;
         size_t lineEnd = src.find('\n', pos);
         if (lineEnd == std::string::npos)
             lineEnd = src.size();
 
-        std::string_view line(src.data() + pos, lineEnd - pos);
-        if (isTemplateHeaderLine(line))
-            return pos;
+        std::string lineText = trim(std::string_view(src.data() + lineStart, lineEnd - lineStart));
 
-        const size_t firstNonWhitespace = line.find_first_not_of(" \t\r");
-        if (firstNonWhitespace != std::string::npos)
+        if (lineText.size() >= 3 && lineText[0] == '/' && lineText[1] == '/' && lineText[2] == '/')
         {
-            std::string_view trimmed = line.substr(firstNonWhitespace);
-            if (trimmed.size() >= 2 && trimmed[0] == '/' && trimmed[1] == '*')
-            {
-                size_t blockStart = pos + firstNonWhitespace;
-                size_t blockEnd = src.find("*/", blockStart + 2);
-                if (blockEnd == std::string::npos)
-                    return src.size();
-                pos = blockEnd + 2;
-                continue;
-            }
+            pos = (lineEnd < src.size()) ? lineEnd + 1 : lineEnd;
+            continue;
         }
 
-        pos = (lineEnd == src.size()) ? src.size() : lineEnd + 1;
+        if (lineText.size() >= 2 && lineText[0] == '/' && lineText[1] == '/')
+        {
+            pos = (lineEnd < src.size()) ? lineEnd + 1 : lineEnd;
+            continue;
+        }
+
+        if (lineText.size() >= 3 && lineText[0] == '/' && lineText[1] == '*' && lineText[2] == '*')
+        {
+            size_t closePos = src.find("*/", pos + 3);
+            pos = (closePos != std::string::npos) ? closePos + 2 : src.size();
+            continue;
+        }
+
+        if (lineText.size() >= 2 && lineText[0] == '/' && lineText[1] == '*')
+        {
+            size_t closePos = src.find("*/", pos + 2);
+            pos = (closePos != std::string::npos) ? closePos + 2 : src.size();
+            continue;
+        }
+
+        if (startsWith(lineText, "template "))
+            return true;
+
+        if (diagnostics)
+        {
+            const int lineNum = static_cast<int>(std::count(src.begin(), src.begin() + static_cast<std::ptrdiff_t>(lineStart), '\n'));
+            Diagnostic d;
+            d.range = {{lineNum, 0}, {lineNum, static_cast<int>(lineText.size())}};
+            d.message = "unexpected content outside template: '" + lineText + "'";
+            d.severity = DiagnosticSeverity::Error;
+            diagnostics->push_back(std::move(d));
+        }
+
+        pos = (lineEnd < src.size()) ? lineEnd + 1 : lineEnd;
     }
 
-    return pos;
+    return false;
 }
 
 } // namespace
@@ -108,24 +145,17 @@ bool parseTemplateSource(const std::string &src,
 {
     templates.clear();
     size_t pos = 0;
-    while (pos < src.size())
+    while (advanceToNextTemplateStart(src, pos, &diagnostics))
     {
-        pos = skipToNextTemplateHeader(src, pos);
-        if (pos >= src.size())
-            break;
-
         compiler::TemplateFunction function;
         size_t bodyStartLine = 0;
         std::string bodyText;
         std::string headerText;
         Range headerRange;
-        size_t prevPos = pos;
 
         if (!compiler::parseOneTemplate(src, pos, function, &bodyStartLine, &bodyText,
                                         nullptr, &diagnostics, &headerRange, &headerText))
-        {
-            return pos != prevPos;
-        }
+            return false;
 
         ParsedTemplateSource parsed;
         parsed.name = std::move(function.name);

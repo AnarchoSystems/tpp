@@ -97,6 +97,8 @@ static bool walkForScope(const std::vector<ASTNode> &nodes, int line, int charac
                 if (arg->sourceRange.start.line > line) return false;
                 for (const auto &c : arg->cases)
                     if (walkForScope(c.body, line, character, scope, reg)) return true;
+                if (arg->defaultCase)
+                    return walkForScope(arg->defaultCase->body, line, character, scope, reg);
             }
             return false;
         }, node);

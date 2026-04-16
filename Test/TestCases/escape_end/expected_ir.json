@@ -1,1 +1,1 @@
-{"enums":[],"functions":[{"body":[{"Emit":{"text":"before\nEND\nafter\n"}}],"doc":"","name":"main","params":[],"policy":""}],"policies":[],"structs":[],"versionMajor":0,"versionMinor":3,"versionPatch":0}
+{"enums":[],"functions":[{"body":[{"Emit":{"text":"before\nEND\nafter\n"}}],"doc":"","name":"main","params":[],"policy":""}],"policies":[],"structs":[],"versionMajor":0,"versionMinor":4,"versionPatch":0}

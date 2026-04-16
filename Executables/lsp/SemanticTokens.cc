@@ -229,9 +229,19 @@ static void emitCaseDirective(std::vector<RawToken> &out, const CaseNode &c)
         out.push_back({ln, afterTag, end - afterTag, TT_KEYWORD, 0});
 }
 
+static void emitDefaultDirective(std::vector<RawToken> &out, const CaseNode &c)
+{
+    if (c.sourceRange.start.line < 0 || c.sourceRange.start.character < 0) return;
+    const int ln  = c.sourceRange.start.line;
+    const int col = c.sourceRange.start.character;
+    const int end = c.sourceRange.end.character;
+    if (end > col)
+        out.push_back({ln, col, end - col, TT_KEYWORD, 0});
+}
+
 // ── Emit sub-tokens for a synthetic @render collExpr via func@ case ───────────
 // These arise from point-free function calls inside @switch@ blocks.
-// The CaseNode has bindingName="__payload" and its body[0] is a FunctionCallNode
+// The CaseNode is marked explicitly and its body[0] is a FunctionCallNode
 // (with no sourceRange set) holding the function name.
 static void emitSyntheticRenderCase(std::vector<RawToken> &out, const CaseNode &c)
 {
@@ -371,7 +381,7 @@ static void walkNode(std::vector<RawToken> &out, const ASTNode &node)
             emitRange(out, arg->endRange, TT_KEYWORD);
             for (const auto &c : arg->cases)
             {
-                if (c.bindingName == "__payload")
+                if (c.isSyntheticRenderCase)
                     emitSyntheticRenderCase(out, c); // @render collExpr via func@
                 else
                 {
@@ -379,6 +389,12 @@ static void walkNode(std::vector<RawToken> &out, const ASTNode &node)
                     emitRange(out, c.endRange, TT_KEYWORD);
                     walkNodes(out, c.body);
                 }
+            }
+            if (arg->defaultCase)
+            {
+                emitDefaultDirective(out, *arg->defaultCase);
+                emitRange(out, arg->defaultCase->endRange, TT_KEYWORD);
+                walkNodes(out, arg->defaultCase->body);
             }
         }
         else if constexpr (std::is_same_v<T, std::shared_ptr<RenderViaNode>>)

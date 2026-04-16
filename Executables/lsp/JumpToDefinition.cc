@@ -357,6 +357,8 @@ static nlohmann::json walkNode(const ASTNode &node,
                 auto r = walkNodes(c.body, line, character, scope, reg, project, uri);
                 if (!r.is_null()) return r;
             }
+            if (arg->defaultCase)
+                return walkNodes(arg->defaultCase->body, line, character, scope, reg, project, uri);
         }
         else if constexpr (std::is_same_v<T, std::shared_ptr<RenderViaNode>>)
         {

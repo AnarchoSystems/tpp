@@ -72,13 +72,20 @@ static void collectFoldNode(std::vector<nlohmann::json> &out, const ASTNode &nod
                                         arg->endRange.start.line));
             }
             // Fold each case body between consecutive case directives
-            for (size_t i = 0; i < arg->cases.size(); ++i)
+            std::vector<const compiler::CaseNode *> branches;
+            branches.reserve(arg->cases.size() + (arg->defaultCase ? 1 : 0));
+            for (const auto &c : arg->cases)
+                branches.push_back(&c);
+            if (arg->defaultCase)
+                branches.push_back(&*arg->defaultCase);
+
+            for (size_t i = 0; i < branches.size(); ++i)
             {
-                const auto &c = arg->cases[i];
+                const auto &c = *branches[i];
                 int caseStart = c.sourceRange.start.line;
                 int caseEnd   = -1;
-                if (i + 1 < arg->cases.size())
-                    caseEnd = arg->cases[i + 1].sourceRange.start.line - 1;
+                if (i + 1 < branches.size())
+                    caseEnd = branches[i + 1]->sourceRange.start.line - 1;
                 else if (arg->endRange.start.line > 0)
                     caseEnd = arg->endRange.start.line - 1;
 

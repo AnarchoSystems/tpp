@@ -6,6 +6,7 @@
 #include <vector>
 #include <variant>
 #include <memory>
+#include <optional>
 #include <nlohmann/json.hpp>
 
 namespace tpp::compiler
@@ -75,6 +76,7 @@ namespace tpp::compiler
     {
         std::string tag;
         std::string bindingName;
+        bool isSyntheticRenderCase = false;
         std::vector<ASTNode> body;
         Range sourceRange{};
         Range endRange{};
@@ -85,6 +87,7 @@ namespace tpp::compiler
         Expression expr;
         bool checkExhaustive = false;
         std::vector<CaseNode> cases;
+        std::optional<CaseNode> defaultCase;
         bool isBlock = false;
         int insertCol = 0;
         std::string policy;
@@ -166,7 +169,10 @@ namespace tpp::compiler
     inline bool operator==(const InterpolationNode &a, const InterpolationNode &b)
     { return a.expr == b.expr && a.policy == b.policy; }
     inline bool operator==(const CaseNode &a, const CaseNode &b)
-    { return a.tag == b.tag && a.bindingName == b.bindingName && a.body == b.body; }
+    {
+        return a.tag == b.tag && a.bindingName == b.bindingName &&
+               a.isSyntheticRenderCase == b.isSyntheticRenderCase && a.body == b.body;
+    }
     inline bool operator==(const ForNode &a, const ForNode &b)
     {
         return a.varName == b.varName && a.enumeratorName == b.enumeratorName &&
@@ -184,7 +190,8 @@ namespace tpp::compiler
     inline bool operator==(const SwitchNode &a, const SwitchNode &b)
     {
         return a.expr == b.expr && a.checkExhaustive == b.checkExhaustive &&
-               a.cases == b.cases && a.isBlock == b.isBlock && a.insertCol == b.insertCol &&
+               a.cases == b.cases && a.defaultCase == b.defaultCase &&
+               a.isBlock == b.isBlock && a.insertCol == b.insertCol &&
                a.policy == b.policy;
     }
     inline bool operator==(const FunctionCallNode &a, const FunctionCallNode &b)
@@ -258,12 +265,16 @@ namespace tpp::compiler
     {
         nlohmann::json bodyJson = nlohmann::json::array();
         for (const auto &n : c.body) { nlohmann::json nj; to_json(nj, n); bodyJson.push_back(nj); }
-        j = {{"tag", c.tag}, {"bindingName", c.bindingName}, {"body", bodyJson}};
+        j = {{"tag", c.tag},
+             {"bindingName", c.bindingName},
+             {"isSyntheticRenderCase", c.isSyntheticRenderCase},
+             {"body", bodyJson}};
     }
     inline void from_json(const nlohmann::json &j, CaseNode &c)
     {
         j.at("tag").get_to(c.tag);
         j.at("bindingName").get_to(c.bindingName);
+        c.isSyntheticRenderCase = j.value("isSyntheticRenderCase", false);
         c.body = j.at("body").get<std::vector<ASTNode>>();
     }
 
@@ -310,6 +321,12 @@ namespace tpp::compiler
                 j = {{"kind", "switch"}, {"expr", exprJson}, {"checkExhaustive", arg->checkExhaustive},
                      {"cases", casesJson}, {"isBlock", arg->isBlock}, {"insertCol", arg->insertCol},
                      {"policy", arg->policy}};
+                if (arg->defaultCase)
+                {
+                    nlohmann::json defaultCaseJson;
+                    to_json(defaultCaseJson, *arg->defaultCase);
+                    j["defaultCase"] = std::move(defaultCaseJson);
+                }
             }
             else if constexpr (std::is_same_v<T, std::shared_ptr<FunctionCallNode>>)
             {
@@ -383,6 +400,8 @@ namespace tpp::compiler
             sn->expr             = j.at("expr").get<Expression>();
             sn->checkExhaustive  = j.at("checkExhaustive").get<bool>();
             sn->cases            = j.at("cases").get<std::vector<CaseNode>>();
+            if (j.contains("defaultCase") && !j.at("defaultCase").is_null())
+                sn->defaultCase = j.at("defaultCase").get<CaseNode>();
             sn->isBlock          = j.at("isBlock").get<bool>();
             sn->insertCol        = j.at("insertCol").get<int>();
             if (j.contains("policy")) j.at("policy").get_to(sn->policy);
