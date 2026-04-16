@@ -40,6 +40,8 @@ struct ExprInfo
 {
     path : string;
     type : TypeKind;
+    isRecursive : bool;
+    isOptional : bool;
 }
 
 /// Emit literal text.
@@ -59,25 +61,31 @@ struct EmitExprInstr
 struct ForInstr
 {
     varName : string;
-    enumeratorName : string;
+    enumeratorName : optional<string>;
     collection : ExprInfo;
     body : list<Instruction>;
-    sep : string;
-    followedBy : string;
-    precededBy : string;
+    sep : optional<string>;
+    followedBy : optional<string>;
+    precededBy : optional<string>;
     isBlock : bool;
     insertCol : int;
     policy : string;
-    hasAlign : bool;
-    alignSpec : string;
+    alignSpec : optional<string>;
+}
+
+struct CaseBinding
+{
+    name : string;
+    isRecursive : bool;
 }
 
 /// One case branch in a switch.
 struct CaseInstr
 {
     tag : string;
-    bindingName : string;
+    bindingName : optional<CaseBinding>;
     payloadType : optional<TypeKind>;
+    payloadIsRecursive : bool;
     body : list<Instruction>;
 }
 
@@ -97,7 +105,6 @@ struct SwitchInstr
 {
     expr : ExprInfo;
     cases : list<CaseInstr>;
-    defaultCase : optional<CaseInstr>;
     isBlock : bool;
     insertCol : int;
     policy : string;
@@ -111,19 +118,6 @@ struct CallInstr
     arguments : list<ExprInfo>;
 }
 
-/// Render-via: call a function for each element in a collection or single enum.
-struct RenderViaInstr
-{
-    collection : ExprInfo;
-    functionName : string;
-    sep : string;
-    followedBy : string;
-    precededBy : string;
-    isBlock : bool;
-    insertCol : int;
-    policy : string;
-}
-
 enum Instruction
 {
     Emit(EmitInstr),
@@ -132,8 +126,7 @@ enum Instruction
     For(ForInstr),
     If(IfInstr),
     Switch(SwitchInstr),
-    Call(CallInstr),
-    RenderVia(RenderViaInstr)
+    Call(CallInstr)
 }
 
 // ── Template function definition ────────────────────────────────────────────
@@ -204,7 +197,6 @@ struct PolicyRequire
 {
     regex : string;
     replace : string;
-    compiledReplace : string;
 }
 
 struct PolicyOutputFilter

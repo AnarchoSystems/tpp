@@ -41,22 +41,24 @@ TypeKind to_public_type(const compiler::TypeRef &type)
 }
 
 std::vector<StructDef> to_public_structs(const std::vector<compiler::StructDef> &defs,
-                                         bool includeRanges)
+                                         bool includeRanges,
+                                         bool includeRawTypedefs)
 {
     std::vector<StructDef> out;
     out.reserve(defs.size());
     for (const auto &def : defs)
-        out.push_back(to_public_struct(def, includeRanges));
+        out.push_back(to_public_struct(def, includeRanges, includeRawTypedefs));
     return out;
 }
 
 std::vector<EnumDef> to_public_enums(const std::vector<compiler::EnumDef> &defs,
-                                     bool includeRanges)
+                                     bool includeRanges,
+                                     bool includeRawTypedefs)
 {
     std::vector<EnumDef> out;
     out.reserve(defs.size());
     for (const auto &def : defs)
-        out.push_back(to_public_enum(def, includeRanges));
+        out.push_back(to_public_enum(def, includeRanges, includeRawTypedefs));
     return out;
 }
 
@@ -68,7 +70,9 @@ std::vector<PolicyDef> to_public_policies(const compiler::PolicyRegistry &polici
     return out;
 }
 
-StructDef to_public_struct(const compiler::StructDef &def, bool includeRanges)
+StructDef to_public_struct(const compiler::StructDef &def,
+                           bool includeRanges,
+                           bool includeRawTypedefs)
 {
     StructDef out;
     out.name = def.name;
@@ -84,11 +88,14 @@ StructDef to_public_struct(const compiler::StructDef &def, bool includeRanges)
     }
     out.doc = def.doc;
     out.sourceRange = to_public_range(def.sourceRange, includeRanges);
-    out.rawTypedefs = def.rawTypedefs;
+    if (includeRawTypedefs)
+        out.rawTypedefs = def.rawTypedefs;
     return out;
 }
 
-EnumDef to_public_enum(const compiler::EnumDef &def, bool includeRanges)
+EnumDef to_public_enum(const compiler::EnumDef &def,
+                       bool includeRanges,
+                       bool includeRawTypedefs)
 {
     EnumDef out;
     out.name = def.name;
@@ -105,7 +112,8 @@ EnumDef to_public_enum(const compiler::EnumDef &def, bool includeRanges)
     }
     out.doc = def.doc;
     out.sourceRange = to_public_range(def.sourceRange, includeRanges);
-    out.rawTypedefs = def.rawTypedefs;
+    if (includeRawTypedefs)
+        out.rawTypedefs = def.rawTypedefs;
     return out;
 }
 
@@ -132,7 +140,6 @@ PolicyDef to_public_policy(const compiler::Policy &policy)
         PolicyRequire requireDef;
         requireDef.regex = require.regex;
         requireDef.replace = require.replace;
-        requireDef.compiledReplace = require.compiled_replace;
         out.require.push_back(std::move(requireDef));
     }
     for (const auto &replacement : policy.replacements)

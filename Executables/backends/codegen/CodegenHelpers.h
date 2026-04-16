@@ -6,6 +6,7 @@
 #pragma once
 
 #include <tpp/IR.h>
+#include <tpp/Policy.h>
 #include "CodegenTypes.h"
 #include <nlohmann/json.hpp>
 #include <algorithm>
@@ -194,20 +195,6 @@ inline std::string stringLiteral(const std::string &s)
     return result + "\"";
 }
 
-inline bool isSyntheticSwitchRenderCase(const tpp::SwitchInstr &switchInstr, const tpp::CaseInstr &caseInstr)
-{
-    if (!caseInstr.bindingName.empty() || !caseInstr.payloadType || !caseInstr.body)
-        return false;
-    if (caseInstr.body->size() != 1)
-        return false;
-
-    const auto *callInstr = std::get_if<tpp::CallInstr>(&caseInstr.body->front().value);
-    if (!callInstr || callInstr->arguments.size() != 1)
-        return false;
-
-    return callInstr->arguments[0].path == switchInstr.expr.path + "." + caseInstr.tag;
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // Re-indent generated code based on brace nesting
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -363,26 +350,14 @@ struct ConvertConfig
     bool callNeedsTry = false;
 };
 
-/// Look up whether a field (by last dot-segment of path) is recursive/optional.
-struct FieldLookup { bool recursive = false; bool optional = false; };
-inline FieldLookup lookupField(const std::string &path, const tpp::IR &ir)
+inline ExprInfo exprInfoToContext(const tpp::ExprInfo &expr)
 {
-    auto dot = path.rfind('.');
-    if (dot == std::string::npos) return {};
-    std::string fieldName = path.substr(dot + 1);
-    for (const auto &s : ir.structs)
-        for (const auto &f : s.fields)
-            if (f.name == fieldName)
-                return {f.recursive,
-                        f.type && f.type->value.index() == 5};
-    return {};
-}
-
-/// Wrap a C++ path in (*...) when it traverses a unique_ptr field (recursive type).
-inline std::string fixCppPath(const std::string &path, const tpp::IR &ir)
-{
-    if (lookupField(path, ir).recursive) return "(*" + path + ")";
-    return path;
+    ExprInfo result;
+    result.path = expr.path;
+    result.type = std::make_unique<TypeKind>(typeKindToContext(*expr.type));
+    result.isRecursive = expr.isRecursive;
+    result.isOptional = expr.isOptional;
+    return result;
 }
 
 /// Recursively convert an Instruction to a codegen::Instruction struct.
@@ -402,15 +377,9 @@ inline Instruction convertInstruction(
         else if constexpr (std::is_same_v<T, tpp::EmitExprInstr>)
         {
             std::string effPol = arg.policy.empty() ? activePolicy : arg.policy;
-            auto fl = lookupField(arg.expr.path, ir);
 
             EmitExprData data;
-            data.expr = {
-                arg.expr.path,
-                std::make_unique<TypeKind>(typeKindToContext(*arg.expr.type)),
-                fl.recursive,
-                fl.optional
-            };
+            data.expr = exprInfoToContext(arg.expr);
             data.sb = sb;
             data.useRuntimePolicy = false;
 
@@ -438,27 +407,29 @@ inline Instruction convertInstruction(
             int s = scope++;
             std::string pol = arg->policy.empty() ? activePolicy : arg->policy;
             auto elemType = getElemType(*arg->collection.type);
-            bool hasAlign = arg->hasAlign;
+            bool hasAlign = arg->alignSpec.has_value();
 
             auto forData = std::make_unique<ForData>();
             forData->scopeId = s;
-            forData->collPath = fixCppPath(arg->collection.path, ir);
+            forData->collPath = arg->collection.path;
+            forData->collIsRecursive = arg->collection.isRecursive;
+            forData->collIsOptional = arg->collection.isOptional;
             forData->elemType = std::make_unique<TypeKind>(typeKindToContext(elemType));
             forData->varName = arg->varName;
-            forData->hasEnum = !arg->enumeratorName.empty();
-            forData->enumeratorName = arg->enumeratorName;
-            forData->hasSep = !arg->sep.empty();
-            forData->sepLit = !arg->sep.empty() ? stringLiteral(arg->sep) : "";
-            forData->hasFollowed = !arg->followedBy.empty();
-            forData->followedByLit = !arg->followedBy.empty() ? stringLiteral(arg->followedBy) : "";
-            forData->hasPreceded = !arg->precededBy.empty();
-            forData->precededByLit = !arg->precededBy.empty() ? stringLiteral(arg->precededBy) : "";
+            forData->hasEnum = arg->enumeratorName.has_value();
+            forData->enumeratorName = arg->enumeratorName.value_or("");
+            forData->hasSep = arg->sep.has_value();
+            forData->sepLit = arg->sep.has_value() ? stringLiteral(*arg->sep) : "";
+            forData->hasFollowed = arg->followedBy.has_value();
+            forData->followedByLit = arg->followedBy.has_value() ? stringLiteral(*arg->followedBy) : "";
+            forData->hasPreceded = arg->precededBy.has_value();
+            forData->precededByLit = arg->precededBy.has_value() ? stringLiteral(*arg->precededBy) : "";
             forData->isBlock = arg->isBlock;
             forData->insertCol = arg->insertCol;
             forData->sb = sb;
             forData->hasAlign = hasAlign;
-            forData->alignSpec = arg->alignSpec;
-            forData->singleAlignChar = arg->alignSpec.size() == 1;
+            forData->alignSpec = arg->alignSpec.value_or("");
+            forData->singleAlignChar = arg->alignSpec.has_value() && arg->alignSpec->size() == 1;
 
             if (hasAlign)
             {
@@ -475,8 +446,9 @@ inline Instruction convertInstruction(
                 }
                 forData->cells = std::move(cellsVec);
                 std::vector<std::string> specChars;
-                for (char c : arg->alignSpec)
-                    specChars.push_back(std::string(1, c));
+                if (arg->alignSpec.has_value())
+                    for (char c : *arg->alignSpec)
+                        specChars.push_back(std::string(1, c));
                 forData->alignSpecChars = std::move(specChars);
                 forData->body = std::make_unique<std::vector<Instruction>>();
             }
@@ -541,11 +513,9 @@ inline Instruction convertInstruction(
 
             // Unwrap OptionalType to find the underlying NamedType for enum lookup
             const tpp::TypeKind *switchType = arg->expr.type.get();
-            bool exprIsOptional = false;
             if (switchType->value.index() == 5)
             {
                 switchType = std::get<5>(switchType->value).get();
-                exprIsOptional = true;
             }
 
             const tpp::EnumDef *enumDef = nullptr;
@@ -568,17 +538,11 @@ inline Instruction convertInstruction(
                     caseSb = "_blk" + std::to_string(caseScopeId);
                 }
 
-                const bool syntheticRenderCase = isSyntheticSwitchRenderCase(*arg, c);
-                const std::string syntheticBindingName = syntheticRenderCase
-                    ? "_case_payload" + std::to_string(caseScopeId)
-                    : std::string{};
-
                 auto caseBody = std::make_unique<std::vector<Instruction>>();
                 for (const auto &bi : *c.body)
                     caseBody->push_back(convertInstruction(bi, caseSb, pol, scope, ir, cfg));
 
                 int variantIndex = -1;
-                bool isRecursivePayload = false;
                 if (enumDef)
                 {
                     for (int vi = 0; vi < (int)enumDef->variants.size(); ++vi)
@@ -586,8 +550,6 @@ inline Instruction convertInstruction(
                         if (enumDef->variants[vi].tag == c.tag)
                         {
                             variantIndex = vi;
-                            isRecursivePayload = enumDef->variants[vi].recursive
-                                                 && enumDef->variants[vi].payload != nullptr;
                             break;
                         }
                     }
@@ -596,16 +558,17 @@ inline Instruction convertInstruction(
                 CaseData caseData;
                 caseData.tag = c.tag;
                 caseData.tagLit = stringLiteral(c.tag);
-                caseData.bindingName = syntheticRenderCase ? syntheticBindingName : c.bindingName;
-                caseData.hasBinding = syntheticRenderCase || !c.bindingName.empty();
+                caseData.bindingName = c.bindingName
+                    ? std::make_optional(c.bindingName->name)
+                    : std::nullopt;
                 caseData.body = std::move(caseBody);
                 caseData.scopeId = caseScopeId;
                 caseData.isFirst = first;
                 caseData.variantIndex = variantIndex;
-                caseData.isRecursivePayload = isRecursivePayload;
+                caseData.isRecursivePayload = c.payloadIsRecursive;
                 if (c.payloadType)
                     caseData.payloadType = std::make_unique<TypeKind>(typeKindToContext(*c.payloadType));
-                else if (caseData.hasBinding && enumDef)
+                else if (caseData.bindingName.has_value() && enumDef)
                 {
                     // Derive payload type from enum when IR omits it (e.g. optional-wrapped switch)
                     for (const auto &ev : enumDef->variants)
@@ -613,66 +576,20 @@ inline Instruction convertInstruction(
                         { caseData.payloadType = std::make_unique<TypeKind>(typeKindToContext(*ev.payload)); break; }
                 }
 
-                if (syntheticRenderCase && !caseData.body->empty())
-                {
-                    if (auto *callData = std::get_if<CallData>(&caseData.body->front().value))
-                    {
-                        if (!callData->args.empty())
-                        {
-                            callData->args[0].path = syntheticBindingName;
-                            callData->args[0].isRecursive = isRecursivePayload;
-                        }
-                    }
-                }
-
                 casesVec->push_back(std::move(caseData));
                 first = false;
-            }
-
-            std::unique_ptr<CaseData> defaultCase;
-            if (arg->defaultCase)
-            {
-                const auto &c = *arg->defaultCase;
-                int caseScopeId = 0;
-                std::string caseSb = sb;
-                if (arg->isBlock)
-                {
-                    caseScopeId = scope++;
-                    caseSb = "_blk" + std::to_string(caseScopeId);
-                }
-
-                auto caseBody = std::make_unique<std::vector<Instruction>>();
-                for (const auto &bi : *c.body)
-                    caseBody->push_back(convertInstruction(bi, caseSb, pol, scope, ir, cfg));
-
-                defaultCase = std::make_unique<CaseData>();
-                defaultCase->tag = c.tag;
-                defaultCase->tagLit = stringLiteral(c.tag);
-                defaultCase->bindingName = c.bindingName;
-                defaultCase->hasBinding = !c.bindingName.empty();
-                defaultCase->body = std::move(caseBody);
-                defaultCase->scopeId = caseScopeId;
-                defaultCase->isFirst = first;
-                defaultCase->variantIndex = -1;
-                defaultCase->isRecursivePayload = false;
-                if (c.payloadType)
-                    defaultCase->payloadType = std::make_unique<TypeKind>(typeKindToContext(*c.payloadType));
             }
 
             std::string enumTypeName;
             if (switchType->value.index() == 3)
                 enumTypeName = std::get<3>(switchType->value);
 
-            // Dereference unique_ptr when the switch expression crosses a recursive/optional field
-            std::string switchExprPath = exprIsOptional
-                ? "(*" + arg->expr.path + ")"
-                : fixCppPath(arg->expr.path, ir);
-
             auto switchData = std::make_unique<SwitchData>();
-            switchData->exprPath = switchExprPath;
+            switchData->exprPath = arg->expr.path;
+            switchData->exprIsRecursive = arg->expr.isRecursive;
+            switchData->exprIsOptional = arg->expr.isOptional;
             switchData->enumTypeName = enumTypeName;
             switchData->cases = std::move(casesVec);
-            switchData->defaultCase = std::move(defaultCase);
             switchData->isBlock = arg->isBlock;
             switchData->insertCol = arg->insertCol;
             switchData->sb = sb;
@@ -685,10 +602,9 @@ inline Instruction convertInstruction(
         {
             std::vector<CallArgInfo> argsVec;
             for (size_t i = 0; i < arg.arguments.size(); ++i)
-            {
-                auto fl = lookupField(arg.arguments[i].path, ir);
-                argsVec.push_back({arg.arguments[i].path, fl.recursive, fl.optional});
-            }
+                argsVec.push_back({arg.arguments[i].path,
+                                   arg.arguments[i].isRecursive,
+                                   arg.arguments[i].isOptional});
 
             CallData callData;
             callData.functionName = cfg.functionPrefix + arg.functionName;
@@ -698,94 +614,6 @@ inline Instruction convertInstruction(
             callData.policyArg = makePolicyRef(activePolicy, ir);
 
             return {std::move(callData)};
-        }
-        else if constexpr (std::is_same_v<T, tpp::RenderViaInstr>)
-        {
-            int s = scope++;
-            bool isCollection = arg.collection.type->value.index() == 4;
-            auto elemType = getElemType(*arg.collection.type);
-
-            std::vector<const tpp::FunctionDef *> overloads;
-            for (const auto &fn : ir.functions)
-                if (fn.name == arg.functionName)
-                    overloads.push_back(&fn);
-
-            bool isSingleOverload = overloads.size() == 1 && overloads[0]->params.size() == 1
-                && overloads[0]->params[0].type && typeKindEqual(*overloads[0]->params[0].type, elemType);
-            std::vector<RenderViaOverload> overloadsVec;
-            std::string enumTypeName;
-
-            if (!isSingleOverload)
-            {
-                const tpp::EnumDef *enumDef = nullptr;
-                if (elemType.value.index() == 3)
-                {
-                    enumTypeName = std::get<3>(elemType.value);
-                    for (const auto &e : ir.enums)
-                        if (e.name == enumTypeName) { enumDef = &e; break; }
-                }
-
-                if (enumDef)
-                {
-                    bool first = true;
-                    for (const auto &v : enumDef->variants)
-                    {
-                        const tpp::FunctionDef *match = nullptr;
-                        for (auto *ovl : overloads)
-                        {
-                            if (!v.payload)
-                            {
-                                if (ovl->params.empty())
-                                {
-                                    match = ovl;
-                                    break;
-                                }
-                                continue;
-                            }
-                            if (ovl->params.size() == 1
-                                && ovl->params[0].type
-                                && typeKindEqual(*ovl->params[0].type, *v.payload))
-                            {
-                                match = ovl;
-                                break;
-                            }
-                        }
-                        if (match)
-                        {
-                            RenderViaOverload ovlData;
-                            ovlData.tag = v.tag;
-                            ovlData.tagLit = stringLiteral(v.tag);
-                            ovlData.isFirst = first;
-                            if (v.payload)
-                                ovlData.payloadType = std::make_unique<TypeKind>(typeKindToContext(*v.payload));
-                            overloadsVec.push_back(std::move(ovlData));
-                            first = false;
-                        }
-                    }
-                }
-            }
-
-            RenderViaData rvia;
-            rvia.scopeId = s;
-            rvia.collPath = fixCppPath(arg.collection.path, ir);
-            rvia.isCollection = isCollection;
-            rvia.elemType = std::make_unique<TypeKind>(typeKindToContext(elemType));
-            rvia.enumTypeName = enumTypeName;
-            rvia.functionName = cfg.functionPrefix + arg.functionName;
-            rvia.hasSep = !arg.sep.empty();
-            rvia.sepLit = !arg.sep.empty() ? stringLiteral(arg.sep) : "";
-            rvia.hasFollowed = !arg.followedBy.empty();
-            rvia.followedByLit = !arg.followedBy.empty() ? stringLiteral(arg.followedBy) : "";
-            rvia.hasPreceded = !arg.precededBy.empty();
-            rvia.precededByLit = !arg.precededBy.empty() ? stringLiteral(arg.precededBy) : "";
-            rvia.sb = sb;
-            rvia.isSingleOverload = isSingleOverload;
-            rvia.overloads = std::move(overloadsVec);
-            rvia.needsTry = cfg.callNeedsTry && !ir.policies.empty();
-            rvia.policyArg = makePolicyRef(
-                arg.policy.empty() ? activePolicy : arg.policy, ir);
-
-            return {std::move(rvia)};
         }
         else
         {
@@ -919,7 +747,7 @@ inline std::vector<PolicyInfo> buildPolicyContext(const tpp::IR &ir, const std::
         for (const auto &r : pol.require)
             reqArr.push_back({
                 stringLiteral(r.regex),
-                !r.replace.empty() ? stringLiteral(r.compiledReplace) : "",
+                !r.replace.empty() ? stringLiteral(tpp::compiler::precompile_replace(r.replace)) : "",
                 !r.replace.empty()
             });
         pj.require = std::move(reqArr);

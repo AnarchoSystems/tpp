@@ -732,8 +732,12 @@ bool compile(const AnalyzedProject &project,
             return false;
         }
 
-        auto structs = to_public_structs(project.semanticModel.structs, options.includeSourceRanges);
-        auto enums = to_public_enums(project.semanticModel.enums, options.includeSourceRanges);
+        auto structs = to_public_structs(project.semanticModel.structs,
+                        options.includeSourceRanges,
+                        options.includeRawTypedefs);
+        auto enums = to_public_enums(project.semanticModel.enums,
+                         options.includeSourceRanges,
+                         options.includeRawTypedefs);
         auto policies = to_public_policies(project.semanticModel.policies());
 
         output = assemble_ir(std::move(structs),

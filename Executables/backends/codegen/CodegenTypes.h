@@ -24,8 +24,6 @@ struct IfData;
 struct SwitchData;
 struct CallArgInfo;
 struct CallData;
-struct RenderViaOverload;
-struct RenderViaData;
 struct PolicyReplacementInfo;
 struct PolicyRequireInfo;
 struct PolicyOutputFilterInfo;
@@ -104,6 +102,8 @@ struct ForData
 {
     int scopeId;
     std::string collPath;
+    bool collIsRecursive;
+    bool collIsOptional;
     std::unique_ptr<TypeKind> elemType;
     std::string varName;
     bool hasEnum;
@@ -126,15 +126,14 @@ struct ForData
     bool singleAlignChar;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct ForData\n{\n    scopeId : int;\n    collPath : string;\n    elemType : TypeKind;\n    varName : string;\n    hasEnum : bool;\n    enumeratorName : string;\n    body : list<Instruction>;\n    hasSep : bool;\n    sepLit : string;\n    hasFollowed : bool;\n    followedByLit : string;\n    hasPreceded : bool;\n    precededByLit : string;\n    isBlock : bool;\n    insertCol : int;\n    sb : string;\n    hasAlign : bool;\n    alignSpec : string;\n    cells : list<AlignCellInfo>;\n    numCols : int;\n    alignSpecChars : list<string>;\n    singleAlignChar : bool;\n}";
+        return "struct ForData\n{\n    scopeId : int;\n    collPath : string;\n    collIsRecursive : bool;\n    collIsOptional : bool;\n    elemType : TypeKind;\n    varName : string;\n    hasEnum : bool;\n    enumeratorName : string;\n    body : list<Instruction>;\n    hasSep : bool;\n    sepLit : string;\n    hasFollowed : bool;\n    followedByLit : string;\n    hasPreceded : bool;\n    precededByLit : string;\n    isBlock : bool;\n    insertCol : int;\n    sb : string;\n    hasAlign : bool;\n    alignSpec : string;\n    cells : list<AlignCellInfo>;\n    numCols : int;\n    alignSpecChars : list<string>;\n    singleAlignChar : bool;\n}";
     }
 };
 struct CaseData
 {
     std::string tag;
     std::string tagLit;
-    std::string bindingName;
-    bool hasBinding;
+    std::optional<std::string> bindingName;
     std::unique_ptr<TypeKind> payloadType;
     std::unique_ptr<std::vector<Instruction>> body;
     int scopeId;
@@ -143,7 +142,7 @@ struct CaseData
     bool isRecursivePayload;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct CaseData\n{\n    tag : string;\n    tagLit : string;\n    bindingName : string;\n    hasBinding : bool;\n    payloadType : optional<TypeKind>;\n    body : list<Instruction>;\n    scopeId : int;\n    isFirst : bool;\n    variantIndex : int;\n    isRecursivePayload : bool;\n}";
+        return "struct CaseData\n{\n    tag : string;\n    tagLit : string;\n    bindingName : optional<string>;\n    payloadType : optional<TypeKind>;\n    body : list<Instruction>;\n    scopeId : int;\n    isFirst : bool;\n    variantIndex : int;\n    isRecursivePayload : bool;\n}";
     }
 };
 struct IfData
@@ -167,15 +166,16 @@ struct IfData
 struct SwitchData
 {
     std::string exprPath;
+    bool exprIsRecursive;
+    bool exprIsOptional;
     std::string enumTypeName;
     std::unique_ptr<std::vector<CaseData>> cases;
-    std::unique_ptr<CaseData> defaultCase;
     bool isBlock;
     int insertCol;
     std::string sb;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct SwitchData\n{\n    exprPath : string;\n    enumTypeName : string;\n    cases : list<CaseData>;\n    defaultCase : optional<CaseData>;\n    isBlock : bool;\n    insertCol : int;\n    sb : string;\n}";
+        return "struct SwitchData\n{\n    exprPath : string;\n    exprIsRecursive : bool;\n    exprIsOptional : bool;\n    enumTypeName : string;\n    cases : list<CaseData>;\n    isBlock : bool;\n    insertCol : int;\n    sb : string;\n}";
     }
 };
 struct CallArgInfo
@@ -198,41 +198,6 @@ struct CallData
     static std::string tpp_typedefs() noexcept
     {
         return "struct CallData\n{\n    functionName : string;\n    args : list<CallArgInfo>;\n    policyArg : optional<PolicyRef>;\n    sb : string;\n    needsTry : bool;\n}";
-    }
-};
-struct RenderViaOverload
-{
-    std::string tag;
-    std::string tagLit;
-    bool isFirst;
-    std::unique_ptr<TypeKind> payloadType;
-    static std::string tpp_typedefs() noexcept
-    {
-        return "struct RenderViaOverload\n{\n    tag : string;\n    tagLit : string;\n    isFirst : bool;\n    payloadType : optional<TypeKind>;\n}";
-    }
-};
-struct RenderViaData
-{
-    int scopeId;
-    std::string collPath;
-    bool isCollection;
-    std::unique_ptr<TypeKind> elemType;
-    std::string enumTypeName;
-    std::string functionName;
-    bool hasSep;
-    std::string sepLit;
-    bool hasFollowed;
-    std::string followedByLit;
-    bool hasPreceded;
-    std::string precededByLit;
-    std::string sb;
-    bool isSingleOverload;
-    std::vector<RenderViaOverload> overloads;
-    std::optional<PolicyRef> policyArg;
-    bool needsTry;
-    static std::string tpp_typedefs() noexcept
-    {
-        return "struct RenderViaData\n{\n    scopeId : int;\n    collPath : string;\n    isCollection : bool;\n    elemType : TypeKind;\n    enumTypeName : string;\n    functionName : string;\n    hasSep : bool;\n    sepLit : string;\n    hasFollowed : bool;\n    followedByLit : string;\n    hasPreceded : bool;\n    precededByLit : string;\n    sb : string;\n    isSingleOverload : bool;\n    overloads : list<RenderViaOverload>;\n    policyArg : optional<PolicyRef>;\n    needsTry : bool;\n}";
     }
 };
 struct PolicyReplacementInfo
@@ -418,11 +383,11 @@ struct Instruction_AlignCell
 };
 struct Instruction
 {
-    using Value = std::variant<EmitData, EmitExprData, Instruction_AlignCell, std::unique_ptr<ForData>, std::unique_ptr<IfData>, std::unique_ptr<SwitchData>, CallData, RenderViaData>;
+    using Value = std::variant<EmitData, EmitExprData, Instruction_AlignCell, std::unique_ptr<ForData>, std::unique_ptr<IfData>, std::unique_ptr<SwitchData>, CallData>;
     Value value;
     static std::string tpp_typedefs() noexcept
     {
-        return "enum Instruction\n{\n    Emit(EmitData),\n    EmitExpr(EmitExprData),\n    AlignCell,\n    For(ForData),\n    If(IfData),\n    Switch(SwitchData),\n    Call(CallData),\n    RenderVia(RenderViaData)\n}";
+        return "enum Instruction\n{\n    Emit(EmitData),\n    EmitExpr(EmitExprData),\n    AlignCell,\n    For(ForData),\n    If(IfData),\n    Switch(SwitchData),\n    Call(CallData)\n}";
     }
 };
 
@@ -452,10 +417,6 @@ inline void from_json(const nlohmann::json& j, CallArgInfo& v);
 inline void to_json(nlohmann::json& j, const CallArgInfo& v);
 inline void from_json(const nlohmann::json& j, CallData& v);
 inline void to_json(nlohmann::json& j, const CallData& v);
-inline void from_json(const nlohmann::json& j, RenderViaOverload& v);
-inline void to_json(nlohmann::json& j, const RenderViaOverload& v);
-inline void from_json(const nlohmann::json& j, RenderViaData& v);
-inline void to_json(nlohmann::json& j, const RenderViaData& v);
 inline void from_json(const nlohmann::json& j, PolicyReplacementInfo& v);
 inline void to_json(nlohmann::json& j, const PolicyReplacementInfo& v);
 inline void from_json(const nlohmann::json& j, PolicyRequireInfo& v);
@@ -523,11 +484,10 @@ inline void from_json(const nlohmann::json& j, Instruction& v)
     else     if (j.contains("If")) v.value.emplace<4>(std::make_unique<IfData>(j["If"].get<IfData>()));
     else     if (j.contains("Switch")) v.value.emplace<5>(std::make_unique<SwitchData>(j["Switch"].get<SwitchData>()));
     else     if (j.contains("Call")) v.value.emplace<6>(j["Call"].get<CallData>());
-    else     if (j.contains("RenderVia")) v.value.emplace<7>(j["RenderVia"].get<RenderViaData>());
 }
 inline void to_json(nlohmann::json& j, const Instruction& v)
 {
-    const char* _tags[] = {"Emit", "EmitExpr", "AlignCell", "For", "If", "Switch", "Call", "RenderVia"};
+    const char* _tags[] = {"Emit", "EmitExpr", "AlignCell", "For", "If", "Switch", "Call"};
     std::visit([&](const auto& arg) {
         j = nlohmann::json::object();
         j[_tags[v.value.index()]] = _tpp_j(arg);
@@ -591,6 +551,8 @@ inline void from_json(const nlohmann::json& j, ForData& v)
 {
     j.at("scopeId").get_to(v.scopeId);
     j.at("collPath").get_to(v.collPath);
+    j.at("collIsRecursive").get_to(v.collIsRecursive);
+    j.at("collIsOptional").get_to(v.collIsOptional);
     v.elemType = std::make_unique<TypeKind>(j.at("elemType").get<TypeKind>());
     j.at("varName").get_to(v.varName);
     j.at("hasEnum").get_to(v.hasEnum);
@@ -617,6 +579,8 @@ inline void to_json(nlohmann::json& j, const ForData& v)
     j = nlohmann::json{};
     j["scopeId"] = v.scopeId;
     j["collPath"] = v.collPath;
+    j["collIsRecursive"] = v.collIsRecursive;
+    j["collIsOptional"] = v.collIsOptional;
     j["elemType"] = *v.elemType;
     j["varName"] = v.varName;
     j["hasEnum"] = v.hasEnum;
@@ -642,8 +606,7 @@ inline void from_json(const nlohmann::json& j, CaseData& v)
 {
     j.at("tag").get_to(v.tag);
     j.at("tagLit").get_to(v.tagLit);
-    j.at("bindingName").get_to(v.bindingName);
-    j.at("hasBinding").get_to(v.hasBinding);
+    if (j.contains("bindingName") && !j.at("bindingName").is_null()) v.bindingName = j.at("bindingName").get<std::string>();
     if (j.contains("payloadType") && !j.at("payloadType").is_null()) v.payloadType = std::make_unique<TypeKind>(j.at("payloadType").get<TypeKind>());
     v.body = std::make_unique<std::vector<Instruction>>(j.at("body").get<std::vector<Instruction>>());
     j.at("scopeId").get_to(v.scopeId);
@@ -656,8 +619,7 @@ inline void to_json(nlohmann::json& j, const CaseData& v)
     j = nlohmann::json{};
     j["tag"] = v.tag;
     j["tagLit"] = v.tagLit;
-    j["bindingName"] = v.bindingName;
-    j["hasBinding"] = v.hasBinding;
+    if (v.bindingName.has_value()) j["bindingName"] = *v.bindingName;
     if (v.payloadType) j["payloadType"] = *v.payloadType;
     j["body"] = *v.body;
     j["scopeId"] = v.scopeId;
@@ -697,9 +659,10 @@ inline void to_json(nlohmann::json& j, const IfData& v)
 inline void from_json(const nlohmann::json& j, SwitchData& v)
 {
     j.at("exprPath").get_to(v.exprPath);
+    j.at("exprIsRecursive").get_to(v.exprIsRecursive);
+    j.at("exprIsOptional").get_to(v.exprIsOptional);
     j.at("enumTypeName").get_to(v.enumTypeName);
     v.cases = std::make_unique<std::vector<CaseData>>(j.at("cases").get<std::vector<CaseData>>());
-    if (j.contains("defaultCase") && !j.at("defaultCase").is_null()) v.defaultCase = std::make_unique<CaseData>(j.at("defaultCase").get<CaseData>());
     j.at("isBlock").get_to(v.isBlock);
     j.at("insertCol").get_to(v.insertCol);
     j.at("sb").get_to(v.sb);
@@ -708,9 +671,10 @@ inline void to_json(nlohmann::json& j, const SwitchData& v)
 {
     j = nlohmann::json{};
     j["exprPath"] = v.exprPath;
+    j["exprIsRecursive"] = v.exprIsRecursive;
+    j["exprIsOptional"] = v.exprIsOptional;
     j["enumTypeName"] = v.enumTypeName;
     j["cases"] = *v.cases;
-    if (v.defaultCase) j["defaultCase"] = *v.defaultCase;
     j["isBlock"] = v.isBlock;
     j["insertCol"] = v.insertCol;
     j["sb"] = v.sb;
@@ -743,62 +707,6 @@ inline void to_json(nlohmann::json& j, const CallData& v)
     j["args"] = v.args;
     if (v.policyArg.has_value()) j["policyArg"] = *v.policyArg;
     j["sb"] = v.sb;
-    j["needsTry"] = v.needsTry;
-}
-inline void from_json(const nlohmann::json& j, RenderViaOverload& v)
-{
-    j.at("tag").get_to(v.tag);
-    j.at("tagLit").get_to(v.tagLit);
-    j.at("isFirst").get_to(v.isFirst);
-    if (j.contains("payloadType") && !j.at("payloadType").is_null()) v.payloadType = std::make_unique<TypeKind>(j.at("payloadType").get<TypeKind>());
-}
-inline void to_json(nlohmann::json& j, const RenderViaOverload& v)
-{
-    j = nlohmann::json{};
-    j["tag"] = v.tag;
-    j["tagLit"] = v.tagLit;
-    j["isFirst"] = v.isFirst;
-    if (v.payloadType) j["payloadType"] = *v.payloadType;
-}
-inline void from_json(const nlohmann::json& j, RenderViaData& v)
-{
-    j.at("scopeId").get_to(v.scopeId);
-    j.at("collPath").get_to(v.collPath);
-    j.at("isCollection").get_to(v.isCollection);
-    v.elemType = std::make_unique<TypeKind>(j.at("elemType").get<TypeKind>());
-    j.at("enumTypeName").get_to(v.enumTypeName);
-    j.at("functionName").get_to(v.functionName);
-    j.at("hasSep").get_to(v.hasSep);
-    j.at("sepLit").get_to(v.sepLit);
-    j.at("hasFollowed").get_to(v.hasFollowed);
-    j.at("followedByLit").get_to(v.followedByLit);
-    j.at("hasPreceded").get_to(v.hasPreceded);
-    j.at("precededByLit").get_to(v.precededByLit);
-    j.at("sb").get_to(v.sb);
-    j.at("isSingleOverload").get_to(v.isSingleOverload);
-    j.at("overloads").get_to(v.overloads);
-    if (j.contains("policyArg") && !j.at("policyArg").is_null()) v.policyArg = j.at("policyArg").get<PolicyRef>();
-    j.at("needsTry").get_to(v.needsTry);
-}
-inline void to_json(nlohmann::json& j, const RenderViaData& v)
-{
-    j = nlohmann::json{};
-    j["scopeId"] = v.scopeId;
-    j["collPath"] = v.collPath;
-    j["isCollection"] = v.isCollection;
-    j["elemType"] = *v.elemType;
-    j["enumTypeName"] = v.enumTypeName;
-    j["functionName"] = v.functionName;
-    j["hasSep"] = v.hasSep;
-    j["sepLit"] = v.sepLit;
-    j["hasFollowed"] = v.hasFollowed;
-    j["followedByLit"] = v.followedByLit;
-    j["hasPreceded"] = v.hasPreceded;
-    j["precededByLit"] = v.precededByLit;
-    j["sb"] = v.sb;
-    j["isSingleOverload"] = v.isSingleOverload;
-    j["overloads"] = v.overloads;
-    if (v.policyArg.has_value()) j["policyArg"] = *v.policyArg;
     j["needsTry"] = v.needsTry;
 }
 inline void from_json(const nlohmann::json& j, PolicyReplacementInfo& v)

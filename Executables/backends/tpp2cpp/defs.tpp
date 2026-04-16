@@ -199,37 +199,41 @@ END
 
 // ── Expression → C++ String expression ───────────────────────────────────────
 
-template cpp_optional_to_str(path: string, inner: TypeKind)
+template cpp_value_path(path: string, isRecursive: bool, isOptional: bool)
+@if isRecursive@*@path@@else@@if isOptional@*@path@@else@@path@@end if@@end if@
+END
+
+template cpp_optional_to_str(expr: ExprInfo, inner: TypeKind)
 @switch inner@
 @case Str@
-(@path@.has_value() ? *@path@ : std::string{})@end case@
+@if expr.isRecursive@(@expr.path@ ? *@expr.path@ : std::string{})@else@(@expr.path@.has_value() ? *@expr.path@ : std::string{})@end if@@end case@
 @case Int@
-(@path@.has_value() ? std::to_string(*@path@) : std::string{})@end case@
+@if expr.isRecursive@(@expr.path@ ? std::to_string(*@expr.path@) : std::string{})@else@(@expr.path@.has_value() ? std::to_string(*@expr.path@) : std::string{})@end if@@end case@
 @case Bool@
-(@path@.has_value() ? (*@path@ ? "true" : "false") : std::string{})@end case@
+@if expr.isRecursive@(@expr.path@ ? (*@expr.path@ ? "true" : "false") : std::string{})@else@(@expr.path@.has_value() ? (*@expr.path@ ? "true" : "false") : std::string{})@end if@@end case@
 @case Named(n)@
-(@path@.has_value() ? std::to_string(*@path@) : std::string{})@end case@
+@if expr.isRecursive@(@expr.path@ ? std::to_string(*@expr.path@) : std::string{})@else@(@expr.path@.has_value() ? std::to_string(*@expr.path@) : std::string{})@end if@@end case@
 @case List(e)@
-(@path@.has_value() ? std::to_string(*@path@) : std::string{})@end case@
+@if expr.isRecursive@(@expr.path@ ? std::to_string(*@expr.path@) : std::string{})@else@(@expr.path@.has_value() ? std::to_string(*@expr.path@) : std::string{})@end if@@end case@
 @case Optional(i)@
-(@path@.has_value() ? std::to_string(*@path@) : std::string{})@end case@
+@if expr.isRecursive@(@expr.path@ ? std::to_string(*@expr.path@) : std::string{})@else@(@expr.path@.has_value() ? std::to_string(*@expr.path@) : std::string{})@end if@@end case@
 @end switch@
 END
 
 template cpp_expr_to_str(expr: ExprInfo)
 @switch expr.type@
 @case Str@
-@expr.path@@end case@
+@cpp_value_path(expr.path, expr.isRecursive, expr.isOptional)@@end case@
 @case Int@
-std::to_string(@expr.path@)@end case@
+std::to_string(@cpp_value_path(expr.path, expr.isRecursive, expr.isOptional)@)@end case@
 @case Bool@
-(@expr.path@ ? "true" : "false")@end case@
+(@cpp_value_path(expr.path, expr.isRecursive, expr.isOptional)@ ? "true" : "false")@end case@
 @case Named(n)@
-std::to_string(@expr.path@)@end case@
+std::to_string(@cpp_value_path(expr.path, expr.isRecursive, expr.isOptional)@)@end case@
 @case List(e)@
-std::to_string(@expr.path@)@end case@
+std::to_string(@cpp_value_path(expr.path, expr.isRecursive, expr.isOptional)@)@end case@
 @case Optional(inner)@
-@cpp_optional_to_str(expr.path, inner)@@end case@
+@cpp_optional_to_str(expr, inner)@@end case@
 @end switch@
 END
 
@@ -260,7 +264,7 @@ template emit_call(c: CallData)
 END
 
 template cpp_call_arg(arg: CallArgInfo)
-@if arg.isRecursive@*@arg.path@@else@@if arg.isOptional@*@arg.path@@else@@arg.path@@end if@@end if@
+@cpp_value_path(arg.path, arg.isRecursive, arg.isOptional)@
 END
 
 template cpp_policy_ref(ref: PolicyRef)
@@ -291,9 +295,6 @@ template emit_instr(instr: Instruction)
 @case Call(c)@
 @emit_call(c)@
 @end case@
-@case RenderVia(r)@
-@emit_render_via(r)@
-@end case@
 @end switch@
 END
 
@@ -316,8 +317,8 @@ template emit_for(f: ForData)
 END
 
 template emit_for_inline(f: ForData)
-for (size_t _i@f.scopeId@ = 0; _i@f.scopeId@ < @f.collPath@.size(); _i@f.scopeId@++) {
-    [[maybe_unused]] const auto& @f.varName@ = @f.collPath@[_i@f.scopeId@];
+for (size_t _i@f.scopeId@ = 0; _i@f.scopeId@ < (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@).size(); _i@f.scopeId@++) {
+    [[maybe_unused]] const auto& @f.varName@ = (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@)[_i@f.scopeId@];
     @if f.hasEnum@
     int @f.enumeratorName@ = (int)_i@f.scopeId@;
     @end if@
@@ -328,13 +329,13 @@ for (size_t _i@f.scopeId@ = 0; _i@f.scopeId@ < @f.collPath@.size(); _i@f.scopeId
     @emit_instr(instr)@
     @end for@
     @if f.hasSep@
-    if (_i@f.scopeId@ + 1 < @f.collPath@.size()) @f.sb@ += @f.sepLit@;
+    if (_i@f.scopeId@ + 1 < (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@).size()) @f.sb@ += @f.sepLit@;
     @if f.hasFollowed@
-    else if (!@f.collPath@.empty()) @f.sb@ += @f.followedByLit@;
+    else if (!(@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@).empty()) @f.sb@ += @f.followedByLit@;
     @end if@
     @else@
     @if f.hasFollowed@
-    if (_i@f.scopeId@ + 1 >= @f.collPath@.size() && !@f.collPath@.empty()) @f.sb@ += @f.followedByLit@;
+    if (_i@f.scopeId@ + 1 >= (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@).size() && !(@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@).empty()) @f.sb@ += @f.followedByLit@;
     @end if@
     @end if@
 }
@@ -349,19 +350,19 @@ if (!_iter@f.scopeId@.empty() && _iter@f.scopeId@.back() == '\n') {
 @f.sb@ += @f.precededByLit@;
 @end if@
 @f.sb@ += _iter@f.scopeId@;
-if (_i@f.scopeId@ + 1 < @f.collPath@.size()) {
+if (_i@f.scopeId@ + 1 < (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@).size()) {
     @f.sb@ += @f.sepLit@;
 } else {
     @if f.hasFollowed@
-    if (!@f.collPath@.empty()) @f.sb@ += @f.followedByLit@;
+    if (!(@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@).empty()) @f.sb@ += @f.followedByLit@;
     @end if@
     if (_stripped@f.scopeId@) @f.sb@ += "\n";
 }
 END
 
 template emit_for_block(f: ForData)
-for (size_t _i@f.scopeId@ = 0; _i@f.scopeId@ < @f.collPath@.size(); _i@f.scopeId@++) {
-    [[maybe_unused]] const auto& @f.varName@ = @f.collPath@[_i@f.scopeId@];
+for (size_t _i@f.scopeId@ = 0; _i@f.scopeId@ < (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@).size(); _i@f.scopeId@++) {
+    [[maybe_unused]] const auto& @f.varName@ = (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@)[_i@f.scopeId@];
     @if f.hasEnum@
     int @f.enumeratorName@ = (int)_i@f.scopeId@;
     @end if@
@@ -378,7 +379,7 @@ for (size_t _i@f.scopeId@ = 0; _i@f.scopeId@ < @f.collPath@.size(); _i@f.scopeId
     @end if@
     @f.sb@ += _iter@f.scopeId@;
     @if f.hasFollowed@
-    if (_i@f.scopeId@ + 1 >= @f.collPath@.size() && !@f.collPath@.empty()) @f.sb@ += @f.followedByLit@;
+    if (_i@f.scopeId@ + 1 >= (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@).size() && !(@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@).empty()) @f.sb@ += @f.followedByLit@;
     @end if@
     @end if@
 }
@@ -398,8 +399,8 @@ END
 
 template emit_aligned_for(f: ForData)
 std::vector<std::vector<std::string>> _rows@f.scopeId@;
-for (size_t _i@f.scopeId@ = 0; _i@f.scopeId@ < @f.collPath@.size(); _i@f.scopeId@++) {
-    [[maybe_unused]] const auto& @f.varName@ = @f.collPath@[_i@f.scopeId@];
+for (size_t _i@f.scopeId@ = 0; _i@f.scopeId@ < (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@).size(); _i@f.scopeId@++) {
+    [[maybe_unused]] const auto& @f.varName@ = (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@)[_i@f.scopeId@];
     @if f.hasEnum@
     int @f.enumeratorName@ = (int)_i@f.scopeId@;
     @end if@
@@ -510,28 +511,15 @@ std::string _blk@c.scopeId@;
 @s.sb@ += _tppBlockIndent(_blk@c.scopeId@, @s.insertCol@);
 END
 
-template emit_switch_default(s: SwitchData, c: CaseData)
-    default: {
-        @if s.isBlock@
-        @emit_switch_case_block(s, c)@
-        @else@
-        @for instr in c.body@
-        @emit_instr(instr)@
-        @end for@
-        @end if@
-        break;
-    }
-END
-
 template emit_switch(s: SwitchData)
-switch (@s.exprPath@.value.index()) {
+switch ((@cpp_value_path(s.exprPath, s.exprIsRecursive, s.exprIsOptional)@).value.index()) {
 @for c in s.cases@
     case @c.variantIndex@: { // @c.tag@
-        @if c.hasBinding@
+        @if c.bindingName@
         @if c.isRecursivePayload@
-        [[maybe_unused]] const auto& @c.bindingName@ = *std::get<@c.variantIndex@>(@s.exprPath@.value);
+        [[maybe_unused]] const auto& @c.bindingName@ = *std::get<@c.variantIndex@>((@cpp_value_path(s.exprPath, s.exprIsRecursive, s.exprIsOptional)@).value);
         @else@
-        [[maybe_unused]] const auto& @c.bindingName@ = std::get<@c.variantIndex@>(@s.exprPath@.value);
+        [[maybe_unused]] const auto& @c.bindingName@ = std::get<@c.variantIndex@>((@cpp_value_path(s.exprPath, s.exprIsRecursive, s.exprIsOptional)@).value);
         @end if@
         @end if@
         @if s.isBlock@
@@ -544,94 +532,7 @@ switch (@s.exprPath@.value.index()) {
         break;
     }
 @end for@
-@if s.defaultCase@
-@emit_switch_default(s, s.defaultCase)@
-@end if@
 }
-END
-
-// ── Render Via ───────────────────────────────────────────────────────────────
-
-template emit_render_via_dispatch(r: RenderViaData)
-std::string _res@r.scopeId@;
-std::visit([&](const auto& _sv) {
-@for ovl in r.overloads@
-@if ovl.payloadType@
-    if constexpr (std::is_same_v<std::decay_t<decltype(_sv)>, @cpp_type(ovl.payloadType)@>) {
-@if r.policyArg@
-        _res@r.scopeId@ = @r.functionName@(_sv, @cpp_policy_ref(r.policyArg)@);
-@else@
-        _res@r.scopeId@ = @r.functionName@(_sv);
-@end if@
-    }
-@else@
-    if constexpr (std::is_same_v<std::decay_t<decltype(_sv)>, @r.enumTypeName@_@ovl.tag@>) {
-@if r.policyArg@
-        _res@r.scopeId@ = @r.functionName@(@cpp_policy_ref(r.policyArg)@);
-@else@
-        _res@r.scopeId@ = @r.functionName@();
-@end if@
-    }
-@end if@
-@end for@
-}, _item@r.scopeId@.value);
-END
-
-template emit_render_via_single(r: RenderViaData)
-const auto& _item@r.scopeId@ = @r.collPath@;
-@if r.isSingleOverload@
-@if r.policyArg@
-std::string _res@r.scopeId@ = @r.functionName@(_item@r.scopeId@, @cpp_policy_ref(r.policyArg)@);
-@else@
-std::string _res@r.scopeId@ = @r.functionName@(_item@r.scopeId@);
-@end if@
-@else@
-@emit_render_via_dispatch(r)@
-@end if@
-@if r.hasPreceded@
-@r.sb@ += @r.precededByLit@;
-@end if@
-@r.sb@ += _res@r.scopeId@;
-@if r.hasFollowed@
-@r.sb@ += @r.followedByLit@;
-@end if@
-END
-
-template emit_render_via_collection(r: RenderViaData)
-for (size_t _i@r.scopeId@ = 0; _i@r.scopeId@ < @r.collPath@.size(); _i@r.scopeId@++) {
-    const auto& _item@r.scopeId@ = @r.collPath@[_i@r.scopeId@];
-    @if r.isSingleOverload@
-@if r.policyArg@
-    std::string _res@r.scopeId@ = @r.functionName@(_item@r.scopeId@, @cpp_policy_ref(r.policyArg)@);
-@else@
-    std::string _res@r.scopeId@ = @r.functionName@(_item@r.scopeId@);
-@end if@
-    @else@
-    @emit_render_via_dispatch(r)@
-    @end if@
-    @if r.hasPreceded@
-    @r.sb@ += @r.precededByLit@;
-    @end if@
-    @r.sb@ += _res@r.scopeId@;
-    @if r.hasSep@
-    if (_i@r.scopeId@ + 1 < @r.collPath@.size()) @r.sb@ += @r.sepLit@;
-    @if r.hasFollowed@
-    else if (!@r.collPath@.empty()) @r.sb@ += @r.followedByLit@;
-    @end if@
-    @else@
-    @if r.hasFollowed@
-    if (_i@r.scopeId@ + 1 >= @r.collPath@.size() && !@r.collPath@.empty()) @r.sb@ += @r.followedByLit@;
-    @end if@
-    @end if@
-}
-END
-
-template emit_render_via(r: RenderViaData)
-@if r.isCollection@
-@emit_render_via_collection(r)@
-@else@
-@emit_render_via_single(r)@
-@end if@
 END
 
 // ── Policy helpers ───────────────────────────────────────────────────────────

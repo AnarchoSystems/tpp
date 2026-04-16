@@ -56,6 +56,7 @@ namespace tpp
     struct CompileOptions
     {
         bool includeSourceRanges = false;
+        bool includeRawTypedefs = true;
     };
 
     struct LexedTypeSource

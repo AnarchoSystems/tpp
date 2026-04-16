@@ -1868,7 +1868,9 @@ namespace tpp::compiler
                         {
                             if (it->switchHasDefault)
                                 addTemplateDiagnostic(diags, bodyStartLine, li, seg, "default branch must be the last branch in a switch");
-                            it->switchCaseTags.insert(d->tag);
+                            auto [_, inserted] = it->switchCaseTags.insert(d->tag);
+                            if (!inserted)
+                                addTemplateDiagnostic(diags, bodyStartLine, li, seg, "duplicate case tag '" + d->tag + "'");
                             break;
                         }
                     }
@@ -1910,7 +1912,9 @@ namespace tpp::compiler
                                 continue;
                             if (it->switchHasDefault)
                                 addTemplateDiagnostic(diags, bodyStartLine, li, seg, "default branch must be the last branch in a switch");
-                            it->switchCaseTags.insert(d->exprText);
+                            auto [_, inserted] = it->switchCaseTags.insert(d->exprText);
+                            if (!inserted)
+                                addTemplateDiagnostic(diags, bodyStartLine, li, seg, "duplicate case tag '" + d->exprText + "'");
                             break;
                         }
                         continue; // Pointfree variant visitor inside switch: @render Tag via fn@

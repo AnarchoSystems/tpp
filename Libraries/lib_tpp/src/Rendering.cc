@@ -51,8 +51,8 @@ namespace tpp
             CompiledRegexStep step;
             step.rx = std::regex(r.regex);
             step.replace = r.replace;
-            step.compiled_replace = r.compiledReplace.empty() && !r.replace.empty()
-                ? compiler::precompile_replace(r.replace) : r.compiledReplace;
+            if (!r.replace.empty())
+                step.compiled_replace = compiler::precompile_replace(r.replace);
             cp.require.push_back(std::move(step));
         }
         cp.replacements = def.replacements;
@@ -73,7 +73,6 @@ namespace tpp
         std::string activePolicy;
         const CompiledPolicy *activePolicyPtr = nullptr;
         std::map<std::string, CompiledPolicy> compiledPolicies;
-        std::unordered_map<std::string, std::vector<size_t>> functionIndex;
         std::string renderError;
         std::vector<RenderMapping> *trackingOut = nullptr;
 
@@ -158,94 +157,6 @@ namespace tpp
     // Forward declarations
     static std::string renderInstructions(const std::vector<Instruction> &instrs, RenderContext &ctx);
     static std::string renderBlockBody(const std::vector<Instruction> &instrs, RenderContext &ctx, int insertCol);
-
-    static bool jsonMatchesType(const nlohmann::json &value, const TypeKind &type)
-    {
-        switch (type.value.index())
-        {
-        case 0:
-            return value.is_string();
-        case 1:
-            return value.is_number_integer();
-        case 2:
-            return value.is_boolean();
-        case 3:
-            return value.is_object();
-        case 4:
-            return value.is_array();
-        case 5:
-            return value.is_null() || jsonMatchesType(value, *std::get<5>(type.value));
-        default:
-            return false;
-        }
-    }
-
-    static const FunctionDef *resolveRenderViaTarget(const std::vector<const FunctionDef *> &overloads,
-                                                     const nlohmann::json &value,
-                                                     nlohmann::json &boundValue)
-    {
-        if (overloads.size() == 1 && overloads[0]->params.size() == 1)
-        {
-            boundValue = value;
-            return overloads[0];
-        }
-
-        if (!value.is_object())
-            return nullptr;
-
-        for (auto it = value.begin(); it != value.end(); ++it)
-        {
-            const auto &payload = it.value();
-            for (auto *overload : overloads)
-            {
-                if (overload->params.empty())
-                {
-                    if (payload.is_null() || (payload.is_object() && payload.empty()))
-                    {
-                        boundValue = payload;
-                        return overload;
-                    }
-                    continue;
-                }
-
-                if (overload->params.size() == 1 && overload->params[0].type && jsonMatchesType(payload, *overload->params[0].type))
-                {
-                    boundValue = payload;
-                    return overload;
-                }
-            }
-        }
-
-        return nullptr;
-    }
-
-    static std::string renderRenderViaTarget(const FunctionDef &targetFunc,
-                                             const nlohmann::json &boundValue,
-                                             RenderContext &ctx)
-    {
-        if (!targetFunc.params.empty())
-            ctx.pushBinding(targetFunc.params[0].name, boundValue);
-
-        std::string savedPolicy = ctx.activePolicy;
-        const CompiledPolicy *savedPolicyPtr = ctx.activePolicyPtr;
-        if (!targetFunc.policy.empty())
-        {
-            ctx.activePolicy = targetFunc.policy;
-            ctx.activePolicyPtr = ctx.findPolicy(targetFunc.policy);
-        }
-
-        std::string rendered = renderInstructions(*targetFunc.body, ctx);
-        ctx.activePolicy = savedPolicy;
-        ctx.activePolicyPtr = savedPolicyPtr;
-
-        if (!rendered.empty() && rendered.back() == '\n')
-            rendered.pop_back();
-
-        if (!targetFunc.params.empty())
-            ctx.popBinding();
-
-        return rendered;
-    }
 
     // Render instructions, splitting output at AlignCell markers.
     // Within an aligned for-loop body, each cell typically contains only
@@ -469,7 +380,7 @@ namespace tpp
                             ctx.activePolicyPtr = ctx.findPolicy(arg->policy);
                         }
 
-                        if (arg->hasAlign)
+                        if (arg->alignSpec.has_value())
                         {
                             // ── Alignment rendering ──
                             std::vector<std::vector<std::string>> rows;
@@ -477,10 +388,10 @@ namespace tpp
                             for (size_t i = 0; i < collection.size(); ++i)
                             {
                                 ctx.pushBinding(arg->varName, collection[i]);
-                                if (!arg->enumeratorName.empty())
-                                    ctx.pushBinding(arg->enumeratorName, (int64_t)i);
+                                if (arg->enumeratorName.has_value())
+                                    ctx.pushBinding(*arg->enumeratorName, (int64_t)i);
                                 rows.push_back(renderInstructionsCells(*arg->body, ctx));
-                                if (!arg->enumeratorName.empty())
+                                if (arg->enumeratorName.has_value())
                                     ctx.popBinding();
                                 ctx.popBinding();
                             }
@@ -488,9 +399,9 @@ namespace tpp
                             for (const auto &row : rows)
                                 numCols = std::max(numCols, row.size());
                             std::vector<char> colSpec(numCols, 'l');
-                            if (!arg->alignSpec.empty())
+                            if (arg->alignSpec.has_value() && !arg->alignSpec->empty())
                             {
-                                const std::string &s = arg->alignSpec;
+                                const std::string &s = *arg->alignSpec;
                                 if (s.size() == 1)
                                     std::fill(colSpec.begin(), colSpec.end(), s[0]);
                                 else
@@ -521,12 +432,16 @@ namespace tpp
                                         iterResult += row[ci];
                                     }
                                 }
-                                result += arg->precededBy;
+                                if (arg->precededBy.has_value())
+                                    result += *arg->precededBy;
                                 result += iterResult;
                                 if (i + 1 < rows.size())
-                                    result += arg->sep;
-                                else if (!arg->followedBy.empty())
-                                    result += arg->followedBy;
+                                {
+                                    if (arg->sep.has_value())
+                                        result += *arg->sep;
+                                }
+                                else if (arg->followedBy.has_value())
+                                    result += *arg->followedBy;
                             }
                         }
                         else
@@ -534,18 +449,18 @@ namespace tpp
                             for (size_t i = 0; i < collection.size(); ++i)
                             {
                                 ctx.pushBinding(arg->varName, collection[i]);
-                                if (!arg->enumeratorName.empty())
-                                    ctx.pushBinding(arg->enumeratorName, (int64_t)i);
+                                if (arg->enumeratorName.has_value())
+                                    ctx.pushBinding(*arg->enumeratorName, (int64_t)i);
                                 std::string iterResult;
                                 if (arg->isBlock)
                                     iterResult = renderBlockBody(*arg->body, ctx, arg->insertCol);
                                 else
                                     iterResult = renderInstructions(*arg->body, ctx);
-                                if (!arg->enumeratorName.empty())
+                                if (arg->enumeratorName.has_value())
                                     ctx.popBinding();
                                 ctx.popBinding();
                                 bool strippedNl = false;
-                                if (arg->isBlock && !arg->sep.empty() &&
+                                if (arg->isBlock && arg->sep.has_value() && !arg->sep->empty() &&
                                     !iterResult.empty() && iterResult.back() == '\n')
                                 {
                                     auto nlCount = std::count(iterResult.begin(), iterResult.end(), '\n');
@@ -555,14 +470,18 @@ namespace tpp
                                         strippedNl = true;
                                     }
                                 }
-                                result += arg->precededBy;
+                                if (arg->precededBy.has_value())
+                                    result += *arg->precededBy;
                                 result += iterResult;
                                 if (i + 1 < collection.size())
-                                    result += arg->sep;
+                                {
+                                    if (arg->sep.has_value())
+                                        result += *arg->sep;
+                                }
                                 else
                                 {
-                                    if (!arg->followedBy.empty() && !collection.empty())
-                                        result += arg->followedBy;
+                                    if (arg->followedBy.has_value() && !collection.empty())
+                                        result += *arg->followedBy;
                                     if (strippedNl)
                                         result += "\n";
                                 }
@@ -610,30 +529,20 @@ namespace tpp
                             ctx.activePolicy = arg->policy;
                             ctx.activePolicyPtr = ctx.findPolicy(arg->policy);
                         }
-                        bool matchedCase = false;
                         for (const auto &c : *arg->cases)
                         {
                             if (val.contains(c.tag))
                             {
-                                matchedCase = true;
-                                if (!c.bindingName.empty())
-                                    ctx.pushBinding(c.bindingName, val[c.tag]);
+                                if (c.bindingName.has_value())
+                                    ctx.pushBinding(c.bindingName->name, val[c.tag]);
                                 if (arg->isBlock)
                                     result += renderBlockBody(*c.body, ctx, arg->insertCol);
                                 else
                                     result += renderInstructions(*c.body, ctx);
-                                if (!c.bindingName.empty())
+                                if (c.bindingName.has_value())
                                     ctx.popBinding();
                                 break;
                             }
-                        }
-                        if (!matchedCase && arg->defaultCase)
-                        {
-                            const auto &defaultCase = *arg->defaultCase;
-                            if (arg->isBlock)
-                                result += renderBlockBody(*defaultCase.body, ctx, arg->insertCol);
-                            else
-                                result += renderInstructions(*defaultCase.body, ctx);
                         }
                         ctx.activePolicy = savedPolicy;
                         ctx.activePolicyPtr = savedPolicyPtr;
@@ -641,81 +550,44 @@ namespace tpp
                 }
                 else if constexpr (std::is_same_v<T, CallInstr>)
                 {
-                    const FunctionDef *targetFunc = nullptr;
-                    if (arg.functionIndex >= 0 && arg.functionIndex < static_cast<int>(ctx.functions.size()))
-                        targetFunc = &ctx.functions[arg.functionIndex];
-                    if (targetFunc)
+                    if (arg.functionIndex < 0 || arg.functionIndex >= static_cast<int>(ctx.functions.size()))
                     {
-                        for (size_t i = 0; i < arg.arguments.size() && i < targetFunc->params.size(); ++i)
-                        {
-                            auto val = ctx.resolve(arg.arguments[i]);
-                            ctx.pushBinding(targetFunc->params[i].name, val);
-                        }
-                        std::string savedPolicy = ctx.activePolicy;
-                        const CompiledPolicy *savedPolicyPtr = ctx.activePolicyPtr;
-                        if (!targetFunc->policy.empty())
-                        {
-                            ctx.activePolicy = targetFunc->policy;
-                            ctx.activePolicyPtr = ctx.findPolicy(targetFunc->policy);
-                        }
-                        std::string callResult = renderInstructions(*targetFunc->body, ctx);
-                        ctx.activePolicy = savedPolicy;
-                        ctx.activePolicyPtr = savedPolicyPtr;
-                        if (!callResult.empty() && callResult.back() == '\n')
-                            callResult.pop_back();
-                        result += callResult;
-                        for (size_t i = 0; i < arg.arguments.size() && i < targetFunc->params.size(); ++i)
-                            ctx.popBinding();
+                        ctx.renderError = "invalid call target index for function '" + arg.functionName + "'";
+                        return;
                     }
-                }
-                else if constexpr (std::is_same_v<T, RenderViaInstr>)
-                {
-                    auto value = ctx.resolve(arg.collection);
-                    if (value.is_array() || value.is_object())
+
+                    const FunctionDef &targetFunc = ctx.functions[arg.functionIndex];
+                    if (targetFunc.name != arg.functionName)
                     {
-                        std::string savedPolicy = ctx.activePolicy;
-                        const CompiledPolicy *savedPolicyPtr = ctx.activePolicyPtr;
-                        if (!arg.policy.empty())
-                        {
-                            ctx.activePolicy = arg.policy;
-                            ctx.activePolicyPtr = ctx.findPolicy(arg.policy);
-                        }
-                        std::vector<const FunctionDef *> overloads;
-                        auto rvIt = ctx.functionIndex.find(arg.functionName);
-                        if (rvIt != ctx.functionIndex.end())
-                            for (size_t idx : rvIt->second)
-                                overloads.push_back(&ctx.functions[idx]);
-
-                        auto appendRenderedItem = [&](const nlohmann::json &item, bool hasMore)
-                        {
-                            nlohmann::json boundValue;
-                            const FunctionDef *targetFunc = resolveRenderViaTarget(overloads, item, boundValue);
-                            if (!targetFunc)
-                                return;
-
-                            std::string iterResult = renderRenderViaTarget(*targetFunc, boundValue, ctx);
-                            result += arg.precededBy;
-                            result += iterResult;
-                            if (hasMore)
-                                result += arg.sep;
-                            else if (!arg.followedBy.empty())
-                                result += arg.followedBy;
-                        };
-
-                        if (value.is_array())
-                        {
-                            for (size_t i = 0; i < value.size(); ++i)
-                            {
-                                appendRenderedItem(value[i], i + 1 < value.size());
-                            }
-                        }
-                        else
-                        {
-                            appendRenderedItem(value, false);
-                        }
-                        ctx.activePolicy = savedPolicy;
-                        ctx.activePolicyPtr = savedPolicyPtr;
+                        ctx.renderError = "call target mismatch for function '" + arg.functionName + "'";
+                        return;
                     }
+                    if (arg.arguments.size() != targetFunc.params.size())
+                    {
+                        ctx.renderError = "call argument count mismatch for function '" + arg.functionName + "'";
+                        return;
+                    }
+
+                    for (size_t i = 0; i < arg.arguments.size(); ++i)
+                    {
+                        auto val = ctx.resolve(arg.arguments[i]);
+                        ctx.pushBinding(targetFunc.params[i].name, val);
+                    }
+                    std::string savedPolicy = ctx.activePolicy;
+                    const CompiledPolicy *savedPolicyPtr = ctx.activePolicyPtr;
+                    if (!targetFunc.policy.empty())
+                    {
+                        ctx.activePolicy = targetFunc.policy;
+                        ctx.activePolicyPtr = ctx.findPolicy(targetFunc.policy);
+                    }
+                    std::string callResult = renderInstructions(*targetFunc.body, ctx);
+                    ctx.activePolicy = savedPolicy;
+                    ctx.activePolicyPtr = savedPolicyPtr;
+                    if (!callResult.empty() && callResult.back() == '\n')
+                        callResult.pop_back();
+                    result += callResult;
+                    for (size_t i = 0; i < arg.arguments.size(); ++i)
+                        ctx.popBinding();
                 }
             }, instr.value);
         }
@@ -883,8 +755,6 @@ namespace tpp
                 ctx.compiledPolicies[pd.tag] = compilePolicy(pd);
             if (!ctx.activePolicy.empty() && ctx.activePolicy != "none")
                 ctx.activePolicyPtr = ctx.findPolicy(ctx.activePolicy);
-            for (size_t fi = 0; fi < ir.functions.size(); ++fi)
-                ctx.functionIndex[ir.functions[fi].name].push_back(fi);
             ctx.trackingOut = tracking;
 
             for (const auto &p : function.params)

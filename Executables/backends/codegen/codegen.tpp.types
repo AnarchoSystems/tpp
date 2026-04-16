@@ -49,6 +49,8 @@ struct ForData
 {
     scopeId : int;
     collPath : string;
+    collIsRecursive : bool;
+    collIsOptional : bool;
     elemType : TypeKind;
     varName : string;
     hasEnum : bool;
@@ -75,8 +77,7 @@ struct CaseData
 {
     tag : string;
     tagLit : string;
-    bindingName : string;
-    hasBinding : bool;
+    bindingName : optional<string>;
     payloadType : optional<TypeKind>;
     body : list<Instruction>;
     scopeId : int;
@@ -103,9 +104,10 @@ struct IfData
 struct SwitchData
 {
     exprPath : string;
+    exprIsRecursive : bool;
+    exprIsOptional : bool;
     enumTypeName : string;
     cases : list<CaseData>;
-    defaultCase : optional<CaseData>;
     isBlock : bool;
     insertCol : int;
     sb : string;
@@ -134,35 +136,6 @@ struct CallData
     needsTry : bool;
 }
 
-struct RenderViaOverload
-{
-    tag : string;
-    tagLit : string;
-    isFirst : bool;
-    payloadType : optional<TypeKind>;
-}
-
-struct RenderViaData
-{
-    scopeId : int;
-    collPath : string;
-    isCollection : bool;
-    elemType : TypeKind;
-    enumTypeName : string;
-    functionName : string;
-    hasSep : bool;
-    sepLit : string;
-    hasFollowed : bool;
-    followedByLit : string;
-    hasPreceded : bool;
-    precededByLit : string;
-    sb : string;
-    isSingleOverload : bool;
-    overloads : list<RenderViaOverload>;
-    policyArg : optional<PolicyRef>;
-    needsTry : bool;
-}
-
 enum Instruction
 {
     Emit(EmitData),
@@ -171,8 +144,7 @@ enum Instruction
     For(ForData),
     If(IfData),
     Switch(SwitchData),
-    Call(CallData),
-    RenderVia(RenderViaData)
+    Call(CallData)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

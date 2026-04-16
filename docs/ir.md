@@ -59,7 +59,7 @@ The IR is produced only after the compiler has already done the language-level w
 - template parameters and expression paths have been resolved and type-checked
 - schema definitions have been validated
 - recursive schema edges have been annotated
-- template bodies have been lowered into explicit instruction nodes
+- template bodies have been lowered into explicit instruction nodes, including lowering `render via` sugar into `For`, `Switch`, `Call`, and literal `Emit` steps as needed
 - policies have been parsed into structured definitions
 
 That means a backend does not need to rediscover field access rules, optional semantics, switch structure, or policy declarations from raw source files. Those concerns have already been compiled into the IR.
@@ -112,7 +112,7 @@ A named record type with ordered fields.
 | `fields` | array of [FieldDef](#fielddef) | Ordered list of fields |
 | `doc` | string | Doc comment text (empty string if none) |
 | `sourceRange` | [SourceRange](#sourcerange) or null | Source location (present when `--source-ranges` is set) |
-| `rawTypedefs` | string | The original tpp type definition source text, including doc comments |
+| `rawTypedefs` | string | The original tpp type definition source text, including doc comments; omitted when raw typedef emission is disabled during compile |
 
 #### FieldDef
 
@@ -136,7 +136,7 @@ A tagged union (sum type) with named variants.
 | `variants` | array of [VariantDef](#variantdef) | Ordered list of variants |
 | `doc` | string | Doc comment text |
 | `sourceRange` | [SourceRange](#sourcerange) or null | Source location |
-| `rawTypedefs` | string | The original tpp type definition source text, including doc comments |
+| `rawTypedefs` | string | The original tpp type definition source text, including doc comments; omitted when raw typedef emission is disabled during compile |
 
 #### VariantDef
 
@@ -189,7 +189,6 @@ The `body` of a `FunctionDef` (and the bodies of `For`, `If`, `Switch`, etc.) is
 | `If` | [IfInstr](#ifinstr) | Conditional |
 | `Switch` | [SwitchInstr](#switchinstr) | Pattern match on a variant |
 | `Call` | [CallInstr](#callinstr) | Direct function call |
-| `RenderVia` | [RenderViaInstr](#renderviainstr) | Call a function for each element in a collection |
 
 ### ExprInfo
 
@@ -199,8 +198,10 @@ All expression references in instructions carry resolved type information:
 |---|---|---|
 | `path` | string | Dot-separated field access path (e.g. `"item.name"`) |
 | `type` | [TypeKind](#typekind) | Resolved type of the expression |
+| `isRecursive` | bool | Whether generated code must dereference recursive storage before using the value |
+| `isOptional` | bool | Whether generated code must unwrap optional storage before using the value |
 
-`ExprInfo` is intentionally simple. It records the resolved access path and the resolved type, not the original source syntax. Consumers should treat it as a compiled access plan, not as a lossless source-level expression tree.
+`ExprInfo` is intentionally execution-oriented. It records the resolved access path, the resolved type, and the storage annotations needed by downstream runtimes and code generators. Consumers should treat it as a compiled access plan, not as a lossless source-level expression tree.
 
 ### EmitInstr
 
@@ -226,17 +227,18 @@ Loop over each element of a collection expression.
 | Field | Type | Description |
 |---|---|---|
 | `varName` | string | Loop variable name |
-| `enumeratorName` | string | Enumerator variable for the loop (e.g. `"_enum"`) |
+| `enumeratorName` | string, optional | Enumerator variable for the loop (e.g. `"_enum"`) |
 | `collection` | [ExprInfo](#exprinfo) | The collection to iterate |
 | `body` | array of Instruction | Loop body |
-| `sep` | string | Separator text emitted between iterations (empty for none) |
-| `followedBy` | string | Text emitted after the last iteration if the collection is non-empty |
-| `precededBy` | string | Text emitted before the first iteration if the collection is non-empty |
+| `sep` | string, optional | Separator text emitted between iterations |
+| `followedBy` | string, optional | Text emitted after the last iteration if the collection is non-empty |
+| `precededBy` | string, optional | Text emitted before the first iteration if the collection is non-empty |
 | `isBlock` | bool | Whether the for loop was on a block line (affects whitespace handling) |
 | `insertCol` | int | Column position where block content is inserted (for indentation) |
 | `policy` | string | Policy tag for this scope |
-| `hasAlign` | bool | Whether alignment is active in this loop |
-| `alignSpec` | string | Alignment specification string (e.g. `"llr"` for left/left/right) |
+| `alignSpec` | string, optional | Alignment specification string (e.g. `"llr"` for left/left/right); present when alignment is active |
+
+Absent optional loop fields are omitted from the JSON rather than encoded as empty-string sentinels.
 
 ### IfInstr
 
@@ -258,20 +260,29 @@ Pattern match on a variant (enum) expression.
 | Field | Type | Description |
 |---|---|---|
 | `expr` | [ExprInfo](#exprinfo) | The expression to match |
-| `cases` | array of [CaseInstr](#caseinstr) | Case branches |
-| `defaultCase` | [CaseInstr](#caseinstr) or null | Default branch, if present |
+| `cases` | array of [CaseInstr](#caseinstr) | Exhaustive case branches in enum declaration order |
 | `isBlock` | bool | Whether the switch was on a block line |
 | `insertCol` | int | Column position for block content insertion |
 | `policy` | string | Policy tag for this scope |
+
+The public IR does not carry a separate default branch. If the source switch contains a default, the compiler eagerly synthesizes per-variant cases using that body for any missing tags. If the source switch omits both an explicit case and a default for a tag, the compiler emits an empty body for that synthesized case.
 
 #### CaseInstr
 
 | Field | Type | Description |
 |---|---|---|
 | `tag` | string | Variant tag to match |
-| `bindingName` | string | Name bound to the payload (empty if no binding) |
+| `bindingName` | [CaseBinding](#casebinding) or null | Explicit payload binding information, if this case binds the payload |
 | `payloadType` | [TypeKind](#typekind) or null | Type of the payload (null for tag-only variants) |
+| `payloadIsRecursive` | bool | Whether the payload is stored behind recursive indirection in generated code |
 | `body` | array of Instruction | Case body |
+
+#### CaseBinding
+
+| Field | Type | Description |
+|---|---|---|
+| `name` | string | Variable name introduced by the case binding |
+| `isRecursive` | bool | Whether the bound payload originated from recursive storage |
 
 ### CallInstr
 
@@ -280,23 +291,10 @@ Direct call to another template function.
 | Field | Type | Description |
 |---|---|---|
 | `functionName` | string | Name of the function to call |
-| `functionIndex` | int | Resolved callee index chosen at compile time |
+| `functionIndex` | int | Resolved callee index chosen at compile time; always valid for the containing IR |
 | `arguments` | array of [ExprInfo](#exprinfo) | Arguments (must match the callee's parameter types) |
 
-### RenderViaInstr
-
-Call a function once for each element in a collection — a higher-order loop.
-
-| Field | Type | Description |
-|---|---|---|
-| `collection` | [ExprInfo](#exprinfo) | The collection to iterate |
-| `functionName` | string | Function to call per element |
-| `sep` | string | Separator between calls |
-| `followedBy` | string | Text after the last call |
-| `precededBy` | string | Text before the first call |
-| `isBlock` | bool | Whether the render-via was on a block line |
-| `insertCol` | int | Column position for block content insertion |
-| `policy` | string | Policy tag for this scope |
+The renderer does not perform overload resolution from `functionName`. It trusts `functionIndex` as the compiler-chosen target and may reject IR where the index is invalid or inconsistent with the name/signature.
 
 ---
 
@@ -337,7 +335,8 @@ The IR stores policies structurally rather than as opaque blobs. That allows run
 |---|---|---|
 | `regex` | string | Required pattern |
 | `replace` | string | Replacement template (empty for validation-only) |
-| `compiledReplace` | string | Pre-compiled replacement string (internal use) |
+
+Replacement precompilation is an internal runtime/codegen concern and is not serialized in the public IR.
 
 #### PolicyReplacement
 

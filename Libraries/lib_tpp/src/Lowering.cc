@@ -9,16 +9,26 @@ namespace tpp::compiler
     // Type environment — maps variable names to their TypeRef
     // ═══════════════════════════════════════════════════════════════════
 
+    struct BoundValue
+    {
+        TypeRef type;
+        bool isRecursive = false;
+        bool isOptional = false;
+    };
+
     struct TypeEnv
     {
         const SemanticModel &semanticModel;
-        std::vector<std::pair<std::string, TypeRef>> bindings;
+        std::vector<std::pair<std::string, BoundValue>> bindings;
 
         explicit TypeEnv(const SemanticModel &model) : semanticModel(model) {}
 
-        void push(const std::string &name, const TypeRef &type)
+        void push(const std::string &name,
+                  const TypeRef &type,
+                  bool isRecursive = false,
+                  bool isOptional = false)
         {
-            bindings.emplace_back(name, type);
+            bindings.emplace_back(name, BoundValue{type, isRecursive, isOptional});
         }
 
         void pop()
@@ -26,7 +36,7 @@ namespace tpp::compiler
             bindings.pop_back();
         }
 
-        const TypeRef *lookup(const std::string &name) const
+        const BoundValue *lookup(const std::string &name) const
         {
             for (auto it = bindings.rbegin(); it != bindings.rend(); ++it)
                 if (it->first == name)
@@ -36,10 +46,9 @@ namespace tpp::compiler
 
         // Look up a field on a NamedType (struct).
         // Returns nullptr if the type is not a struct or the field doesn't exist.
-        const TypeRef *lookupField(const TypeRef &baseType, const std::string &field) const
+        const FieldDef *lookupField(const TypeRef &baseType, const std::string &field) const
         {
-            const auto *fieldDef = semanticModel.find_field(baseType, field);
-            return fieldDef ? &fieldDef->type : nullptr;
+            return semanticModel.find_field(baseType, field);
         }
     };
 
@@ -47,15 +56,70 @@ namespace tpp::compiler
     // Expression helpers
     // ═══════════════════════════════════════════════════════════════════
 
-    // Flatten an AST Expression to a dotted path string.
-    static std::string flattenExpr(const Expression &e)
+    static bool isOptionalTypeRef(const TypeRef &type)
+    {
+        return std::holds_alternative<std::shared_ptr<OptionalType>>(type);
+    }
+
+    static std::string typeRefToString(const TypeRef &type)
+    {
+        return std::visit([&](const auto &arg) -> std::string
+        {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, StringType>)
+                return "string";
+            else if constexpr (std::is_same_v<T, IntType>)
+                return "int";
+            else if constexpr (std::is_same_v<T, BoolType>)
+                return "bool";
+            else if constexpr (std::is_same_v<T, NamedType>)
+                return arg.name;
+            else if constexpr (std::is_same_v<T, std::shared_ptr<ListType>>)
+                return "list<" + typeRefToString(arg->elementType) + ">";
+            else
+                return "optional<" + typeRefToString(arg->innerType) + ">";
+        }, type);
+    }
+
+    struct ResolvedExpr
+    {
+        std::string path;
+        TypeRef type;
+        bool isRecursive = false;
+        bool isOptional = false;
+    };
+
+    static ResolvedExpr resolvePublicExpr(const Expression &e, const TypeEnv &env)
     {
         if (auto *v = std::get_if<Variable>(&e))
-            return v->name;
+        {
+            if (const BoundValue *binding = env.lookup(v->name))
+                return {v->name, binding->type, binding->isRecursive, binding->isOptional};
+            return {v->name, TypeRef{StringType{}}, false, false};
+        }
+
         auto *fa = std::get_if<std::shared_ptr<FieldAccess>>(&e);
         if (fa && *fa)
-            return flattenExpr((*fa)->base) + "." + (*fa)->field;
-        return "";
+        {
+            ResolvedExpr base = resolvePublicExpr((*fa)->base, env);
+            TypeRef baseType = base.type;
+            if (auto *opt = std::get_if<std::shared_ptr<OptionalType>>(&baseType))
+                baseType = (*opt)->innerType;
+
+            if (const auto *fieldDef = env.lookupField(baseType, (*fa)->field))
+            {
+                return {
+                    base.path + "." + (*fa)->field,
+                    fieldDef->type,
+                    fieldDef->recursive,
+                    isOptionalTypeRef(fieldDef->type)
+                };
+            }
+
+            return {base.path + "." + (*fa)->field, TypeRef{StringType{}}, false, false};
+        }
+
+        return {"", TypeRef{StringType{}}, false, false};
     }
 
     // Resolve the type of an expression given the current type environment.
@@ -65,8 +129,8 @@ namespace tpp::compiler
     {
         if (auto *v = std::get_if<Variable>(&e))
         {
-            const TypeRef *t = env.lookup(v->name);
-            return t ? *t : TypeRef{StringType{}};
+            const BoundValue *binding = env.lookup(v->name);
+            return binding ? binding->type : TypeRef{StringType{}};
         }
         auto *fa = std::get_if<std::shared_ptr<FieldAccess>>(&e);
         if (fa && *fa)
@@ -75,18 +139,33 @@ namespace tpp::compiler
             // Unwrap optional for field access (tpp allows x.field inside @if x@)
             if (auto *opt = std::get_if<std::shared_ptr<OptionalType>>(&baseType))
                 baseType = (*opt)->innerType;
-            const TypeRef *fieldType = env.lookupField(baseType, (*fa)->field);
-            return fieldType ? *fieldType : TypeRef{StringType{}};
+            const FieldDef *fieldDef = env.lookupField(baseType, (*fa)->field);
+            return fieldDef ? fieldDef->type : TypeRef{StringType{}};
         }
         return TypeRef{StringType{}};
     }
 
-    static tpp::ExprInfo lowerPublicExpr(const Expression &e, const TypeEnv &env)
+    static tpp::ExprInfo lowerPublicExpr(const std::string &path,
+                                         const TypeRef &type,
+                                         bool isRecursive,
+                                         bool isOptional)
     {
         tpp::ExprInfo expr;
-        expr.path = flattenExpr(e);
-        expr.type = std::make_unique<tpp::TypeKind>(tpp::to_public_type(resolveExprType(e, env)));
+        expr.path = path;
+        expr.type = std::make_unique<tpp::TypeKind>(tpp::to_public_type(type));
+        expr.isRecursive = isRecursive;
+        expr.isOptional = isOptional;
         return expr;
+    }
+
+    static tpp::ExprInfo lowerPublicExpr(const ResolvedExpr &expr)
+    {
+        return lowerPublicExpr(expr.path, expr.type, expr.isRecursive, expr.isOptional);
+    }
+
+    static tpp::ExprInfo lowerPublicExpr(const Expression &e, const TypeEnv &env)
+    {
+        return lowerPublicExpr(resolvePublicExpr(e, env));
     }
 
     static TypeRef normalizeCallArgumentType(const TypeRef &type)
@@ -123,6 +202,205 @@ namespace tpp::compiler
         return -1;
     }
 
+    static std::vector<const TemplateFunction *> findTemplateOverloads(const std::vector<TemplateFunction> &functions,
+                                                                       const std::string &name)
+    {
+        std::vector<const TemplateFunction *> overloads;
+        for (const auto &function : functions)
+        {
+            if (function.name == name)
+                overloads.push_back(&function);
+        }
+        return overloads;
+    }
+
+    static bool hasWholeEnumRenderViaOverload(const std::vector<const TemplateFunction *> &overloads,
+                                              const TypeRef &enumType)
+    {
+        return overloads.size() == 1 &&
+               overloads[0]->params.size() == 1 &&
+               overloads[0]->params[0].type == enumType;
+    }
+
+    static std::optional<std::string> lowerOptionalString(const std::string &value)
+    {
+        if (value.empty())
+            return std::nullopt;
+        return value;
+    }
+
+    struct ResolvedCallArgument
+    {
+        std::string path;
+        TypeRef type;
+        bool isRecursive = false;
+        bool isOptional = false;
+    };
+
+    static tpp::CallInstr lowerResolvedCall(const std::string &functionName,
+                                            const std::vector<ResolvedCallArgument> &arguments,
+                                            const std::vector<TemplateFunction> &functions)
+    {
+        tpp::CallInstr callInstr;
+        callInstr.functionName = functionName;
+
+        std::vector<TypeRef> argumentTypes;
+        argumentTypes.reserve(arguments.size());
+        for (const auto &argument : arguments)
+        {
+            callInstr.arguments.push_back(lowerPublicExpr(argument.path,
+                                                         argument.type,
+                                                         argument.isRecursive,
+                                                         argument.isOptional));
+            argumentTypes.push_back(argument.type);
+        }
+
+        callInstr.functionIndex = resolveFunctionOverloadIndex(functions, functionName, argumentTypes);
+        if (callInstr.functionIndex < 0)
+        {
+            std::string argsText;
+            for (size_t i = 0; i < argumentTypes.size(); ++i)
+            {
+                if (i > 0)
+                    argsText += ", ";
+                argsText += typeRefToString(normalizeCallArgumentType(argumentTypes[i]));
+            }
+            throw std::runtime_error("failed to resolve overload for function '" + functionName +
+                                     "' with arguments (" + argsText + ")");
+        }
+        return callInstr;
+    }
+
+    static std::unique_ptr<tpp::SwitchInstr> lowerRenderViaSwitch(tpp::ExprInfo expr,
+                                                                  const EnumDef &enumDef,
+                                                                  const std::string &functionName,
+                                                                  const std::vector<TemplateFunction> &functions,
+                                                                  const std::optional<ResolvedCallArgument> &wholeEnumArgument,
+                                                                  const std::string &policy,
+                                                                  int &syntheticCounter)
+    {
+        auto switchInstr = std::make_unique<tpp::SwitchInstr>();
+        switchInstr->expr = std::move(expr);
+        switchInstr->isBlock = false;
+        switchInstr->insertCol = 0;
+        switchInstr->policy = policy;
+
+        auto cases = std::make_unique<std::vector<tpp::CaseInstr>>();
+        for (const auto &variant : enumDef.variants)
+        {
+            tpp::CaseInstr caseInstr;
+            caseInstr.tag = variant.tag;
+
+            std::vector<ResolvedCallArgument> callArguments;
+            if (wholeEnumArgument.has_value())
+            {
+                callArguments.push_back(*wholeEnumArgument);
+            }
+            else if (variant.payload.has_value())
+            {
+                std::string bindingName = "_render_via_payload" + std::to_string(syntheticCounter++);
+                caseInstr.payloadType = std::make_unique<tpp::TypeKind>(tpp::to_public_type(*variant.payload));
+                caseInstr.bindingName = tpp::CaseBinding{bindingName, variant.recursive};
+                caseInstr.payloadIsRecursive = variant.recursive;
+                callArguments.push_back({bindingName, *variant.payload, false, isOptionalTypeRef(*variant.payload)});
+            }
+            else
+            {
+                caseInstr.payloadIsRecursive = false;
+            }
+
+            auto body = std::make_unique<std::vector<tpp::Instruction>>();
+            body->push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<6>, lowerResolvedCall(functionName, callArguments, functions)}});
+            caseInstr.body = std::move(body);
+            cases->push_back(std::move(caseInstr));
+        }
+
+        switchInstr->cases = std::move(cases);
+        return switchInstr;
+    }
+
+    static std::vector<tpp::Instruction> lowerRenderViaNode(const RenderViaNode &node,
+                                                            const TypeEnv &env,
+                                                            const std::vector<TemplateFunction> &functions,
+                                                            int &syntheticCounter)
+    {
+        std::vector<tpp::Instruction> out;
+        ResolvedExpr collectionExpr = resolvePublicExpr(node.collectionExpr, env);
+        TypeRef collectionType = collectionExpr.type;
+        const auto *listType = std::get_if<std::shared_ptr<ListType>>(&collectionType);
+        TypeRef renderElemType = listType ? (*listType)->elementType : collectionType;
+        const EnumDef *renderEnum = env.semanticModel.resolve_enum(renderElemType);
+        auto overloads = findTemplateOverloads(functions, node.functionName);
+        bool wholeEnumOverload = renderEnum && hasWholeEnumRenderViaOverload(overloads, normalizeCallArgumentType(renderElemType));
+
+        if (listType)
+        {
+            auto forInstr = std::make_unique<tpp::ForInstr>();
+            std::string itemName = "_render_via_item" + std::to_string(syntheticCounter++);
+            forInstr->varName = itemName;
+            forInstr->collection = lowerPublicExpr(collectionExpr);
+
+            auto body = std::make_unique<std::vector<tpp::Instruction>>();
+            if (renderEnum && !wholeEnumOverload)
+            {
+                body->push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<5>, lowerRenderViaSwitch(lowerPublicExpr(itemName,
+                                                                                                                                           renderElemType,
+                                                                                                                                           false,
+                                                                                                                                           isOptionalTypeRef(renderElemType)),
+                                                                                                                         *renderEnum,
+                                                                                                                         node.functionName,
+                                                                                                                         functions,
+                                                                                                                         std::nullopt,
+                                                                                                                         "",
+                                                                                                                         syntheticCounter)}});
+            }
+            else
+            {
+                std::vector<ResolvedCallArgument> callArguments = {{itemName, renderElemType, false, isOptionalTypeRef(renderElemType)}};
+                body->push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<6>, lowerResolvedCall(node.functionName, callArguments, functions)}});
+            }
+
+            forInstr->body = std::move(body);
+            forInstr->sep = lowerOptionalString(node.sep);
+            forInstr->followedBy = lowerOptionalString(node.followedBy);
+            forInstr->precededBy = lowerOptionalString(node.precededBy);
+            forInstr->isBlock = false;
+            forInstr->insertCol = 0;
+            forInstr->policy = node.policy;
+            out.push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<3>, std::move(forInstr)}});
+            return out;
+        }
+
+        if (!node.precededBy.empty())
+            out.push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<0>, tpp::EmitInstr{node.precededBy}}});
+
+        ResolvedExpr resolvedExpr = resolvePublicExpr(node.collectionExpr, env);
+        auto expr = lowerPublicExpr(resolvedExpr);
+        if (renderEnum)
+        {
+            std::optional<ResolvedCallArgument> wholeEnumArgument;
+            if (wholeEnumOverload)
+                wholeEnumArgument = ResolvedCallArgument{resolvedExpr.path,
+                                                        renderElemType,
+                                                        resolvedExpr.isRecursive,
+                                                        resolvedExpr.isOptional};
+            out.push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<5>, lowerRenderViaSwitch(std::move(expr), *renderEnum, node.functionName, functions, wholeEnumArgument, node.policy, syntheticCounter)}});
+        }
+        else
+        {
+            std::vector<ResolvedCallArgument> callArguments = {{resolvedExpr.path,
+                                                                renderElemType,
+                                                                resolvedExpr.isRecursive,
+                                                                resolvedExpr.isOptional}};
+            out.push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<6>, lowerResolvedCall(node.functionName, callArguments, functions)}});
+        }
+
+        if (!node.followedBy.empty())
+            out.push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<0>, tpp::EmitInstr{node.followedBy}}});
+
+        return out;
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // AST → public IR lowering
     // ═══════════════════════════════════════════════════════════════════
@@ -130,12 +408,12 @@ namespace tpp::compiler
     static std::vector<tpp::Instruction> lowerPublicNodes(const std::vector<ASTNode> &nodes,
                                                           TypeEnv &env,
                                                           const std::vector<TemplateFunction> &functions,
-                                                          const std::map<std::string, int> &funcIndex);
+                                                          int &syntheticCounter);
 
     static std::vector<tpp::Instruction> lowerPublicNodes(const std::vector<ASTNode> &nodes,
                                                           TypeEnv &env,
                                                           const std::vector<TemplateFunction> &functions,
-                                                          const std::map<std::string, int> &funcIndex)
+                                                          int &syntheticCounter)
     {
         std::vector<tpp::Instruction> out;
         for (const auto &node : nodes)
@@ -171,11 +449,11 @@ namespace tpp::compiler
                     if (auto *listType = std::get_if<std::shared_ptr<ListType>>(&collectionType))
                         elementType = (*listType)->elementType;
 
-                    env.push(arg->varName, elementType);
+                    env.push(arg->varName, elementType, false, isOptionalTypeRef(elementType));
                     if (!arg->enumeratorName.empty())
                         env.push(arg->enumeratorName, TypeRef{IntType{}});
 
-                    auto body = lowerPublicNodes(arg->body, env, functions, funcIndex);
+                    auto body = lowerPublicNodes(arg->body, env, functions, syntheticCounter);
 
                     if (!arg->enumeratorName.empty())
                         env.pop();
@@ -183,17 +461,17 @@ namespace tpp::compiler
 
                     auto forInstr = std::make_unique<tpp::ForInstr>();
                     forInstr->varName = arg->varName;
-                    forInstr->enumeratorName = arg->enumeratorName;
+                    forInstr->enumeratorName = lowerOptionalString(arg->enumeratorName);
                     forInstr->collection = lowerPublicExpr(arg->collectionExpr, env);
                     forInstr->body = std::make_unique<std::vector<tpp::Instruction>>(std::move(body));
-                    forInstr->sep = arg->sep;
-                    forInstr->followedBy = arg->followedBy;
-                    forInstr->precededBy = arg->precededBy;
+                    forInstr->sep = lowerOptionalString(arg->sep);
+                    forInstr->followedBy = lowerOptionalString(arg->followedBy);
+                    forInstr->precededBy = lowerOptionalString(arg->precededBy);
                     forInstr->isBlock = arg->isBlock;
                     forInstr->insertCol = arg->insertCol;
                     forInstr->policy = arg->policy;
-                    forInstr->hasAlign = arg->hasAlign;
-                    forInstr->alignSpec = arg->alignSpec;
+                    if (arg->hasAlign)
+                        forInstr->alignSpec = arg->alignSpec;
                     out.push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<3>, std::move(forInstr)}});
                 }
                 else if constexpr (std::is_same_v<T, std::shared_ptr<IfNode>>)
@@ -201,8 +479,8 @@ namespace tpp::compiler
                     auto ifInstr = std::make_unique<tpp::IfInstr>();
                     ifInstr->condExpr = lowerPublicExpr(arg->condExpr, env);
                     ifInstr->negated = arg->negated;
-                    ifInstr->thenBody = std::make_unique<std::vector<tpp::Instruction>>(lowerPublicNodes(arg->thenBody, env, functions, funcIndex));
-                    ifInstr->elseBody = std::make_unique<std::vector<tpp::Instruction>>(lowerPublicNodes(arg->elseBody, env, functions, funcIndex));
+                    ifInstr->thenBody = std::make_unique<std::vector<tpp::Instruction>>(lowerPublicNodes(arg->thenBody, env, functions, syntheticCounter));
+                    ifInstr->elseBody = std::make_unique<std::vector<tpp::Instruction>>(lowerPublicNodes(arg->elseBody, env, functions, syntheticCounter));
                     ifInstr->isBlock = arg->isBlock;
                     ifInstr->insertCol = arg->insertCol;
                     out.push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<4>, std::move(ifInstr)}});
@@ -216,81 +494,81 @@ namespace tpp::compiler
                     switchInstr->expr = lowerPublicExpr(arg->expr, env);
                     auto cases = std::make_unique<std::vector<tpp::CaseInstr>>();
 
+                    std::map<std::string, const CaseNode *> explicitCases;
                     for (const auto &c : arg->cases)
-                    {
-                        tpp::CaseInstr caseInstr;
-                        caseInstr.tag = c.tag;
+                        explicitCases.emplace(c.tag, &c);
 
-                        std::optional<TypeRef> payloadType;
-                        if (enumDef)
+                    if (enumDef)
+                    {
+                        for (const auto &variant : enumDef->variants)
                         {
-                            for (const auto &variant : enumDef->variants)
+                            tpp::CaseInstr caseInstr;
+                            caseInstr.tag = variant.tag;
+                            caseInstr.payloadIsRecursive = variant.recursive && variant.payload.has_value();
+                            if (variant.payload.has_value())
+                                caseInstr.payloadType = std::make_unique<tpp::TypeKind>(tpp::to_public_type(*variant.payload));
+
+                            auto explicitCaseIt = explicitCases.find(variant.tag);
+                            const CaseNode *sourceCase = explicitCaseIt == explicitCases.end()
+                                ? nullptr
+                                : explicitCaseIt->second;
+
+                            if (sourceCase && sourceCase->isSyntheticRenderCase)
                             {
-                                if (variant.tag == c.tag)
+                                const auto *callNode = (!sourceCase->body.empty())
+                                    ? std::get_if<std::shared_ptr<FunctionCallNode>>(&sourceCase->body.front())
+                                    : nullptr;
+                                std::string functionName;
+                                if (callNode && *callNode)
+                                    functionName = (*callNode)->functionName;
+
+                                std::vector<ResolvedCallArgument> callArguments;
+                                if (variant.payload.has_value())
                                 {
-                                    payloadType = variant.payload;
-                                    break;
+                                    std::string bindingName = "_switch_payload" + std::to_string(syntheticCounter++);
+                                    caseInstr.bindingName = tpp::CaseBinding{bindingName, variant.recursive};
+                                    callArguments.push_back({bindingName,
+                                                             *variant.payload,
+                                                             false,
+                                                             isOptionalTypeRef(*variant.payload)});
+                                }
+
+                                auto body = std::make_unique<std::vector<tpp::Instruction>>();
+                                body->push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<6>, lowerResolvedCall(functionName, callArguments, functions)}});
+                                caseInstr.body = std::move(body);
+                            }
+                            else if (sourceCase)
+                            {
+                                if (sourceCase->bindingName.empty())
+                                {
+                                    caseInstr.body = std::make_unique<std::vector<tpp::Instruction>>(lowerPublicNodes(sourceCase->body, env, functions, syntheticCounter));
+                                }
+                                else if (variant.payload.has_value())
+                                {
+                                    caseInstr.bindingName = tpp::CaseBinding{sourceCase->bindingName, variant.recursive};
+                                    env.push(sourceCase->bindingName,
+                                             *variant.payload,
+                                             false,
+                                             isOptionalTypeRef(*variant.payload));
+                                    caseInstr.body = std::make_unique<std::vector<tpp::Instruction>>(lowerPublicNodes(sourceCase->body, env, functions, syntheticCounter));
+                                    env.pop();
+                                }
+                                else
+                                {
+                                    caseInstr.body = std::make_unique<std::vector<tpp::Instruction>>(lowerPublicNodes(sourceCase->body, env, functions, syntheticCounter));
                                 }
                             }
-                        }
-
-                        if (payloadType.has_value())
-                            caseInstr.payloadType = std::make_unique<tpp::TypeKind>(tpp::to_public_type(*payloadType));
-
-                        if (c.isSyntheticRenderCase)
-                        {
-                            tpp::CallInstr callInstr;
-                            if (!c.body.empty())
+                            else if (arg->defaultCase)
                             {
-                                if (auto *callNode = std::get_if<std::shared_ptr<FunctionCallNode>>(&c.body.front()))
-                                {
-                                    if (*callNode)
-                                        callInstr.functionName = (*callNode)->functionName;
-                                }
+                                caseInstr.body = std::make_unique<std::vector<tpp::Instruction>>(lowerPublicNodes(arg->defaultCase->body, env, functions, syntheticCounter));
+                            }
+                            else
+                            {
+                                caseInstr.body = std::make_unique<std::vector<tpp::Instruction>>();
                             }
 
-                            std::vector<TypeRef> argumentTypes;
-                            if (payloadType.has_value())
-                            {
-                                tpp::ExprInfo payloadExpr;
-                                payloadExpr.path = switchInstr->expr.path + "." + c.tag;
-                                payloadExpr.type = std::make_unique<tpp::TypeKind>(tpp::to_public_type(*payloadType));
-                                callInstr.arguments.push_back(std::move(payloadExpr));
-                                argumentTypes.push_back(*payloadType);
-                            }
-                            callInstr.functionIndex = resolveFunctionOverloadIndex(functions, callInstr.functionName, argumentTypes);
-
-                            auto body = std::make_unique<std::vector<tpp::Instruction>>();
-                            body->push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<6>, std::move(callInstr)}});
-                            caseInstr.body = std::move(body);
+                            cases->push_back(std::move(caseInstr));
                         }
-                        else
-                        {
-                            caseInstr.bindingName = c.bindingName;
-
-                            if (!c.bindingName.empty() && payloadType.has_value())
-                                env.push(c.bindingName, *payloadType);
-                            else if (!c.bindingName.empty())
-                                env.push(c.bindingName, TypeRef{StringType{}});
-
-                            caseInstr.body = std::make_unique<std::vector<tpp::Instruction>>(lowerPublicNodes(c.body, env, functions, funcIndex));
-
-                            if (!c.bindingName.empty())
-                                env.pop();
-                        }
-
-                        cases->push_back(std::move(caseInstr));
-                    }
-
-                    if (arg->defaultCase)
-                    {
-                        const auto &c = *arg->defaultCase;
-                        tpp::CaseInstr caseInstr;
-                        caseInstr.tag = c.tag;
-                        caseInstr.bindingName = c.bindingName;
-
-                        caseInstr.body = std::make_unique<std::vector<tpp::Instruction>>(lowerPublicNodes(c.body, env, functions, funcIndex));
-                        switchInstr->defaultCase = std::make_unique<tpp::CaseInstr>(std::move(caseInstr));
                     }
 
                     switchInstr->cases = std::move(cases);
@@ -301,29 +579,21 @@ namespace tpp::compiler
                 }
                 else if constexpr (std::is_same_v<T, std::shared_ptr<FunctionCallNode>>)
                 {
-                    tpp::CallInstr callInstr;
-                    callInstr.functionName = arg->functionName;
-                    std::vector<TypeRef> argumentTypes;
+                    std::vector<ResolvedCallArgument> arguments;
                     for (const auto &argument : arg->arguments)
                     {
-                        argumentTypes.push_back(resolveExprType(argument, env));
-                        callInstr.arguments.push_back(lowerPublicExpr(argument, env));
+                        ResolvedExpr resolvedArgument = resolvePublicExpr(argument, env);
+                        arguments.push_back({resolvedArgument.path,
+                                             resolvedArgument.type,
+                                             resolvedArgument.isRecursive,
+                                             resolvedArgument.isOptional});
                     }
-                    callInstr.functionIndex = resolveFunctionOverloadIndex(functions, arg->functionName, argumentTypes);
-                    out.push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<6>, std::move(callInstr)}});
+                    out.push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<6>, lowerResolvedCall(arg->functionName, arguments, functions)}});
                 }
                 else if constexpr (std::is_same_v<T, std::shared_ptr<RenderViaNode>>)
                 {
-                    tpp::RenderViaInstr renderViaInstr;
-                    renderViaInstr.collection = lowerPublicExpr(arg->collectionExpr, env);
-                    renderViaInstr.functionName = arg->functionName;
-                    renderViaInstr.sep = arg->sep;
-                    renderViaInstr.followedBy = arg->followedBy;
-                    renderViaInstr.precededBy = arg->precededBy;
-                    renderViaInstr.isBlock = arg->isBlock;
-                    renderViaInstr.insertCol = arg->insertCol;
-                    renderViaInstr.policy = arg->policy;
-                    out.push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<7>, std::move(renderViaInstr)}});
+                    auto lowered = lowerRenderViaNode(*arg, env, functions, syntheticCounter);
+                    out.insert(out.end(), std::make_move_iterator(lowered.begin()), std::make_move_iterator(lowered.end()));
                 }
             }, node);
         }
@@ -339,21 +609,15 @@ namespace tpp::compiler
                           std::vector<tpp::FunctionDef> &out,
                           bool includeSourceRanges)
     {
-        std::map<std::string, int> funcIndex;
-        for (size_t i = 0; i < functions.size(); ++i)
-        {
-            if (funcIndex.find(functions[i].name) == funcIndex.end())
-                funcIndex[functions[i].name] = (int)i;
-        }
-
         out.clear();
         out.reserve(functions.size());
 
         for (const auto &fn : functions)
         {
             TypeEnv env(semanticModel);
+            int syntheticCounter = 0;
             for (const auto &param : fn.params)
-                env.push(param.name, param.type);
+                env.push(param.name, param.type, false, isOptionalTypeRef(param.type));
 
             tpp::FunctionDef functionDef;
             functionDef.name = fn.name;
@@ -364,7 +628,7 @@ namespace tpp::compiler
                 paramDef.type = std::make_unique<tpp::TypeKind>(tpp::to_public_type(param.type));
                 functionDef.params.push_back(std::move(paramDef));
             }
-            functionDef.body = std::make_unique<std::vector<tpp::Instruction>>(lowerPublicNodes(fn.body, env, functions, funcIndex));
+            functionDef.body = std::make_unique<std::vector<tpp::Instruction>>(lowerPublicNodes(fn.body, env, functions, syntheticCounter));
             functionDef.policy = fn.policy;
             functionDef.doc = fn.doc;
             functionDef.sourceRange = tpp::to_public_range(fn.sourceRange, includeSourceRanges);
