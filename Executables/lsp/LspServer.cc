@@ -271,7 +271,7 @@ void LspServer::onDidChangeWatchedFiles(const nlohmann::json &params,
 
         std::error_code ec;
         if (!fs::exists(cfgPath, ec) || ec) continue;
-        auto project = std::make_unique<TppProject>(cfgPath);
+        auto project = std::make_unique<WorkspaceProject>(cfgPath);
 
         // Migrate any standalone-buffer files that belong to this new project.
         for (auto it = standaloneBuffer_.begin(); it != standaloneBuffer_.end(); )
@@ -357,7 +357,7 @@ void LspServer::scanWorkspace(const std::vector<std::string> &roots)
         findConfigsRecursive(rootPath, configs);
         for (const auto &cfg : configs)
         {
-            auto project = std::make_unique<TppProject>(cfg);
+            auto project = std::make_unique<WorkspaceProject>(cfg);
             project->recompile();
             projects_.push_back(std::move(project));
         }
@@ -366,7 +366,7 @@ void LspServer::scanWorkspace(const std::vector<std::string> &roots)
 
 // ── Project lookup ────────────────────────────────────────────────────────────
 
-TppProject *LspServer::projectFor(const std::string &uri)
+WorkspaceProject *LspServer::projectFor(const std::string &uri)
 {
     // Normalize: VS Code percent-encodes paths (e.g. C%2B%2B), but stored URIs
     // are built from filesystem paths without encoding.
@@ -393,7 +393,7 @@ TppProject *LspServer::projectFor(const std::string &uri)
 
 // ── Diagnostics publish ───────────────────────────────────────────────────────
 
-void LspServer::publishDiagnostics(const TppProject &project,
+void LspServer::publishDiagnostics(const WorkspaceProject &project,
                                    std::vector<nlohmann::json> &notifications)
 {
     // Publish for every URI in the project (including those with no diagnostics,
@@ -419,7 +419,7 @@ void LspServer::onDidOpen(const nlohmann::json &params, std::vector<nlohmann::js
     std::string uri  = uriDecode(doc.at("uri").get<std::string>());
     std::string text = doc.at("text").get<std::string>();
 
-    TppProject *proj = projectFor(uri);
+    WorkspaceProject *proj = projectFor(uri);
     if (!proj)
     {
         // File not part of any known project — try creating a project for it if
@@ -432,7 +432,7 @@ void LspServer::onDidOpen(const nlohmann::json &params, std::vector<nlohmann::js
             std::error_code ec;
             if (fs::exists(cfg, ec) && !ec)
             {
-                auto project = std::make_unique<TppProject>(cfg);
+                auto project = std::make_unique<WorkspaceProject>(cfg);
                 project->setDirty(uri, text);
                 project->recompile();
                 publishDiagnostics(*project, outNotifs);
@@ -479,7 +479,7 @@ void LspServer::onDidChange(const nlohmann::json &params, std::vector<nlohmann::
     if (changes.empty()) return;
     std::string text = changes.back().at("text").get<std::string>();
 
-    TppProject *proj = projectFor(uri);
+    WorkspaceProject *proj = projectFor(uri);
     if (!proj)
     {
         // Mirror onDidOpen: if a tpp-config.json now exists in an ancestor dir
@@ -492,7 +492,7 @@ void LspServer::onDidChange(const nlohmann::json &params, std::vector<nlohmann::
             std::error_code ec;
             if (fs::exists(cfg, ec) && !ec)
             {
-                auto project = std::make_unique<TppProject>(cfg);
+                auto project = std::make_unique<WorkspaceProject>(cfg);
                 project->setDirty(uri, text);
                 project->recompile();
                 publishDiagnostics(*project, outNotifs);
@@ -513,7 +513,7 @@ void LspServer::onDidChange(const nlohmann::json &params, std::vector<nlohmann::
 void LspServer::onDidClose(const nlohmann::json &params)
 {
     std::string uri = uriDecode(params.at("textDocument").at("uri").get<std::string>());
-    TppProject *proj = projectFor(uri);
+    WorkspaceProject *proj = projectFor(uri);
     if (proj)
         proj->clearDirty(uri);
     else
@@ -525,7 +525,7 @@ void LspServer::onDidClose(const nlohmann::json &params)
 nlohmann::json LspServer::onSemanticTokensFull(const nlohmann::json &params)
 {
     std::string uri = uriDecode(params.at("textDocument").at("uri").get<std::string>());
-    TppProject *proj = projectFor(uri);
+    WorkspaceProject *proj = projectFor(uri);
     if (proj) return computeSemanticTokens(uri, *proj);
 
     // No project — use standalone buffer or read from disk
@@ -544,7 +544,7 @@ nlohmann::json LspServer::onSemanticTokensFull(const nlohmann::json &params)
 nlohmann::json LspServer::onFoldingRange(const nlohmann::json &params)
 {
     std::string uri = uriDecode(params.at("textDocument").at("uri").get<std::string>());
-    TppProject *proj = projectFor(uri);
+    WorkspaceProject *proj = projectFor(uri);
     if (!proj) return nlohmann::json::array();
     return computeFoldingRanges(uri, *proj);
 }
@@ -552,7 +552,7 @@ nlohmann::json LspServer::onFoldingRange(const nlohmann::json &params)
 nlohmann::json LspServer::onDefinition(const nlohmann::json &params)
 {
     std::string uri = uriDecode(params.at("textDocument").at("uri").get<std::string>());
-    TppProject *proj = projectFor(uri);
+    WorkspaceProject *proj = projectFor(uri);
     if (!proj) return nullptr;
     int line = params.at("position").at("line").get<int>();
     int character = params.at("position").at("character").get<int>();
@@ -562,7 +562,7 @@ nlohmann::json LspServer::onDefinition(const nlohmann::json &params)
 nlohmann::json LspServer::onCompletion(const nlohmann::json &params)
 {
     std::string uri = uriDecode(params.at("textDocument").at("uri").get<std::string>());
-    TppProject *proj = projectFor(uri);
+    WorkspaceProject *proj = projectFor(uri);
     if (!proj) return nlohmann::json::array();
     int line = params.at("position").at("line").get<int>();
     int character = params.at("position").at("character").get<int>();
@@ -572,7 +572,7 @@ nlohmann::json LspServer::onCompletion(const nlohmann::json &params)
 nlohmann::json LspServer::onRenderPreview(const nlohmann::json &params)
 {
     // Find the project that owns this config path.
-    TppProject *proj = nullptr;
+    WorkspaceProject *proj = nullptr;
     if (params.contains("configPath") && params["configPath"].is_string())
     {
         std::string configUri = params["configPath"].get<std::string>();

@@ -1,4 +1,3 @@
-#include <tpp/Compiler.h>
 #include <tpp/Tokenizer.h>
 #include <tpp/TypedefParser.h>
 #include <tpp/Diagnostic.h>
@@ -609,8 +608,9 @@ namespace tpp::compiler
         {
             if (finite.count(sd.name)) continue;
             const Token *t = findTypeNameToken(sd.name);
+            if (!t) continue;
             Diagnostic d;
-            if (t) d.range = {{t->line, t->col}, {t->line, t->col + (int)sd.name.size()}};
+            d.range = {{t->line, t->col}, {t->line, t->col + (int)sd.name.size()}};
             d.message = "type '" + sd.name + "' has no finite minimal JSON value";
             d.severity = DiagnosticSeverity::Error;
             diags.push_back(std::move(d));
@@ -620,8 +620,9 @@ namespace tpp::compiler
         {
             if (finite.count(ed.name)) continue;
             const Token *t = findTypeNameToken(ed.name);
+            if (!t) continue;
             Diagnostic d;
-            if (t) d.range = {{t->line, t->col}, {t->line, t->col + (int)ed.name.size()}};
+            d.range = {{t->line, t->col}, {t->line, t->col + (int)ed.name.size()}};
             d.message = "type '" + ed.name + "' has no finite minimal JSON value";
             d.severity = DiagnosticSeverity::Error;
             diags.push_back(std::move(d));
@@ -630,7 +631,7 @@ namespace tpp::compiler
         return allOk;
     }
 
-    void TypedefParser::annotateRecursiveFields()
+    void annotateRecursiveFields(SemanticModel &semanticModel)
     {
         // Build direct NamedType reference sets for each type.
         std::map<std::string, std::set<std::string>> directRefs;
@@ -712,22 +713,3 @@ namespace tpp::compiler
     }
 
 } // namespace tpp::compiler
-
-namespace tpp
-{
-
-    void Compiler::clear_types() noexcept
-    {
-        semanticModel_.clear_types();
-        pendingSources_.erase(
-            std::remove_if(pendingSources_.begin(), pendingSources_.end(),
-                           [](const PendingSource &s) { return s.isTypes; }),
-            pendingSources_.end());
-    }
-
-    void Compiler::add_types(const std::string &typedefs, std::vector<Diagnostic> &diagnostics) noexcept
-    {
-        pendingSources_.push_back({typedefs, &diagnostics, true});
-    }
-
-} // namespace tpp

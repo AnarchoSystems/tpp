@@ -164,7 +164,7 @@ static void collectTopLevelCommentFolds(std::vector<nlohmann::json> &out, const 
 }
 
 // ── .tpp.types fold ranges ────────────────────────────────────────────────────
-static nlohmann::json foldsForTypes(const TppProject &project)
+static nlohmann::json foldsForTypes(const WorkspaceProject &project)
 {
     nlohmann::json result = nlohmann::json::array();
     for (const auto &sd : project.output().structs)
@@ -191,7 +191,7 @@ static nlohmann::json foldsForTypes(const TppProject &project)
 }
 
 // ── .tpp fold ranges ──────────────────────────────────────────────────────────
-static nlohmann::json foldsForTemplate(const std::string &src, const TppProject &project)
+static nlohmann::json foldsForTemplate(const std::string &src, const WorkspaceProject &project)
 {
     std::vector<nlohmann::json> folds;
     std::vector<ParsedTemplateSource> templates;
@@ -218,7 +218,7 @@ static nlohmann::json foldsForTemplate(const std::string &src, const TppProject 
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
-nlohmann::json computeFoldingRanges(const std::string &uri, const TppProject &project)
+nlohmann::json computeFoldingRanges(const std::string &uri, const WorkspaceProject &project)
 {
     return project.isTypeUri(uri) ? foldsForTypes(project) : foldsForTemplate(project.getContent(uri), project);
 }

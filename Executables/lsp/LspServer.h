@@ -25,15 +25,15 @@ namespace tpp
         bool shutdown_ = false;
 
         // One project per tpp-config.json found in the workspace roots.
-        std::vector<std::unique_ptr<TppProject>> projects_;
+        std::vector<std::unique_ptr<WorkspaceProject>> projects_;
 
         // Dirty buffer for files not belonging to any project (syntax-only features).
         std::unordered_map<std::string, std::string> standaloneBuffer_;
 
         // ── Helpers ────────────────────────────────────────────────────
-        TppProject *projectFor(const std::string &uri);
+        WorkspaceProject *projectFor(const std::string &uri);
         void scanWorkspace(const std::vector<std::string> &roots);
-        void publishDiagnostics(const TppProject &project, std::vector<nlohmann::json> &notifications);
+        void publishDiagnostics(const WorkspaceProject &project, std::vector<nlohmann::json> &notifications);
 
         // ── Request / notification handlers ────────────────────────────
         nlohmann::json onInitialize(const nlohmann::json &params);

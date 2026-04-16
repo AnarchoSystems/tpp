@@ -49,5 +49,8 @@ namespace tpp
         int endCol = 0;
     };
 
-    std::vector<Segment> tokenize_template(const std::string &src);
+    namespace compiler
+    {
+        std::vector<Segment> tokenize_template(const std::string &src);
+    }
 }

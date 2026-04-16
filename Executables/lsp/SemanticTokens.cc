@@ -815,7 +815,7 @@ static nlohmann::json tokensForTemplate(const std::string &src,
 }
 
 // ── Entry points ──────────────────────────────────────────────────────────────
-nlohmann::json computeSemanticTokens(const std::string &uri, const TppProject &project)
+nlohmann::json computeSemanticTokens(const std::string &uri, const WorkspaceProject &project)
 {
     if (project.isTypeUri(uri))
     {
@@ -823,7 +823,7 @@ nlohmann::json computeSemanticTokens(const std::string &uri, const TppProject &p
         std::string src = project.getContent(uri);
         if (auto typeFileIndex = project.typeFileIndex(uri))
         {
-            const auto &typeSourceFiles = project.compiler().semantic_model().type_source_files();
+            const auto &typeSourceFiles = project.semantic_model().type_source_files();
             if (*typeFileIndex < typeSourceFiles.size())
                 return tokensForTypes(src, &typeSourceFiles[*typeFileIndex]);
         }
@@ -832,7 +832,7 @@ nlohmann::json computeSemanticTokens(const std::string &uri, const TppProject &p
     else
     {
         std::string src = project.getContent(uri);
-        return tokensForTemplate(src, &project.compiler().semantic_model().functions());
+        return tokensForTemplate(src, &project.semantic_model().functions());
     }
 }
 

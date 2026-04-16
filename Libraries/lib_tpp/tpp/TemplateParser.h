@@ -1,6 +1,8 @@
 #pragma once
 
 #include <tpp/AST.h>
+#include <tpp/Policy.h>
+#include <tpp/SemanticModel.h>
 #include <tpp/Tokenizer.h>
 #include <tpp/Diagnostic.h>
 #include <string>
@@ -125,6 +127,16 @@ namespace tpp::compiler
     };
 
     std::vector<TemplateLine> parseTemplateLines(const std::string &body);
+
+    void validateTemplateSemantics(const TemplateFunction &f,
+                                   const std::vector<TemplateLine> &templateLines,
+                                   size_t bodyStartLine,
+                                   const SemanticModel &types,
+                                   const PolicyRegistry &policies,
+                                   std::vector<Diagnostic> &diags,
+                                   const std::vector<TemplateFunction> &allFunctions,
+                                   int headerLine = 0,
+                                   const std::string &headerText = "");
 
     // ── AST builder ──
 

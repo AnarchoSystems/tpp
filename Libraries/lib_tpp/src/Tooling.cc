@@ -132,6 +132,39 @@ std::vector<TypeSourceToken> tokenizeTypeSource(const std::string &src)
     return result;
 }
 
+std::vector<TemplateToken> tokenizeTemplateSource(const std::string &src)
+{
+    std::vector<TemplateToken> result;
+
+    size_t lineStart = 0;
+    int lineNumber = 0;
+    while (lineStart <= src.size())
+    {
+        size_t lineEnd = src.find('\n', lineStart);
+        if (lineEnd == std::string::npos)
+            lineEnd = src.size();
+
+        const std::string line = src.substr(lineStart, lineEnd - lineStart);
+        const auto segments = compiler::tokenize_template(line);
+        for (const auto &segment : segments)
+        {
+            result.push_back({
+                segment.isDirective,
+                segment.text,
+                {{lineNumber, segment.startCol}, {lineNumber, segment.endCol}}
+            });
+        }
+
+        if (lineEnd == src.size())
+            break;
+
+        lineStart = lineEnd + 1;
+        ++lineNumber;
+    }
+
+    return result;
+}
+
 std::vector<TypeSourceSemanticSpan> classifyTypeSource(const std::string &src)
 {
     return classifyTypeSourceTokens(tokenizeTypeSource(src));

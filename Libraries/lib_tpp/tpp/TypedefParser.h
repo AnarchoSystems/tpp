@@ -39,10 +39,11 @@ namespace tpp::compiler
         bool validateTypes();
         // Returns false and emits diagnostics for any type with no finite minimal JSON value.
         bool computeFiniteTypes();
-        // Sets recursive=true on FieldDef/VariantDef entries whose TypeRef references a cyclic NamedType.
-        void annotateRecursiveFields();
         void parse();
     };
+
+    // Sets recursive=true on FieldDef/VariantDef entries whose TypeRef references a cyclic NamedType.
+    void annotateRecursiveFields(SemanticModel &semanticModel);
 
     // Parses a type string like "string", "list<Item>", "optional<bool>" into a TypeRef.
     TypeRef parseParamType(const std::string &s);

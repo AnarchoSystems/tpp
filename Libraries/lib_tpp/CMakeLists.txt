@@ -1,4 +1,5 @@
 add_library(lib_tpp
+    src/Compiler.cc
     src/TypedefParser.cc
     src/TemplateParser.cc
     src/Rendering.cc

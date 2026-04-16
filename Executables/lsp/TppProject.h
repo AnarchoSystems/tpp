@@ -13,13 +13,13 @@
 
 namespace tpp
 {
-    // One TppProject corresponds to one tpp-config.json on disk.
-    // It owns the Compiler, the IR, and an in-memory dirty buffer
+    // One WorkspaceProject corresponds to one tpp-config.json on disk.
+    // It owns the project inputs, compilation artifacts, and an in-memory dirty buffer
     // for open files that have unsaved changes.
-    class TppProject
+    class WorkspaceProject
     {
     public:
-        explicit TppProject(std::filesystem::path configPath);
+        explicit WorkspaceProject(std::filesystem::path configPath);
 
         // Re-read the config file and re-resolve file lists.
         // Returns false if the config file can't be parsed.
@@ -40,7 +40,7 @@ namespace tpp
         const std::map<std::string, std::vector<Diagnostic>> &diagnostics() const { return diagnostics_; }
 
         const IR &output() const { return output_; }
-        const Compiler &compiler() const { return compiler_; }
+        const compiler::SemanticModel &semantic_model() const { return analyzed_.semantic_model(); }
         const std::filesystem::path &configPath() const { return configPath_; }
         const std::filesystem::path &root() const { return root_; }
 
@@ -72,7 +72,8 @@ namespace tpp
 
         std::map<std::string, std::string> dirtyBuffer_; // URI -> text
 
-        Compiler compiler_;
+        TppProject project_;
+        AnalyzedProject analyzed_;
         IR output_;
         std::map<std::string, std::vector<Diagnostic>> diagnostics_;
 

@@ -164,10 +164,10 @@ static nlohmann::json makeItem(const std::string &label, int kind,
 // ── Entry point ───────────────────────────────────────────────────────────────
 nlohmann::json computeCompletions(const std::string &uri,
                                   int line, int character,
-                                  const TppProject &project)
+                                  const WorkspaceProject &project)
 {
     nlohmann::json result = nlohmann::json::array();
-    const auto &model = project.compiler().semantic_model();
+    const auto &model = project.semantic_model();
 
     // Build initial scope from the function that contains (line, character)
     Scope scope;

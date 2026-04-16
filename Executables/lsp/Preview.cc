@@ -8,7 +8,7 @@
 namespace tpp
 {
 
-nlohmann::json renderPreview(const nlohmann::json &params, TppProject *project)
+nlohmann::json renderPreview(const nlohmann::json &params, WorkspaceProject *project)
 {
     if (!project)
         return {{"error", "No tpp project found for the requested config path"}};

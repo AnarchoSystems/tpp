@@ -23,14 +23,14 @@ namespace tpp
         return normalized;
     }
 
-    TppProject::TppProject(fs::path configPath)
+    WorkspaceProject::WorkspaceProject(fs::path configPath)
         : configPath_(std::move(configPath))
         , root_(configPath_.parent_path())
     {
         reloadConfig();
     }
 
-    bool TppProject::reloadConfig()
+    bool WorkspaceProject::reloadConfig()
     {
         typeFiles_.clear();
         templateFiles_.clear();
@@ -70,12 +70,12 @@ namespace tpp
         return true;
     }
 
-    bool TppProject::recompile()
+    bool WorkspaceProject::recompile()
     {
-        compiler_.clear_types();
-        compiler_.clear_templates();
-        compiler_.clear_policies();
+        project_.clear();
         diagnostics_.clear();
+        analyzed_ = {};
+        output_ = {};
 
         // Process type files
         for (const auto &path : typeFiles_)
@@ -88,8 +88,7 @@ namespace tpp
             else
                 text = readFile(path);
 
-            auto &diags = diagnostics_[uri];
-            compiler_.add_types(text, diags);
+            project_.add_type_source(std::move(text), uri);
         }
 
         // Process template files
@@ -103,40 +102,48 @@ namespace tpp
             else
                 text = readFile(path);
 
-            auto &diags = diagnostics_[uri];
-            compiler_.add_templates(text, diags);
+            project_.add_template_source(std::move(text), uri);
         }
 
         // Load replacement policies
         for (const auto &path : policyFiles_)
         {
             std::string uri = pathToUri(path);
-            auto &diags = diagnostics_[uri];
-            compiler_.add_policy_text(readFile(path), diags);
+            project_.add_policy_source(readFile(path), uri);
         }
 
-        IR newOutput;
-        bool ok = compiler_.compile(newOutput, true);  // LSP needs source ranges
-        output_ = std::move(newOutput);
-        return ok;
+        CompileOptions options;
+        options.includeSourceRanges = true;
+        std::vector<DiagnosticLSPMessage> diagnostics;
+        LexedProject lexed;
+        ParsedProject parsed;
+        const bool success = tpp::lex(project_, lexed, diagnostics, options) &&
+                     tpp::parse(lexed, parsed, diagnostics, options) &&
+                     tpp::analyze(parsed, analyzed_, diagnostics, options) &&
+                     tpp::compile(analyzed_, output_, diagnostics, options);
+
+        for (const auto &message : diagnostics)
+            diagnostics_[message.uri] = message.diagnostics;
+
+        return success;
     }
 
-    void TppProject::setDirty(const std::string &uri, const std::string &text)
+    void WorkspaceProject::setDirty(const std::string &uri, const std::string &text)
     {
         dirtyBuffer_[uri] = text;
     }
 
-    void TppProject::clearDirty(const std::string &uri)
+    void WorkspaceProject::clearDirty(const std::string &uri)
     {
         dirtyBuffer_.erase(uri);
     }
 
-    bool TppProject::ownsUri(const std::string &uri) const
+    bool WorkspaceProject::ownsUri(const std::string &uri) const
     {
         return uris_.count(uri) > 0;
     }
 
-    bool TppProject::dependsOnWatchedPath(const fs::path &path) const
+    bool WorkspaceProject::dependsOnWatchedPath(const fs::path &path) const
     {
         fs::path normalizedPath = normalizePath(path);
         if (normalizedPath == normalizePath(configPath_))
@@ -168,7 +175,7 @@ namespace tpp
                hasSuffix(fileName, ".tpp.types");
     }
 
-    std::optional<size_t> TppProject::typeFileIndex(const std::string &uri) const
+    std::optional<size_t> WorkspaceProject::typeFileIndex(const std::string &uri) const
     {
         for (size_t index = 0; index < typeFiles_.size(); ++index)
             if (pathToUri(typeFiles_[index]) == uri)
@@ -176,7 +183,7 @@ namespace tpp
         return std::nullopt;
     }
 
-    std::string TppProject::readFile(const fs::path &path) const
+    std::string WorkspaceProject::readFile(const fs::path &path) const
     {
         std::ifstream f(path);
         if (!f) return {};
@@ -185,7 +192,7 @@ namespace tpp
         return ss.str();
     }
 
-    std::string TppProject::pathToUri(const fs::path &path) const
+    std::string WorkspaceProject::pathToUri(const fs::path &path) const
     {
         // Produce a file:// URI from an absolute path.
         // Canonicalise to absolute first.
@@ -198,14 +205,14 @@ namespace tpp
         return "file://" + s;
     }
 
-    fs::path TppProject::uriToPath(const std::string &uri) const
+    fs::path WorkspaceProject::uriToPath(const std::string &uri) const
     {
         if (uri.rfind("file://", 0) == 0)
             return fs::path(uri.substr(7));
         return fs::path(uri);
     }
 
-    std::vector<fs::path> TppProject::expandGlob(const std::string &pattern) const
+    std::vector<fs::path> WorkspaceProject::expandGlob(const std::string &pattern) const
     {
         fs::path patPath(pattern);
         std::string filename = patPath.filename().string();
@@ -258,7 +265,7 @@ namespace tpp
         return results;
     }
 
-    std::string TppProject::getContent(const std::string &uri) const
+    std::string WorkspaceProject::getContent(const std::string &uri) const
     {
         auto it = dirtyBuffer_.find(uri);
         if (it != dirtyBuffer_.end())

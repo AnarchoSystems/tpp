@@ -112,13 +112,13 @@ static std::string textForSingleLineRange(const std::string &source, const Range
 
 static nlohmann::json resolveTypeName(const std::string &name,
                                       const SemanticModel &model,
-                                      const TppProject &project);
+                                      const WorkspaceProject &project);
 
 static nlohmann::json resolveTypeIdentifierInSource(const std::string &src,
                                                     int line,
                                                     int character,
                                                     const SemanticModel &model,
-                                                    const TppProject &project,
+                                                    const WorkspaceProject &project,
                                                     const std::vector<TypeSourceSemanticSpan> *typeSpans = nullptr)
 {
     if (typeSpans)
@@ -172,7 +172,7 @@ static std::string typeRefNamedType(const TypeRef &type)
 // ── Resolve a type name to its Location in the types file ─────────────────────
 static nlohmann::json resolveTypeName(const std::string &name,
                                        const SemanticModel &model,
-                                       const TppProject &project)
+                                       const WorkspaceProject &project)
 {
     const Range *range = nullptr;
     if (const auto *sd = model.find_struct(name))
@@ -237,7 +237,7 @@ static std::optional<TypeRef> exprTypeRef(const Expression &expr,
 static nlohmann::json resolveFieldLocation(const TypeRef &containerType,
                                             const std::string &fieldName,
                                             const SemanticModel &model,
-                                            const TppProject &project)
+                                            const WorkspaceProject &project)
 {
     // Unwrap list/optional to get the named struct
     auto unwrap = [](const TypeRef &t) -> TypeRef {
@@ -264,7 +264,7 @@ static nlohmann::json resolveFieldLocation(const TypeRef &containerType,
 static nlohmann::json resolveExpr(const Expression &expr,
                                    const TemplateScope &scope,
                                    const SemanticModel &model,
-                                   const TppProject &project,
+                                   const WorkspaceProject &project,
                                    const std::string &uri)
 {
     // Walk to root variable
@@ -304,7 +304,7 @@ static nlohmann::json resolveExprAtCursor(const Expression &expr,
                                            int exprStartChar,
                                            const TemplateScope &scope,
                                            const SemanticModel &model,
-                                           const TppProject &project,
+                                           const WorkspaceProject &project,
                                            const std::string &uri);
 
 // ── Walk AST nodes with scope to find the definition under (line, char) ────────
@@ -312,14 +312,14 @@ static nlohmann::json walkNodes(const std::vector<ASTNode> &nodes,
                                  int line, int character,
                                  TemplateScope scope,
                                  const SemanticModel &model,
-                                 const TppProject &project,
+                                 const WorkspaceProject &project,
                                  const std::string &uri);
 
 static nlohmann::json walkNode(const ASTNode &node,
                                 int line, int character,
                                 TemplateScope &scope,
                                 const SemanticModel &model,
-                                const TppProject &project,
+                                const WorkspaceProject &project,
                                 const std::string &uri)
 {
     return std::visit([&](auto &&arg) -> nlohmann::json
@@ -344,7 +344,7 @@ static nlohmann::json walkNode(const ASTNode &node,
                 if (character >= sc && character <= nameEnd)
                 {
                     // Cursor on function name — jump to definition
-                    for (const auto *func : project.compiler().semantic_model().find_template_overloads(arg->functionName))
+                    for (const auto *func : project.semantic_model().find_template_overloads(arg->functionName))
                         for (const auto &pUri : project.uris())
                             if (!project.isTypeUri(pUri))
                                 return locationJson(pUri, func->sourceRange);
@@ -422,7 +422,7 @@ static nlohmann::json walkNodes(const std::vector<ASTNode> &nodes,
                                  int line, int character,
                                  TemplateScope scope,
                                  const SemanticModel &model,
-                                 const TppProject &project,
+                                 const WorkspaceProject &project,
                                  const std::string &uri)
 {
     for (const auto &n : nodes)
@@ -436,9 +436,9 @@ static nlohmann::json walkNodes(const std::vector<ASTNode> &nodes,
 // ── Entry point ───────────────────────────────────────────────────────────────
 nlohmann::json jumpToDefinition(const std::string &uri,
                                 int line, int character,
-                                const TppProject &project)
+                                const WorkspaceProject &project)
 {
-    const auto &model = project.compiler().semantic_model();
+    const auto &model = project.semantic_model();
     // ── Types file ────────────────────────────────────────────────────────────
     if (project.isTypeUri(uri))
     {
@@ -509,7 +509,7 @@ static nlohmann::json resolveExprAtCursor(const Expression &expr,
                                            int exprStartChar,
                                            const TemplateScope &scope,
                                            const SemanticModel &model,
-                                           const TppProject &project,
+                                           const WorkspaceProject &project,
                                            const std::string &uri)
 {
     // Build segment chain from the field-access expression.

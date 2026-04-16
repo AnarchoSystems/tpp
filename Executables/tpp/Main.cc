@@ -16,6 +16,14 @@ static std::string readFile(const fs::path &path)
                        std::istreambuf_iterator<char>());
 }
 
+static bool hasDiagnostics(const std::vector<tpp::DiagnosticLSPMessage> &messages)
+{
+    for (const auto &message : messages)
+        if (!message.diagnostics.empty())
+            return true;
+    return false;
+}
+
 // input: a single folder. if none is specified, use working directory.
 // reads tpp-config.json in that folder which specifies which .tpp files are types and which are templates.
 // finally, compile.
@@ -163,9 +171,8 @@ void tppApp::run()
         }
     }
 
-    // Collect file paths first so we can reserve diags to the exact size needed.
-    // This is important: add_types / add_templates store raw pointers into
-    // diags[i].diagnostics; if diags later reallocates those pointers dangle.
+    // Collect file paths first so we can produce stable per-file diagnostics
+    // for missing-file errors before running the pipeline.
     struct FileEntry
     {
         std::string path;
@@ -186,8 +193,8 @@ void tppApp::run()
     }
 
     std::vector<DiagnosticLSPMessage> diags;
-    diags.reserve(fileEntries.size()); // no reallocation after this point
-    Compiler compiler;
+    diags.reserve(fileEntries.size());
+    TppProject project;
 
     for (const auto &fe : fileEntries)
     {
@@ -201,7 +208,7 @@ void tppApp::run()
                 continue;
             }
             std::string typedefs((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-            compiler.add_types(typedefs, diags.back().diagnostics);
+            project.add_type_source(std::move(typedefs), fe.path);
         }
         else
         {
@@ -213,7 +220,7 @@ void tppApp::run()
                 continue;
             }
             std::string templates((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-            compiler.add_templates(templates, diags.back().diagnostics);
+            project.add_template_source(std::move(templates), fe.path);
         }
     }
 
@@ -221,18 +228,21 @@ void tppApp::run()
     for (const auto &policyEntry : config.value("replacement-policies", nlohmann::json::array()))
     {
         fs::path policyPath = fs::path(inputDirectory) / policyEntry.get<std::string>();
-        std::string policyText = readFile(policyPath);
-        std::vector<tpp::Diagnostic> policyDiagnostics;
-        if (!compiler.add_policy_text(policyText, policyDiagnostics))
-        {
-            for (const auto &diagnostic : policyDiagnostics)
-                std::cerr << "Error: " << policyPath.string() << ": " << diagnostic.message << "\n";
-            exit(1);
-        }
+        project.add_policy_source(readFile(policyPath), policyPath.string());
     }
 
+    CompileOptions options;
+    options.includeSourceRanges = includeSourceRanges;
+    LexedProject lexed;
+    ParsedProject parsed;
+    AnalyzedProject analyzed;
     IR output;
-    bool success = compiler.compile(output, includeSourceRanges);
+
+    bool success = tpp::lex(project, lexed, diags, options) &&
+                   tpp::parse(lexed, parsed, diags, options) &&
+                   tpp::analyze(parsed, analyzed, diags, options) &&
+                   tpp::compile(analyzed, output, diags, options) &&
+                   !hasDiagnostics(diags);
     if (success)
     {
         nlohmann::json j = output;

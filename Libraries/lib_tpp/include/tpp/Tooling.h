@@ -38,6 +38,13 @@ namespace tpp
         Range range;
     };
 
+    struct TemplateToken
+    {
+        bool isDirective = false;
+        std::string text;
+        Range range;
+    };
+
     enum class TypeSourceSemanticKind
     {
         Keyword,
@@ -75,6 +82,8 @@ namespace tpp
     };
 
     std::vector<TypeSourceToken> tokenizeTypeSource(const std::string &src);
+
+    std::vector<TemplateToken> tokenizeTemplateSource(const std::string &src);
 
     std::vector<TypeSourceSemanticSpan> classifyTypeSource(const std::string &src);
 

@@ -1,5 +1,4 @@
 #include <tpp/Policy.h>
-#include <tpp/Compiler.h>
 #include <string>
 
 namespace tpp::compiler
@@ -153,45 +152,4 @@ namespace tpp::compiler
         return &it->second;
     }
 
-    // ═══════════════════════════════════════════════════════════════════
-    // Compiler::clear_policies / add_policy
-    // ═══════════════════════════════════════════════════════════════════
-
 } // namespace tpp::compiler
-
-namespace tpp
-{
-
-    void Compiler::clear_policies() noexcept
-    {
-        semanticModel_.mutable_policies() = compiler::PolicyRegistry{};
-    }
-
-    bool Compiler::add_policy_text(const std::string &policyText,
-                                   std::vector<Diagnostic> &diagnostics) noexcept
-    {
-        if (policyText.empty())
-        {
-            diagnostics.push_back(makeErrorDiagnostic("policy file not found or empty"));
-            return false;
-        }
-
-        try
-        {
-            return compiler::load_policy_json(semanticModel_.mutable_policies(),
-                                              nlohmann::json::parse(policyText),
-                                              diagnostics);
-        }
-        catch (const std::exception &e)
-        {
-            diagnostics.push_back(makeErrorDiagnostic(std::string("invalid JSON: ") + e.what()));
-            return false;
-        }
-        catch (...)
-        {
-            diagnostics.push_back(makeErrorDiagnostic("unknown error loading policy"));
-            return false;
-        }
-    }
-
-} // namespace tpp

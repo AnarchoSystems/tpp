@@ -43,7 +43,7 @@ Example — wrong argument count:
 
 ## expected_diagnostics.json (compile / parse error)
 
-Used when `compiler.add_types(...)` or `compiler.add_templates(...)` emits diagnostics.
+Used when the in-process compilation pipeline emits diagnostics while compiling a test case.
 
 Schema — array of LSP `PublishDiagnosticsParams`-style objects:
 ```json

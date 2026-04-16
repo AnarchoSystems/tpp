@@ -57,27 +57,26 @@ TEST(IRStability, SchemaCheck)
 
         // Compile in-process
         auto loaded = tc.extract();
-        tpp::Compiler compiler;
-        std::vector<tpp::DiagnosticLSPMessage> fileDiags;
+        tpp::TppProject project;
         for (const auto &src : loaded.sources)
         {
-            tpp::DiagnosticLSPMessage dm(src.url);
             if (src.isTypes)
-                compiler.add_types(src.content, dm.diagnostics);
+                project.add_type_source(src.content, src.url);
             else
-                compiler.add_templates(src.content, dm.diagnostics);
-            fileDiags.push_back(std::move(dm));
+                project.add_template_source(src.content, src.url);
         }
-        for (const auto &pol : loaded.policies)
-        {
-            std::vector<tpp::Diagnostic> policyDiagnostics;
-            compiler.add_policy_text(pol, policyDiagnostics);
-            ASSERT_TRUE(policyDiagnostics.empty())
-                << "Unexpected policy diagnostics: " << nlohmann::json(policyDiagnostics).dump(2);
-        }
+        for (size_t index = 0; index < loaded.policies.size(); ++index)
+            project.add_policy_source(loaded.policies[index], loaded.name + "/policy_" + std::to_string(index) + ".json");
 
+        std::vector<tpp::DiagnosticLSPMessage> diagnostics;
+        tpp::LexedProject lexed;
+        tpp::ParsedProject parsed;
+        tpp::AnalyzedProject analyzed;
         tpp::IR output;
-        bool ok = compiler.compile(output);
+        bool ok = tpp::lex(project, lexed, diagnostics) &&
+              tpp::parse(lexed, parsed, diagnostics) &&
+              tpp::analyze(parsed, analyzed, diagnostics) &&
+              tpp::compile(analyzed, output, diagnostics);
         ASSERT_TRUE(ok) << "Failed to compile test case: " << tc.name;
 
         nlohmann::json actualIR = output;

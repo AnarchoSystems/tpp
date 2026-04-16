@@ -84,6 +84,7 @@ StructDef to_public_struct(const compiler::StructDef &def, bool includeRanges)
     }
     out.doc = def.doc;
     out.sourceRange = to_public_range(def.sourceRange, includeRanges);
+    out.rawTypedefs = def.rawTypedefs;
     return out;
 }
 
@@ -104,6 +105,7 @@ EnumDef to_public_enum(const compiler::EnumDef &def, bool includeRanges)
     }
     out.doc = def.doc;
     out.sourceRange = to_public_range(def.sourceRange, includeRanges);
+    out.rawTypedefs = def.rawTypedefs;
     return out;
 }
 

@@ -54,17 +54,17 @@ Every generated C++ type carries a `tpp_typedefs()` static method that returns t
 std::string src = Item::tpp_typedefs(); // returns the raw .tpp type definition
 ```
 
-This means a generated type is self-describing. You can reconstruct a `Compiler` from it at runtime and use the dynamic API alongside the static one.
+This means a generated type is self-describing. You can reconstruct a `TppProject` and run it through the pipeline at runtime while still using the dynamic API alongside the static one.
 
 ### The dynamic API is still strongly typed
 
 When you use the C++ library directly, you get a templated `get_function` that binds argument types at compile time:
 
 ```cpp
-tpp::Compiler compiler;
-// ...compile...
+tpp::TppProject project;
+project.add_type<Item>();
+// ...add templates, run Lexer -> Parser -> SemanticAnalyzer -> Compiler...
 tpp::IR output;
-compiler.compile(output);
 
 auto render = output.get_function<Item>("render_item");
 std::string result = render(myItem); // type-checked: must pass an Item

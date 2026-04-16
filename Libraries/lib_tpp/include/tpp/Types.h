@@ -47,6 +47,7 @@ namespace tpp::compiler
         std::vector<FieldDef> fields;
         Range sourceRange{};
         std::string doc; // doc comment text attached to this struct (/// or /** */)
+        std::string rawTypedefs;
     };
 
     struct VariantDef
@@ -64,6 +65,7 @@ namespace tpp::compiler
         std::vector<VariantDef> variants;
         Range sourceRange{};
         std::string doc; // doc comment text attached to this enum (/// or /** */)
+        std::string rawTypedefs;
     };
 
     // ── Type lookup ──

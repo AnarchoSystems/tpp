@@ -12,5 +12,5 @@ namespace tpp
     //       or { "error": string } on failure.
     // project may be null if no project owns the config path.
     nlohmann::json renderPreview(const nlohmann::json &params,
-                                 TppProject *project);
+                                 WorkspaceProject *project);
 }

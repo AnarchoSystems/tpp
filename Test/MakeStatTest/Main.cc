@@ -171,35 +171,32 @@ int main(int argc, char *argv[])
             fileEntries.push_back({p, false});
     }
 
-    tpp::Compiler compiler;
-    std::vector<tpp::DiagnosticLSPMessage> diagnostics;
-    diagnostics.reserve(fileEntries.size());
+    tpp::TppProject project;
     for (const auto &fe : fileEntries)
     {
         std::string content = readFile(fe.path);
-        auto &msg = diagnostics.emplace_back(fe.path.string());
         if (fe.isTypes)
-            compiler.add_types(content, msg.diagnostics);
+            project.add_type_source(std::move(content), fe.path.string());
         else
-            compiler.add_templates(content, msg.diagnostics);
+            project.add_template_source(std::move(content), fe.path.string());
     }
 
     // Load replacement policies (same as tpp/Main.cc)
     for (const auto &policyEntry : config.value("replacement-policies", nlohmann::json::array()))
     {
         std::filesystem::path policyPath = testDir / policyEntry.get<std::string>();
-        std::string policyText = readFile(policyPath);
-        std::vector<tpp::Diagnostic> policyDiagnostics;
-        if (!compiler.add_policy_text(policyText, policyDiagnostics))
-        {
-            for (const auto &diagnostic : policyDiagnostics)
-                std::cerr << policyPath.string() << ": error: " << diagnostic.message << std::endl;
-            return EXIT_FAILURE;
-        }
+        project.add_policy_source(readFile(policyPath), policyPath.string());
     }
 
+    std::vector<tpp::DiagnosticLSPMessage> diagnostics;
+    tpp::LexedProject lexed;
+    tpp::ParsedProject parsed;
+    tpp::AnalyzedProject analyzed;
     tpp::IR iRep;
-    if (!compiler.compile(iRep))
+    if (!tpp::lex(project, lexed, diagnostics) ||
+        !tpp::parse(lexed, parsed, diagnostics) ||
+        !tpp::analyze(parsed, analyzed, diagnostics) ||
+        !tpp::compile(analyzed, iRep, diagnostics))
     {
         for (const auto &msg : diagnostics)
             for (const auto &d : msg.toGCCDiagnostics())

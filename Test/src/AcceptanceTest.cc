@@ -8,39 +8,42 @@ class AcceptanceTest : public ::testing::TestWithParam<tTestCase>
 {
 protected:
     tLoadedTestCase testCase;
-    tpp::Compiler compiler;
-    std::vector<tpp::DiagnosticLSPMessage> fileDiags;
+    tpp::TppProject project;
+    tpp::IR output;
+    std::vector<tpp::DiagnosticLSPMessage> diagnostics;
+    bool compileSuccess = false;
+
     void SetUp() override
     {
         testCase = GetParam().extract();
-        fileDiags.reserve(testCase.sources.size());
         for (const auto &src : testCase.sources)
-            fileDiags.push_back(tpp::DiagnosticLSPMessage(src.url));
-        for (size_t i = 0; i < testCase.sources.size(); ++i)
         {
-            const auto &src = testCase.sources[i];
             if (src.isTypes)
-                compiler.add_types(src.content, fileDiags[i].diagnostics);
+                project.add_type_source(src.content, src.url);
             else
-                compiler.add_templates(src.content, fileDiags[i].diagnostics);
+                project.add_template_source(src.content, src.url);
         }
-        for (const auto &pol : testCase.policies)
-        {
-            std::vector<tpp::Diagnostic> policyDiagnostics;
-            compiler.add_policy_text(pol, policyDiagnostics);
-            EXPECT_TRUE(policyDiagnostics.empty())
-                << "Unexpected policy diagnostics: " << nlohmann::json(policyDiagnostics).dump(2);
-        }
+        for (size_t index = 0; index < testCase.policies.size(); ++index)
+            project.add_policy_source(testCase.policies[index], testCase.name + "/policy_" + std::to_string(index) + ".json");
+
+        tpp::LexedProject lexed;
+        tpp::ParsedProject parsed;
+        tpp::AnalyzedProject analyzed;
+        diagnostics.clear();
+        output = {};
+        compileSuccess = tpp::lex(project, lexed, diagnostics) &&
+                 tpp::parse(lexed, parsed, diagnostics) &&
+                 tpp::analyze(parsed, analyzed, diagnostics) &&
+                 tpp::compile(analyzed, output, diagnostics);
     }
 };
 
 TEST_P(AcceptanceTest, RunTestCase)
 {
-    tpp::IR output;
     std::string getFunctionError, renderError, renderedOutput;
     const tpp::FunctionDef *function = nullptr;
 
-    const bool isSuccess = compiler.compile(output) &&
+    const bool isSuccess = compileSuccess &&
                            tpp::get_function(output, "main", function, getFunctionError) &&
                            tpp::render_function(output, *function, testCase.input, renderedOutput, renderError);
 
@@ -52,7 +55,7 @@ TEST_P(AcceptanceTest, RunTestCase)
     else
     {
         std::vector<tpp::DiagnosticLSPMessage> actualDiags;
-        for (const auto &d : fileDiags)
+        for (const auto &d : diagnostics)
             if (!d.diagnostics.empty())
                 actualDiags.push_back(d);
         EXPECT_EQ(actualDiags, testCase.expectedDiagnostics)
@@ -71,8 +74,7 @@ TEST_P(AcceptanceTest, CompareCompileByCLI)
     auto cliOutput = runCommandDirect({TPP_EXE,
         std::filesystem::absolute("TestCases/" + testCase.name).string()});
 
-    tpp::IR expectedOutput;
-    bool expectedSuccess = compiler.compile(expectedOutput);
+    bool expectedSuccess = compileSuccess;
 
     EXPECT_EQ(cliOutput.success, expectedSuccess) << "Test case: " << testCase.name;
     if (cliOutput.success != expectedSuccess)
@@ -81,9 +83,9 @@ TEST_P(AcceptanceTest, CompareCompileByCLI)
     if (expectedSuccess)
     {
         tpp::IR actualOutput = nlohmann::json::parse(cliOutput.output);
-        EXPECT_EQ(nlohmann::json(actualOutput), nlohmann::json(expectedOutput))
+        EXPECT_EQ(nlohmann::json(actualOutput), nlohmann::json(output))
             << "Test case: " << testCase.name
-            << "\nExpected: " << nlohmann::json(expectedOutput).dump(2)
+            << "\nExpected: " << nlohmann::json(output).dump(2)
             << "\nActual: " << nlohmann::json(actualOutput).dump(2);
     }
     else

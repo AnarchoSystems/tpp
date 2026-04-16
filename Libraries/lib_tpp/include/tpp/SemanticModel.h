@@ -37,10 +37,6 @@ namespace tpp::compiler
         const PolicyRegistry &policies() const noexcept { return policies_; }
         PolicyRegistry &mutable_policies() noexcept { return policies_; }
 
-        const std::string &raw_typedefs() const noexcept { return rawTypedefs_; }
-        void set_raw_typedefs(std::string rawTypedefs) { rawTypedefs_ = std::move(rawTypedefs); }
-        void clear_raw_typedefs() noexcept { rawTypedefs_.clear(); }
-
         const TypeEntry *find_type_entry(std::string_view name) const noexcept
         {
             auto it = nameIndex.find(std::string(name));
@@ -147,7 +143,6 @@ namespace tpp::compiler
         std::vector<TemplateFunction> functions_;
         std::vector<std::vector<tpp::TypeSourceSemanticSpan>> typeSourceFiles_;
         PolicyRegistry policies_;
-        std::string rawTypedefs_;
     };
 
 }
