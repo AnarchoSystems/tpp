@@ -116,13 +116,9 @@ tLoadedTestCase tTestCase::extract() const
     }
     for (const auto &policyEntry : config.value("replacement-policies", nlohmann::json::array()))
     {
-        std::ifstream pf(path / policyEntry.get<std::string>());
-        if (pf.is_open())
-        {
-            try { loaded.policies.push_back(nlohmann::json::parse(
-                    std::string((std::istreambuf_iterator<char>(pf)), std::istreambuf_iterator<char>()))); }
-            catch (...) {}
-        }
+        std::filesystem::path policyPath = path / policyEntry.get<std::string>();
+        if (std::filesystem::is_regular_file(policyPath))
+            loaded.policies.push_back(readFile(policyPath));
     }
 
     // Input: read from previews[0].input in tpp-config.json

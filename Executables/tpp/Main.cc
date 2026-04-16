@@ -9,6 +9,13 @@
 namespace fs = std::filesystem;
 using namespace tpp;
 
+static std::string readFile(const fs::path &path)
+{
+    std::ifstream file(path);
+    return std::string((std::istreambuf_iterator<char>(file)),
+                       std::istreambuf_iterator<char>());
+}
+
 // input: a single folder. if none is specified, use working directory.
 // reads tpp-config.json in that folder which specifies which .tpp files are types and which are templates.
 // finally, compile.
@@ -214,28 +221,12 @@ void tppApp::run()
     for (const auto &policyEntry : config.value("replacement-policies", nlohmann::json::array()))
     {
         fs::path policyPath = fs::path(inputDirectory) / policyEntry.get<std::string>();
-        std::ifstream pf(policyPath);
-        if (!pf.is_open())
+        std::string policyText = readFile(policyPath);
+        std::vector<tpp::Diagnostic> policyDiagnostics;
+        if (!compiler.add_policy_text(policyText, policyDiagnostics))
         {
-            std::cerr << "Error: " << policyPath.string() << ": policy file not found\n";
-            exit(1);
-        }
-        nlohmann::json policyJson;
-        try
-        {
-            policyJson = nlohmann::json::parse(std::string(
-                (std::istreambuf_iterator<char>(pf)),
-                std::istreambuf_iterator<char>()));
-        }
-        catch (const std::exception &e)
-        {
-            std::cerr << "Error: " << policyPath.string() << ": invalid JSON: " << e.what() << "\n";
-            exit(1);
-        }
-        std::string policyError;
-        if (!compiler.add_policy(policyJson, policyError))
-        {
-            std::cerr << "Error: " << policyPath.string() << ": " << policyError << "\n";
+            for (const auto &diagnostic : policyDiagnostics)
+                std::cerr << "Error: " << policyPath.string() << ": " << diagnostic.message << "\n";
             exit(1);
         }
     }

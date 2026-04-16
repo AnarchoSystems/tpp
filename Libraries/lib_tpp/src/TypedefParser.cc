@@ -351,20 +351,20 @@ namespace tpp::compiler
         if (at(TokKind::Semi))
             eat(TokKind::Semi);
 
-        size_t idx = reg.structs.size();
-        reg.structs.push_back(std::move(sd));
-        if (reg.nameIndex.count(reg.structs[idx].name))
+        size_t idx = semanticModel.structs.size();
+        semanticModel.structs.push_back(std::move(sd));
+        if (semanticModel.nameIndex.count(semanticModel.structs[idx].name))
         {
             Diagnostic d;
             d.range = {{nameTok.line, nameTok.col},
                        {nameTok.line, nameTok.col + (int)nameTok.text.size()}};
-            d.message = "type '" + reg.structs[idx].name + "' is already defined";
+            d.message = "type '" + semanticModel.structs[idx].name + "' is already defined";
             d.severity = DiagnosticSeverity::Error;
             diags.push_back(std::move(d));
             ok = false;
             return;
         }
-        reg.nameIndex[reg.structs[idx].name] = {TypeKind::Struct, idx};
+        semanticModel.nameIndex[semanticModel.structs[idx].name] = {TypeKind::Struct, idx};
     }
 
     void TypedefParser::parseEnum()
@@ -407,20 +407,20 @@ namespace tpp::compiler
         if (at(TokKind::Semi))
             eat(TokKind::Semi);
 
-        size_t idx = reg.enums.size();
-        reg.enums.push_back(std::move(ed));
-        if (reg.nameIndex.count(reg.enums[idx].name))
+        size_t idx = semanticModel.enums.size();
+        semanticModel.enums.push_back(std::move(ed));
+        if (semanticModel.nameIndex.count(semanticModel.enums[idx].name))
         {
             Diagnostic d;
             d.range = {{nameTok.line, nameTok.col},
                        {nameTok.line, nameTok.col + (int)nameTok.text.size()}};
-            d.message = "type '" + reg.enums[idx].name + "' is already defined";
+            d.message = "type '" + semanticModel.enums[idx].name + "' is already defined";
             d.severity = DiagnosticSeverity::Error;
             diags.push_back(std::move(d));
             ok = false;
             return;
         }
-        reg.nameIndex[reg.enums[idx].name] = {TypeKind::Enum, idx};
+        semanticModel.nameIndex[semanticModel.enums[idx].name] = {TypeKind::Enum, idx};
     }
 
     bool TypedefParser::validateTypes()
@@ -457,7 +457,7 @@ namespace tpp::compiler
             else
             {
                 auto &t = tokens[p];
-                if (reg.nameIndex.find(t.text) == reg.nameIndex.end())
+                if (semanticModel.nameIndex.find(t.text) == semanticModel.nameIndex.end())
                 {
                     Diagnostic d;
                     d.range = {{t.line, t.col}, {t.line, t.col + (int)t.text.size()}};
@@ -572,7 +572,7 @@ namespace tpp::compiler
         while (changed)
         {
             changed = false;
-            for (const auto &sd : reg.structs)
+            for (const auto &sd : semanticModel.structs)
             {
                 if (finite.count(sd.name)) continue;
                 bool all = true;
@@ -580,7 +580,7 @@ namespace tpp::compiler
                     if (!isTypeRefFinite(fd.type)) { all = false; break; }
                 if (all) { finite.insert(sd.name); changed = true; }
             }
-            for (const auto &ed : reg.enums)
+            for (const auto &ed : semanticModel.enums)
             {
                 if (finite.count(ed.name)) continue;
                 bool any = false;
@@ -605,7 +605,7 @@ namespace tpp::compiler
         };
 
         bool allOk = true;
-        for (const auto &sd : reg.structs)
+        for (const auto &sd : semanticModel.structs)
         {
             if (finite.count(sd.name)) continue;
             const Token *t = findTypeNameToken(sd.name);
@@ -616,7 +616,7 @@ namespace tpp::compiler
             diags.push_back(std::move(d));
             allOk = false;
         }
-        for (const auto &ed : reg.enums)
+        for (const auto &ed : semanticModel.enums)
         {
             if (finite.count(ed.name)) continue;
             const Token *t = findTypeNameToken(ed.name);
@@ -634,13 +634,13 @@ namespace tpp::compiler
     {
         // Build direct NamedType reference sets for each type.
         std::map<std::string, std::set<std::string>> directRefs;
-        for (const auto &sd : reg.structs)
+        for (const auto &sd : semanticModel.structs)
         {
             auto &refs = directRefs[sd.name];
             for (const auto &fd : sd.fields)
                 collectNamedTypesFromRef(fd.type, refs);
         }
-        for (const auto &ed : reg.enums)
+        for (const auto &ed : semanticModel.enums)
         {
             auto &refs = directRefs[ed.name];
             for (const auto &vd : ed.variants)
@@ -686,10 +686,10 @@ namespace tpp::compiler
             return false;
         };
 
-        for (auto &sd : reg.structs)
+        for (auto &sd : semanticModel.structs)
             for (auto &fd : sd.fields)
                 fd.recursive = containsCyclic(fd.type);
-        for (auto &ed : reg.enums)
+        for (auto &ed : semanticModel.enums)
             for (auto &vd : ed.variants)
                 if (vd.payload.has_value())
                     vd.recursive = containsCyclic(vd.payload.value());
@@ -718,7 +718,7 @@ namespace tpp
 
     void Compiler::clear_types() noexcept
     {
-        types = compiler::TypeRegistry{};
+        semanticModel_.clear_types();
         pendingSources_.erase(
             std::remove_if(pendingSources_.begin(), pendingSources_.end(),
                            [](const PendingSource &s) { return s.isTypes; }),

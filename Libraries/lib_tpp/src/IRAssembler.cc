@@ -1,4 +1,4 @@
-#include <tpp/IRBuilder.h>
+#include <tpp/IRAssembler.h>
 #include "tpp/Version.h"
 
 namespace tpp
@@ -59,15 +59,15 @@ static std::string extract_type_definition(const std::string &raw,
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Top-level builder
+// Top-level assembler
 // ═══════════════════════════════════════════════════════════════════════════
 
-IR build_ir(std::vector<StructDef> structs,
-            std::vector<EnumDef> enums,
-            std::vector<FunctionDef> functions,
-            std::vector<PolicyDef> policies,
-            const std::string &rawTypedefs,
-            bool)
+IR assemble_ir(std::vector<StructDef> structs,
+               std::vector<EnumDef> enums,
+               std::vector<FunctionDef> functions,
+               std::vector<PolicyDef> policies,
+               const std::string &rawTypedefs,
+               bool)
 {
     IR out;
     out.versionMajor = TPP_VERSION_MAJOR;

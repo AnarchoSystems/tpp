@@ -132,6 +132,109 @@ std::vector<TypeSourceToken> tokenizeTypeSource(const std::string &src)
     return result;
 }
 
+std::vector<TypeSourceSemanticSpan> classifyTypeSource(const std::string &src)
+{
+    return classifyTypeSourceTokens(tokenizeTypeSource(src));
+}
+
+std::vector<TypeSourceSemanticSpan> classifyTypeSourceTokens(const std::vector<TypeSourceToken> &tokens)
+{
+    std::vector<TypeSourceSemanticSpan> spans;
+
+    bool inEnum = false;
+    int depth = 0;
+    bool expectDeclName = false;
+    bool expectMemberName = false;
+
+    for (const auto &token : tokens)
+    {
+        if (token.kind == TypeSourceTokenKind::Eof)
+            break;
+
+        TypeSourceSemanticKind kind;
+        bool emit = true;
+
+        switch (token.kind)
+        {
+        case TypeSourceTokenKind::Struct:
+            inEnum = false;
+            expectDeclName = true;
+            expectMemberName = false;
+            kind = TypeSourceSemanticKind::Keyword;
+            break;
+        case TypeSourceTokenKind::Enum:
+            inEnum = true;
+            expectDeclName = true;
+            expectMemberName = false;
+            kind = TypeSourceSemanticKind::Keyword;
+            break;
+        case TypeSourceTokenKind::KwOptional:
+        case TypeSourceTokenKind::KwList:
+        case TypeSourceTokenKind::KwString:
+        case TypeSourceTokenKind::KwInt:
+        case TypeSourceTokenKind::KwBool:
+            kind = TypeSourceSemanticKind::Keyword;
+            break;
+        case TypeSourceTokenKind::LBrace:
+            ++depth;
+            if (depth == 1) expectMemberName = true;
+            kind = TypeSourceSemanticKind::Operator;
+            break;
+        case TypeSourceTokenKind::RBrace:
+            --depth;
+            if (depth == 0)
+            {
+                inEnum = false;
+                expectMemberName = false;
+            }
+            kind = TypeSourceSemanticKind::Operator;
+            break;
+        case TypeSourceTokenKind::Semi:
+            if (depth == 1) expectMemberName = true;
+            kind = TypeSourceSemanticKind::Operator;
+            break;
+        case TypeSourceTokenKind::LParen:
+        case TypeSourceTokenKind::RParen:
+        case TypeSourceTokenKind::Colon:
+        case TypeSourceTokenKind::Comma:
+        case TypeSourceTokenKind::LAngle:
+        case TypeSourceTokenKind::RAngle:
+            if (token.kind == TypeSourceTokenKind::Comma && inEnum && depth == 1)
+                expectMemberName = true;
+            kind = TypeSourceSemanticKind::Operator;
+            break;
+        case TypeSourceTokenKind::Comment:
+        case TypeSourceTokenKind::DocComment:
+            kind = TypeSourceSemanticKind::Comment;
+            break;
+        case TypeSourceTokenKind::Ident:
+            if (expectDeclName)
+            {
+                kind = TypeSourceSemanticKind::Type;
+                expectDeclName = false;
+            }
+            else if (expectMemberName && depth == 1)
+            {
+                kind = inEnum ? TypeSourceSemanticKind::EnumMember : TypeSourceSemanticKind::Property;
+                expectMemberName = false;
+            }
+            else
+            {
+                kind = TypeSourceSemanticKind::Type;
+            }
+            break;
+        default:
+            emit = false;
+            break;
+        }
+
+        if (emit)
+            spans.push_back({token.range, kind});
+    }
+
+    return spans;
+}
+
 bool parseTemplateSource(const std::string &src,
                          std::vector<ParsedTemplateSource> &templates)
 {

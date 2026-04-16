@@ -5,11 +5,9 @@
 namespace tpp::compiler
 {
 
-    // ═══════════════════════════════════════════════════════════════════
-    // PolicyRegistry
-    // ═══════════════════════════════════════════════════════════════════
-
-    bool PolicyRegistry::add_policy(const nlohmann::json &j, std::string &error)
+    static bool parsePolicy(const nlohmann::json &j,
+                            std::map<std::string, Policy> &policies,
+                            std::string &error)
     {
         if (!j.is_object())
         {
@@ -27,7 +25,7 @@ namespace tpp::compiler
             error = "policy 'tag' must not be empty";
             return false;
         }
-        if (policies_.count(tag))
+        if (policies.count(tag))
         {
             error = "duplicate policy tag '" + tag + "'";
             return false;
@@ -103,7 +101,7 @@ namespace tpp::compiler
             return true;
         };
 
-        if (!parseRegexSteps("require", pol.require))           return false;
+        if (!parseRegexSteps("require", pol.require))            return false;
         if (!parseRegexSteps("output-filter", pol.outputFilter)) return false;
 
         if (j.contains("replacements"))
@@ -128,8 +126,24 @@ namespace tpp::compiler
             }
         }
 
-        policies_[tag] = std::move(pol);
+        policies[tag] = std::move(pol);
         return true;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // PolicyRegistry loading
+    // ═══════════════════════════════════════════════════════════════════
+
+    bool load_policy_json(PolicyRegistry &registry,
+                          const nlohmann::json &j,
+                          std::vector<Diagnostic> &diagnostics)
+    {
+        std::string error;
+        if (parsePolicy(j, registry.policies_, error))
+            return true;
+
+        diagnostics.push_back(makeErrorDiagnostic(error));
+        return false;
     }
 
     const Policy *PolicyRegistry::find(const std::string &tag) const noexcept
@@ -150,23 +164,32 @@ namespace tpp
 
     void Compiler::clear_policies() noexcept
     {
-        policies_ = compiler::PolicyRegistry{};
+        semanticModel_.mutable_policies() = compiler::PolicyRegistry{};
     }
 
-    bool Compiler::add_policy(const nlohmann::json &policyJson, std::string &error) noexcept
+    bool Compiler::add_policy_text(const std::string &policyText,
+                                   std::vector<Diagnostic> &diagnostics) noexcept
     {
+        if (policyText.empty())
+        {
+            diagnostics.push_back(makeErrorDiagnostic("policy file not found or empty"));
+            return false;
+        }
+
         try
         {
-            return policies_.add_policy(policyJson, error);
+            return compiler::load_policy_json(semanticModel_.mutable_policies(),
+                                              nlohmann::json::parse(policyText),
+                                              diagnostics);
         }
         catch (const std::exception &e)
         {
-            error = e.what();
+            diagnostics.push_back(makeErrorDiagnostic(std::string("invalid JSON: ") + e.what()));
             return false;
         }
         catch (...)
         {
-            error = "unknown error loading policy";
+            diagnostics.push_back(makeErrorDiagnostic("unknown error loading policy"));
             return false;
         }
     }

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <tpp/Types.h>
+#include <tpp/SemanticModel.h>
 #include <tpp/Tokenizer.h>
 #include <tpp/Diagnostic.h>
 #include <string>
@@ -12,13 +12,13 @@ namespace tpp::compiler
     std::vector<Token> tokenize_typedefs(const std::string &src);
 
     // ── Typedef parser ──
-    // Parses a typedef source string (structs and enums) into a TypeRegistry.
+    // Parses a typedef source string (structs and enums) into a SemanticModel.
 
     struct TypedefParser
     {
         const std::vector<Token> &tokens;
         size_t pos = 0;
-        TypeRegistry &reg;
+        SemanticModel &semanticModel;
         std::vector<Diagnostic> &diags;
         bool ok = true;
         std::string pendingDoc; // accumulated doc comment text waiting to be attached

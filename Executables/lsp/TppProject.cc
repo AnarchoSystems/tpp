@@ -77,20 +77,6 @@ namespace tpp
         compiler_.clear_policies();
         diagnostics_.clear();
 
-        auto makePolicyDiagnostic = [](const std::string &message)
-        {
-            return Diagnostic{
-                {{0, 0}, {0, 0}},
-                message,
-                DiagnosticSeverity::Error,
-                std::nullopt,
-                std::string("tpp"),
-                {},
-                std::nullopt,
-                {}
-            };
-        };
-
         // Process type files
         for (const auto &path : typeFiles_)
         {
@@ -126,23 +112,7 @@ namespace tpp
         {
             std::string uri = pathToUri(path);
             auto &diags = diagnostics_[uri];
-            std::string text = readFile(path);
-            if (text.empty())
-            {
-                diags.push_back(makePolicyDiagnostic("policy file not found or empty"));
-                continue;
-            }
-            try
-            {
-                nlohmann::json pj = nlohmann::json::parse(text);
-                std::string err;
-                if (!compiler_.add_policy(pj, err))
-                    diags.push_back(makePolicyDiagnostic(err));
-            }
-            catch (const std::exception &e)
-            {
-                diags.push_back(makePolicyDiagnostic(std::string("invalid JSON: ") + e.what()));
-            }
+            compiler_.add_policy_text(readFile(path), diags);
         }
 
         IR newOutput;
@@ -196,6 +166,14 @@ namespace tpp
         return normalizedPath.extension() == ".tpp" ||
                normalizedPath.extension() == ".json" ||
                hasSuffix(fileName, ".tpp.types");
+    }
+
+    std::optional<size_t> TppProject::typeFileIndex(const std::string &uri) const
+    {
+        for (size_t index = 0; index < typeFiles_.size(); ++index)
+            if (pathToUri(typeFiles_[index]) == uri)
+                return index;
+        return std::nullopt;
     }
 
     std::string TppProject::readFile(const fs::path &path) const

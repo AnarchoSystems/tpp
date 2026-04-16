@@ -31,7 +31,7 @@ struct tLoadedTestCase
 {
     std::string name;
     std::vector<SourceFile> sources;
-    std::vector<nlohmann::json> policies;
+    std::vector<std::string> policies;
     nlohmann::json input;
     bool expectSuccess = true;
     std::string expectedOutput;

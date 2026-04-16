@@ -7,10 +7,10 @@ namespace tpp
 
 // ── Compiler type aliases (these live in tpp::compiler after the IR migration) ─
 using TypeRef          = compiler::TypeRef;
-using TypeRegistry     = compiler::TypeRegistry;
 using NamedType        = compiler::NamedType;
 using ListType         = compiler::ListType;
 using OptionalType     = compiler::OptionalType;
+using SemanticModel    = compiler::SemanticModel;
 using TemplateFunction = compiler::TemplateFunction;
 using Expression       = compiler::Expression;
 using Variable         = compiler::Variable;
@@ -85,6 +85,73 @@ static std::string wordAtPos(const std::string &source, int line, int character)
     return std::string(ln + start, end - start);
 }
 
+static std::string textForSingleLineRange(const std::string &source, const Range &range)
+{
+    if (range.start.line != range.end.line)
+        return {};
+
+    int curLine = 0;
+    size_t pos = 0;
+    while (pos < source.size() && curLine < range.start.line)
+    {
+        if (source[pos++] == '\n') ++curLine;
+    }
+    if (curLine != range.start.line) return {};
+
+    size_t lineEnd = source.find('\n', pos);
+    if (lineEnd == std::string::npos) lineEnd = source.size();
+    const size_t lineLen = lineEnd - pos;
+
+    const int start = std::clamp(range.start.character, 0, static_cast<int>(lineLen));
+    const int end = std::clamp(range.end.character, start, static_cast<int>(lineLen));
+    if (end <= start)
+        return {};
+
+    return source.substr(pos + static_cast<size_t>(start), static_cast<size_t>(end - start));
+}
+
+static nlohmann::json resolveTypeName(const std::string &name,
+                                      const SemanticModel &model,
+                                      const TppProject &project);
+
+static nlohmann::json resolveTypeIdentifierInSource(const std::string &src,
+                                                    int line,
+                                                    int character,
+                                                    const SemanticModel &model,
+                                                    const TppProject &project,
+                                                    const std::vector<TypeSourceSemanticSpan> *typeSpans = nullptr)
+{
+    if (typeSpans)
+    {
+        for (const auto &span : *typeSpans)
+        {
+            if (span.kind != TypeSourceSemanticKind::Type)
+                continue;
+            if (!rangeContains(span.range, line, character))
+                continue;
+
+            const std::string name = textForSingleLineRange(src, span.range);
+            if (!name.empty())
+                return resolveTypeName(name, model, project);
+            break;
+        }
+    }
+
+    auto tokens = tokenizeTypeSource(src);
+    for (const auto &tok : tokens)
+    {
+        if (tok.kind == TypeSourceTokenKind::Eof) break;
+        if (tok.kind == TypeSourceTokenKind::Ident &&
+            tok.range.start.line == line &&
+            tok.range.start.character <= character &&
+            character < tok.range.end.character)
+        {
+            return resolveTypeName(tok.text, model, project);
+        }
+    }
+    return nullptr;
+}
+
 // ── Extract the top-level named type from a TypeRef ───────────────────────────
 static std::string typeRefNamedType(const TypeRef &type)
 {
@@ -104,17 +171,16 @@ static std::string typeRefNamedType(const TypeRef &type)
 
 // ── Resolve a type name to its Location in the types file ─────────────────────
 static nlohmann::json resolveTypeName(const std::string &name,
-                                       const TypeRegistry &reg,
+                                       const SemanticModel &model,
                                        const TppProject &project)
 {
-    auto it = reg.nameIndex.find(name);
-    if (it == reg.nameIndex.end()) return nullptr;
-
     const Range *range = nullptr;
-    if (it->second.kind == compiler::TypeKind::Struct)
-        range = &reg.structs[it->second.index].sourceRange;
+    if (const auto *sd = model.find_struct(name))
+        range = &sd->sourceRange;
+    else if (const auto *ed = model.find_enum(name))
+        range = &ed->sourceRange;
     else
-        range = &reg.enums[it->second.index].sourceRange;
+        return nullptr;
 
     for (const auto &pUri : project.uris())
     {
@@ -139,7 +205,7 @@ struct TemplateScope
 // Returns nullopt if type cannot be determined.
 static std::optional<TypeRef> exprTypeRef(const Expression &expr,
                                            const TemplateScope &scope,
-                                           const TypeRegistry &reg)
+                                           const SemanticModel &model)
 {
     if (auto *v = std::get_if<Variable>(&expr))
     {
@@ -150,7 +216,7 @@ static std::optional<TypeRef> exprTypeRef(const Expression &expr,
     if (auto *fa = std::get_if<std::shared_ptr<FieldAccess>>(&expr))
     {
         if (!*fa) return {};
-        auto baseType = exprTypeRef((*fa)->base, scope, reg);
+        auto baseType = exprTypeRef((*fa)->base, scope, model);
         if (!baseType) return {};
         // Unwrap list/optional to get the named struct
         auto unwrap = [](const TypeRef &t) -> TypeRef {
@@ -161,14 +227,8 @@ static std::optional<TypeRef> exprTypeRef(const Expression &expr,
             return t;
         };
         TypeRef inner = unwrap(*baseType);
-        if (auto *named = std::get_if<NamedType>(&inner))
-        {
-            auto it = reg.nameIndex.find(named->name);
-            if (it != reg.nameIndex.end() && it->second.kind == compiler::TypeKind::Struct)
-                for (const auto &f : reg.structs[it->second.index].fields)
-                    if (f.name == (*fa)->field) return f.type;
-        }
-        return {};
+        if (const auto *field = model.find_field(inner, (*fa)->field))
+            return field->type;
     }
     return {};
 }
@@ -176,7 +236,7 @@ static std::optional<TypeRef> exprTypeRef(const Expression &expr,
 // ── Resolve jump to a named field inside a container type ────────────────────
 static nlohmann::json resolveFieldLocation(const TypeRef &containerType,
                                             const std::string &fieldName,
-                                            const TypeRegistry &reg,
+                                            const SemanticModel &model,
                                             const TppProject &project)
 {
     // Unwrap list/optional to get the named struct
@@ -188,16 +248,10 @@ static nlohmann::json resolveFieldLocation(const TypeRef &containerType,
         return t;
     };
     TypeRef inner = unwrap(containerType);
-    if (auto *named = std::get_if<NamedType>(&inner))
-    {
-        auto it = reg.nameIndex.find(named->name);
-        if (it != reg.nameIndex.end() && it->second.kind == compiler::TypeKind::Struct)
-            for (const auto &f : reg.structs[it->second.index].fields)
-                if (f.name == fieldName)
-                    for (const auto &pUri : project.uris())
-                        if (project.isTypeUri(pUri))
-                            return locationJson(pUri, f.sourceRange);
-    }
+    if (const auto *field = model.find_field(inner, fieldName))
+        for (const auto &pUri : project.uris())
+            if (project.isTypeUri(pUri))
+                return locationJson(pUri, field->sourceRange);
     return nullptr;
 }
 
@@ -209,7 +263,7 @@ static nlohmann::json resolveFieldLocation(const TypeRef &containerType,
 //  - Otherwise return null.
 static nlohmann::json resolveExpr(const Expression &expr,
                                    const TemplateScope &scope,
-                                   const TypeRegistry &reg,
+                                   const SemanticModel &model,
                                    const TppProject &project,
                                    const std::string &uri)
 {
@@ -227,7 +281,7 @@ static nlohmann::json resolveExpr(const Expression &expr,
             // 2. Template param → resolve the param's type
             auto pIt = scope.paramTypes.find(v->name);
             if (pIt != scope.paramTypes.end())
-                return resolveTypeName(pIt->second, reg, project);
+                return resolveTypeName(pIt->second, model, project);
 
             return nullptr;
         }
@@ -249,7 +303,7 @@ static nlohmann::json resolveExprAtCursor(const Expression &expr,
                                            int line, int character,
                                            int exprStartChar,
                                            const TemplateScope &scope,
-                                           const TypeRegistry &reg,
+                                           const SemanticModel &model,
                                            const TppProject &project,
                                            const std::string &uri);
 
@@ -257,14 +311,14 @@ static nlohmann::json resolveExprAtCursor(const Expression &expr,
 static nlohmann::json walkNodes(const std::vector<ASTNode> &nodes,
                                  int line, int character,
                                  TemplateScope scope,
-                                 const TypeRegistry &reg,
+                                 const SemanticModel &model,
                                  const TppProject &project,
                                  const std::string &uri);
 
 static nlohmann::json walkNode(const ASTNode &node,
                                 int line, int character,
                                 TemplateScope &scope,
-                                const TypeRegistry &reg,
+                                const SemanticModel &model,
                                 const TppProject &project,
                                 const std::string &uri)
 {
@@ -278,7 +332,7 @@ static nlohmann::json walkNode(const ASTNode &node,
             {
                 const int exprStart = arg.sourceRange.start.character + 1; // skip '@'
                 return resolveExprAtCursor(arg.expr, line, character, exprStart,
-                                           scope, reg, project, uri);
+                                           scope, model, project, uri);
             }
         }
         else if constexpr (std::is_same_v<T, std::shared_ptr<FunctionCallNode>>)
@@ -290,15 +344,10 @@ static nlohmann::json walkNode(const ASTNode &node,
                 if (character >= sc && character <= nameEnd)
                 {
                     // Cursor on function name — jump to definition
-                    for (const auto &func : project.compiler().functions)
-                    {
-                        if (func.name == arg->functionName)
-                        {
-                            for (const auto &pUri : project.uris())
-                                if (!project.isTypeUri(pUri))
-                                    return locationJson(pUri, func.sourceRange);
-                        }
-                    }
+                    for (const auto *func : project.compiler().semantic_model().find_template_overloads(arg->functionName))
+                        for (const auto &pUri : project.uris())
+                            if (!project.isTypeUri(pUri))
+                                return locationJson(pUri, func->sourceRange);
                 }
                 else
                 {
@@ -312,7 +361,7 @@ static nlohmann::json walkNode(const ASTNode &node,
                         const std::string argText = exprToText(argExpr);
                         if (character >= argCol && character < argCol + (int)argText.size())
                             return resolveExprAtCursor(argExpr, line, character, argCol,
-                                                        scope, reg, project, uri);
+                                                        scope, model, project, uri);
                         argCol += (int)argText.size();
                     }
                 }
@@ -324,13 +373,13 @@ static nlohmann::json walkNode(const ASTNode &node,
             {
                 // Cursor is on the @for@ directive itself.
                 // Resolve the collection expression (cursor may be on the collection var).
-                return resolveExpr(arg->collectionExpr, scope, reg, project, uri);
+                return resolveExpr(arg->collectionExpr, scope, model, project, uri);
             }
             // Recurse into body with the loop variable added to scope.
             TemplateScope innerScope = scope;
             innerScope.forBindings[arg->varName] = {uri, arg->sourceRange};
             // Compute element TypeRef for the for-loop variable
-            auto colType = exprTypeRef(arg->collectionExpr, scope, reg);
+            auto colType = exprTypeRef(arg->collectionExpr, scope, model);
             if (colType)
             {
                 if (auto *lst = std::get_if<std::shared_ptr<ListType>>(&*colType))
@@ -338,32 +387,32 @@ static nlohmann::json walkNode(const ASTNode &node,
                 else
                     innerScope.varTypes[arg->varName] = *colType;
             }
-            return walkNodes(arg->body, line, character, std::move(innerScope), reg, project, uri);
+            return walkNodes(arg->body, line, character, std::move(innerScope), model, project, uri);
         }
         else if constexpr (std::is_same_v<T, std::shared_ptr<IfNode>>)
         {
             if (rangeContains(arg->sourceRange, line, character))
-                return resolveExpr(arg->condExpr, scope, reg, project, uri);
-            auto r = walkNodes(arg->thenBody, line, character, scope, reg, project, uri);
+                return resolveExpr(arg->condExpr, scope, model, project, uri);
+            auto r = walkNodes(arg->thenBody, line, character, scope, model, project, uri);
             if (!r.is_null()) return r;
-            return walkNodes(arg->elseBody, line, character, scope, reg, project, uri);
+            return walkNodes(arg->elseBody, line, character, scope, model, project, uri);
         }
         else if constexpr (std::is_same_v<T, std::shared_ptr<SwitchNode>>)
         {
             if (rangeContains(arg->sourceRange, line, character))
-                return resolveExpr(arg->expr, scope, reg, project, uri);
+                return resolveExpr(arg->expr, scope, model, project, uri);
             for (const auto &c : arg->cases)
             {
-                auto r = walkNodes(c.body, line, character, scope, reg, project, uri);
+                auto r = walkNodes(c.body, line, character, scope, model, project, uri);
                 if (!r.is_null()) return r;
             }
             if (arg->defaultCase)
-                return walkNodes(arg->defaultCase->body, line, character, scope, reg, project, uri);
+                return walkNodes(arg->defaultCase->body, line, character, scope, model, project, uri);
         }
         else if constexpr (std::is_same_v<T, std::shared_ptr<RenderViaNode>>)
         {
             if (rangeContains(arg->sourceRange, line, character))
-                return resolveExpr(arg->collectionExpr, scope, reg, project, uri);
+                return resolveExpr(arg->collectionExpr, scope, model, project, uri);
         }
         return nullptr;
     }, node);
@@ -372,13 +421,13 @@ static nlohmann::json walkNode(const ASTNode &node,
 static nlohmann::json walkNodes(const std::vector<ASTNode> &nodes,
                                  int line, int character,
                                  TemplateScope scope,
-                                 const TypeRegistry &reg,
+                                 const SemanticModel &model,
                                  const TppProject &project,
                                  const std::string &uri)
 {
     for (const auto &n : nodes)
     {
-        auto r = walkNode(n, line, character, scope, reg, project, uri);
+        auto r = walkNode(n, line, character, scope, model, project, uri);
         if (!r.is_null()) return r;
     }
     return nullptr;
@@ -389,31 +438,25 @@ nlohmann::json jumpToDefinition(const std::string &uri,
                                 int line, int character,
                                 const TppProject &project)
 {
-    const auto &reg = project.compiler().types;
-
+    const auto &model = project.compiler().semantic_model();
     // ── Types file ────────────────────────────────────────────────────────────
     if (project.isTypeUri(uri))
     {
         std::string src = project.getContent(uri);
-        auto tokens = tokenizeTypeSource(src);
-        for (const auto &tok : tokens)
+        if (auto typeFileIndex = project.typeFileIndex(uri))
         {
-            if (tok.kind == TypeSourceTokenKind::Eof) break;
-            if (tok.kind == TypeSourceTokenKind::Ident &&
-                tok.range.start.line == line &&
-                tok.range.start.character <= character &&
-                character < tok.range.end.character)
-            {
-                return resolveTypeName(tok.text, reg, project);
-            }
+            const auto &typeSourceFiles = model.type_source_files();
+            if (*typeFileIndex < typeSourceFiles.size())
+                return resolveTypeIdentifierInSource(src, line, character, model, project,
+                                                   &typeSourceFiles[*typeFileIndex]);
         }
-        return nullptr;
+        return resolveTypeIdentifierInSource(src, line, character, model, project);
     }
 
     // ── Template file ─────────────────────────────────────────────────────────
     std::string src = project.getContent(uri);
 
-    for (const auto &func : project.compiler().functions)
+    for (const auto &func : model.functions())
     {
         // ── Header line ───────────────────────────────────────────────────────
         if (line == func.sourceRange.start.line)
@@ -422,7 +465,7 @@ nlohmann::json jumpToDefinition(const std::string &uri,
             if (word.empty()) return nullptr;
 
             // Is the word a type name? → jump to type definition
-            auto loc = resolveTypeName(word, reg, project);
+            auto loc = resolveTypeName(word, model, project);
             if (!loc.is_null()) return loc;
 
             // Is the word a parameter name? → jump to the parameter's type
@@ -432,7 +475,7 @@ nlohmann::json jumpToDefinition(const std::string &uri,
                 {
                     std::string typeName = typeRefNamedType(p.type);
                     if (!typeName.empty())
-                        return resolveTypeName(typeName, reg, project);
+                        return resolveTypeName(typeName, model, project);
                 }
             }
             return nullptr;
@@ -452,7 +495,7 @@ nlohmann::json jumpToDefinition(const std::string &uri,
             scope.varTypes[p.name] = p.type;
         }
 
-        auto result = walkNodes(func.body, line, character, scope, reg, project, uri);
+        auto result = walkNodes(func.body, line, character, scope, model, project, uri);
         if (!result.is_null()) return result;
     }
 
@@ -465,7 +508,7 @@ static nlohmann::json resolveExprAtCursor(const Expression &expr,
                                            int /*line*/, int character,
                                            int exprStartChar,
                                            const TemplateScope &scope,
-                                           const TypeRegistry &reg,
+                                           const SemanticModel &model,
                                            const TppProject &project,
                                            const std::string &uri)
 {
@@ -479,7 +522,7 @@ static nlohmann::json resolveExprAtCursor(const Expression &expr,
             if (*fa) { build((*fa)->base); chain.push_back({(*fa)->field, &e}); }
     };
     build(expr);
-    if (chain.empty()) return resolveExpr(expr, scope, reg, project, uri);
+    if (chain.empty()) return resolveExpr(expr, scope, model, project, uri);
 
     // Find which segment the cursor falls on.
     int col = exprStartChar;
@@ -491,22 +534,22 @@ static nlohmann::json resolveExprAtCursor(const Expression &expr,
             if (i == 0)
             {
                 // Cursor on root variable — existing scope resolution
-                return resolveExpr(*chain[i].second, scope, reg, project, uri);
+                return resolveExpr(*chain[i].second, scope, model, project, uri);
             }
             else
             {
                 // Cursor on a field name — resolve the container type then jump to field
                 const auto *fa = std::get_if<std::shared_ptr<FieldAccess>>(chain[i].second);
                 if (!fa || !*fa) return nullptr;
-                auto containerType = exprTypeRef((*fa)->base, scope, reg);
+                auto containerType = exprTypeRef((*fa)->base, scope, model);
                 if (!containerType) return nullptr;
-                return resolveFieldLocation(*containerType, chain[i].first, reg, project);
+                return resolveFieldLocation(*containerType, chain[i].first, model, project);
             }
         }
         col = segEnd + 1; // skip the '.'
     }
     // Cursor past the end (e.g. on closing '@') — fall back to root
-    return resolveExpr(expr, scope, reg, project, uri);
+    return resolveExpr(expr, scope, model, project, uri);
 }
 
 } // namespace tpp

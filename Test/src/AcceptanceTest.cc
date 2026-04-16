@@ -26,8 +26,10 @@ protected:
         }
         for (const auto &pol : testCase.policies)
         {
-            std::string err;
-            compiler.add_policy(pol, err);
+            std::vector<tpp::Diagnostic> policyDiagnostics;
+            compiler.add_policy_text(pol, policyDiagnostics);
+            EXPECT_TRUE(policyDiagnostics.empty())
+                << "Unexpected policy diagnostics: " << nlohmann::json(policyDiagnostics).dump(2);
         }
     }
 };

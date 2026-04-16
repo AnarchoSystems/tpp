@@ -1,3 +1,4 @@
+| `<tpp/Types.h>` | Type definitions (`StructDef`, `EnumDef`, `TypeRef`) and lookup helpers |
 # tpp Usage & Tooling Guide
 
 This guide covers the tpp compiler toolchain as a whole: how source files become validated IR, how that IR feeds multiple backends, how to integrate the generated code into builds, and how to use the runtime and editor tooling.
@@ -303,7 +304,8 @@ This backend is used by the Swift acceptance-test pipeline in `Test/MakeSwiftTes
 | `<tpp/Compiler.h>` | Compile type definitions, templates, and policies |
 | `<tpp/IR.h>` | Compiled template IR (types, functions, policies) |
 | `<tpp/Rendering.h>` | Render template functions from the IR |
-| `<tpp/Types.h>` | Type definitions (`StructDef`, `EnumDef`, `TypeRegistry`) |
+| `<tpp/Types.h>` | Type definitions (`StructDef`, `EnumDef`, `TypeRef`) |
+| `<tpp/SemanticModel.h>` | Retained semantic model plus lookup/query helpers used by compiler and tooling |
 | `<tpp/Policy.h>` | Policy data model and registry |
 | `<tpp/RenderMapping.h>` | Source-to-output range tracking |
 | `<tpp/Tooling.h>` | Public source-analysis helpers used by IDE and tooling integrations |
@@ -321,9 +323,8 @@ std::vector<tpp::Diagnostic> diags;
 compiler.add_types(typeSource, diags);
 compiler.add_templates(templateSource, diags);
 
-// Load a policy from a parsed JSON object:
-std::string policyError;
-compiler.add_policy(policyJson, policyError);
+// Load a policy from raw file text:
+compiler.add_policy_text(policyText, diags);
 
 tpp::IR output;
 bool ok = compiler.compile(output);

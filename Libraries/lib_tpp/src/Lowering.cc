@@ -1,4 +1,5 @@
 #include <tpp/Lowering.h>
+#include "tpp/PublicIRConverter.h"
 #include <map>
 #include <stdexcept>
 
@@ -10,10 +11,10 @@ namespace tpp::compiler
 
     struct TypeEnv
     {
-        const TypeRegistry &types;
+        const SemanticModel &semanticModel;
         std::vector<std::pair<std::string, TypeRef>> bindings;
 
-        explicit TypeEnv(const TypeRegistry &t) : types(t) {}
+        explicit TypeEnv(const SemanticModel &model) : semanticModel(model) {}
 
         void push(const std::string &name, const TypeRef &type)
         {
@@ -37,20 +38,8 @@ namespace tpp::compiler
         // Returns nullptr if the type is not a struct or the field doesn't exist.
         const TypeRef *lookupField(const TypeRef &baseType, const std::string &field) const
         {
-            const NamedType *nt = std::get_if<NamedType>(&baseType);
-            if (!nt)
-                return nullptr;
-            auto it = types.nameIndex.find(nt->name);
-            if (it == types.nameIndex.end())
-                return nullptr;
-            if (it->second.kind == TypeKind::Struct)
-            {
-                const StructDef &sd = types.structs[it->second.index];
-                for (const auto &f : sd.fields)
-                    if (f.name == field)
-                        return &f.type;
-            }
-            return nullptr;
+            const auto *fieldDef = semanticModel.find_field(baseType, field);
+            return fieldDef ? &fieldDef->type : nullptr;
         }
     };
 
@@ -92,50 +81,12 @@ namespace tpp::compiler
         return TypeRef{StringType{}};
     }
 
-    static tpp::TypeKind lowerPublicType(const TypeRef &type)
-    {
-        return std::visit([](auto &&arg) -> tpp::TypeKind
-        {
-            using T = std::decay_t<decltype(arg)>;
-            if constexpr (std::is_same_v<T, StringType>)
-                return tpp::TypeKind{tpp::TypeKind::Value{std::in_place_index<0>}};
-            else if constexpr (std::is_same_v<T, IntType>)
-                return tpp::TypeKind{tpp::TypeKind::Value{std::in_place_index<1>}};
-            else if constexpr (std::is_same_v<T, BoolType>)
-                return tpp::TypeKind{tpp::TypeKind::Value{std::in_place_index<2>}};
-            else if constexpr (std::is_same_v<T, NamedType>)
-                return tpp::TypeKind{tpp::TypeKind::Value{std::in_place_index<3>, arg.name}};
-            else if constexpr (std::is_same_v<T, std::shared_ptr<ListType>>)
-                return tpp::TypeKind{tpp::TypeKind::Value{std::in_place_index<4>,
-                    std::make_unique<tpp::TypeKind>(lowerPublicType(arg->elementType))}};
-            else if constexpr (std::is_same_v<T, std::shared_ptr<OptionalType>>)
-                return tpp::TypeKind{tpp::TypeKind::Value{std::in_place_index<5>,
-                    std::make_unique<tpp::TypeKind>(lowerPublicType(arg->innerType))}};
-            else
-                return tpp::TypeKind{tpp::TypeKind::Value{std::in_place_index<0>}};
-        }, type);
-    }
-
     static tpp::ExprInfo lowerPublicExpr(const Expression &e, const TypeEnv &env)
     {
         tpp::ExprInfo expr;
         expr.path = flattenExpr(e);
-        expr.type = std::make_unique<tpp::TypeKind>(lowerPublicType(resolveExprType(e, env)));
+        expr.type = std::make_unique<tpp::TypeKind>(tpp::to_public_type(resolveExprType(e, env)));
         return expr;
-    }
-
-    static std::optional<tpp::SourceRange> lowerPublicRange(const Range &range,
-                                                            bool includeSourceRanges)
-    {
-        if (!includeSourceRanges)
-            return std::nullopt;
-
-        tpp::SourceRange sourceRange;
-        sourceRange.start.line = range.start.line;
-        sourceRange.start.character = range.start.character;
-        sourceRange.end.line = range.end.line;
-        sourceRange.end.character = range.end.character;
-        return sourceRange;
     }
 
     static TypeRef normalizeCallArgumentType(const TypeRef &type)
@@ -259,13 +210,7 @@ namespace tpp::compiler
                 else if constexpr (std::is_same_v<T, std::shared_ptr<SwitchNode>>)
                 {
                     TypeRef exprType = resolveExprType(arg->expr, env);
-                    const EnumDef *enumDef = nullptr;
-                    if (auto *namedType = std::get_if<NamedType>(&exprType))
-                    {
-                        auto it = env.types.nameIndex.find(namedType->name);
-                        if (it != env.types.nameIndex.end() && it->second.kind == TypeKind::Enum)
-                            enumDef = &env.types.enums[it->second.index];
-                    }
+                    const EnumDef *enumDef = env.semanticModel.resolve_enum(exprType);
 
                     auto switchInstr = std::make_unique<tpp::SwitchInstr>();
                     switchInstr->expr = lowerPublicExpr(arg->expr, env);
@@ -290,7 +235,7 @@ namespace tpp::compiler
                         }
 
                         if (payloadType.has_value())
-                            caseInstr.payloadType = std::make_unique<tpp::TypeKind>(lowerPublicType(*payloadType));
+                            caseInstr.payloadType = std::make_unique<tpp::TypeKind>(tpp::to_public_type(*payloadType));
 
                         if (c.isSyntheticRenderCase)
                         {
@@ -309,7 +254,7 @@ namespace tpp::compiler
                             {
                                 tpp::ExprInfo payloadExpr;
                                 payloadExpr.path = switchInstr->expr.path + "." + c.tag;
-                                payloadExpr.type = std::make_unique<tpp::TypeKind>(lowerPublicType(*payloadType));
+                                payloadExpr.type = std::make_unique<tpp::TypeKind>(tpp::to_public_type(*payloadType));
                                 callInstr.arguments.push_back(std::move(payloadExpr));
                                 argumentTypes.push_back(*payloadType);
                             }
@@ -390,10 +335,9 @@ namespace tpp::compiler
     // ═══════════════════════════════════════════════════════════════════
 
     bool lowerToFunctions(const std::vector<TemplateFunction> &functions,
-                          const TypeRegistry &types,
+                          const SemanticModel &semanticModel,
                           std::vector<tpp::FunctionDef> &out,
-                          bool includeSourceRanges,
-                          std::string &error)
+                          bool includeSourceRanges)
     {
         std::map<std::string, int> funcIndex;
         for (size_t i = 0; i < functions.size(); ++i)
@@ -407,7 +351,7 @@ namespace tpp::compiler
 
         for (const auto &fn : functions)
         {
-            TypeEnv env(types);
+            TypeEnv env(semanticModel);
             for (const auto &param : fn.params)
                 env.push(param.name, param.type);
 
@@ -417,13 +361,13 @@ namespace tpp::compiler
             {
                 tpp::ParamDef paramDef;
                 paramDef.name = param.name;
-                paramDef.type = std::make_unique<tpp::TypeKind>(lowerPublicType(param.type));
+                paramDef.type = std::make_unique<tpp::TypeKind>(tpp::to_public_type(param.type));
                 functionDef.params.push_back(std::move(paramDef));
             }
             functionDef.body = std::make_unique<std::vector<tpp::Instruction>>(lowerPublicNodes(fn.body, env, functions, funcIndex));
             functionDef.policy = fn.policy;
             functionDef.doc = fn.doc;
-            functionDef.sourceRange = lowerPublicRange(fn.sourceRange, includeSourceRanges);
+            functionDef.sourceRange = tpp::to_public_range(fn.sourceRange, includeSourceRanges);
 
             out.push_back(std::move(functionDef));
         }

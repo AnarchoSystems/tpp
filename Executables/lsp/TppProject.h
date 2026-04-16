@@ -9,6 +9,7 @@
 #include <map>
 #include <set>
 #include <filesystem>
+#include <optional>
 
 namespace tpp
 {
@@ -51,6 +52,9 @@ namespace tpp
 
         // Returns true if the given URI is a type definition file (not a template).
         bool isTypeUri(const std::string &uri) const { return typeUris_.count(uri) > 0; }
+
+        // Returns the index of a type file within the project's configured type list.
+        std::optional<size_t> typeFileIndex(const std::string &uri) const;
 
         // Returns the current content for a URI (dirty buffer first, else disk).
         std::string getContent(const std::string &uri) const;

@@ -38,6 +38,22 @@ namespace tpp
         Range range;
     };
 
+    enum class TypeSourceSemanticKind
+    {
+        Keyword,
+        Type,
+        Property,
+        EnumMember,
+        Operator,
+        Comment,
+    };
+
+    struct TypeSourceSemanticSpan
+    {
+        Range range;
+        TypeSourceSemanticKind kind;
+    };
+
     struct ParsedTemplateSource
     {
         std::string name;
@@ -59,6 +75,10 @@ namespace tpp
     };
 
     std::vector<TypeSourceToken> tokenizeTypeSource(const std::string &src);
+
+    std::vector<TypeSourceSemanticSpan> classifyTypeSource(const std::string &src);
+
+    std::vector<TypeSourceSemanticSpan> classifyTypeSourceTokens(const std::vector<TypeSourceToken> &tokens);
 
     bool parseTemplateSource(const std::string &src,
                              std::vector<ParsedTemplateSource> &templates);

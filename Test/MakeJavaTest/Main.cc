@@ -227,11 +227,12 @@ int main(int argc, char *argv[])
 
     for (const auto &pe : config.value("replacement-policies", nlohmann::json::array()))
     {
-        nlohmann::json pj = nlohmann::json::parse(readFile(testDir / pe.get<std::string>()));
-        std::string err;
-        if (!compiler.add_policy(pj, err))
+        std::string policyText = readFile(testDir / pe.get<std::string>());
+        std::vector<tpp::Diagnostic> policyDiagnostics;
+        if (!compiler.add_policy_text(policyText, policyDiagnostics))
         {
-            std::cerr << testDir.string() << ": error: " << err << std::endl;
+            for (const auto &diagnostic : policyDiagnostics)
+                std::cerr << testDir.string() << ": error: " << diagnostic.message << std::endl;
             return EXIT_FAILURE;
         }
     }

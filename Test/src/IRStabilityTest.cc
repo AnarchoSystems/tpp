@@ -70,8 +70,10 @@ TEST(IRStability, SchemaCheck)
         }
         for (const auto &pol : loaded.policies)
         {
-            std::string err;
-            compiler.add_policy(pol, err);
+            std::vector<tpp::Diagnostic> policyDiagnostics;
+            compiler.add_policy_text(pol, policyDiagnostics);
+            ASSERT_TRUE(policyDiagnostics.empty())
+                << "Unexpected policy diagnostics: " << nlohmann::json(policyDiagnostics).dump(2);
         }
 
         tpp::IR output;

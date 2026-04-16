@@ -129,6 +129,28 @@ namespace tpp
         }
     };
 
+    inline Diagnostic makeErrorDiagnostic(std::string message,
+                                          Range range,
+                                          std::string source = "tpp")
+    {
+        return Diagnostic{
+            range,
+            std::move(message),
+            DiagnosticSeverity::Error,
+            std::nullopt,
+            std::move(source),
+            {},
+            std::nullopt,
+            {}
+        };
+    }
+
+    inline Diagnostic makeErrorDiagnostic(std::string message,
+                                          std::string source = "tpp")
+    {
+        return makeErrorDiagnostic(std::move(message), {{0, 0}, {0, 0}}, std::move(source));
+    }
+
     struct DiagnosticLSPMessage
     {
         std::string uri;

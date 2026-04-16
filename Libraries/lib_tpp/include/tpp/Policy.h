@@ -1,5 +1,6 @@
 #pragma once
 
+#include <tpp/Diagnostic.h>
 #include <string>
 #include <vector>
 #include <map>
@@ -90,10 +91,6 @@ namespace tpp::compiler
     class PolicyRegistry
     {
     public:
-        // Returns true on success; false and appends a message to `error` on failure
-        // (unknown/missing fields, duplicate tag).
-        bool add_policy(const nlohmann::json &j, std::string &error);
-
         // Returns nullptr if the tag is not registered.
         const Policy *find(const std::string &tag) const noexcept;
 
@@ -102,8 +99,15 @@ namespace tpp::compiler
         bool operator==(const PolicyRegistry &other) const { return policies_ == other.policies_; }
 
     private:
+        friend bool load_policy_json(PolicyRegistry &registry,
+                                     const nlohmann::json &j,
+                                     std::vector<Diagnostic> &diagnostics);
         std::map<std::string, Policy> policies_;
     };
+
+    bool load_policy_json(PolicyRegistry &registry,
+                          const nlohmann::json &j,
+                          std::vector<Diagnostic> &diagnostics);
 
     // ── JSON serialization (needed to round-trip through IR) ──
 
@@ -188,9 +192,9 @@ namespace tpp::compiler
     }
     inline void from_json(const nlohmann::json &j, PolicyRegistry &v)
     {
-        std::string err;
+        std::vector<Diagnostic> diagnostics;
         for (const auto &item : j)
-            v.add_policy(item, err);
+            load_policy_json(v, item, diagnostics);
     }
 
 } // namespace tpp

@@ -1,8 +1,9 @@
 #include <tpp/Compiler.h>
 #include <tpp/IR.h>
-#include <tpp/IRBuilder.h>
+#include <tpp/IRAssembler.h>
 #include "tpp/PublicIRConverter.h"
 #include <tpp/Lowering.h>
+#include <tpp/Tooling.h>
 #include <tpp/TemplateParser.h>
 #include <tpp/TypedefParser.h>
 #include <tpp/Diagnostic.h>
@@ -1268,81 +1269,16 @@ namespace tpp::compiler
         LineSeg openSeg;
     };
 
-    static const StructDef *resolveStructFromType(const TypeRef &type, const TypeRegistry &types)
-    {
-        if (auto named = std::get_if<NamedType>(&type))
-        {
-            auto it = types.nameIndex.find(named->name);
-            if (it != types.nameIndex.end() && it->second.kind == TypeKind::Struct)
-                return &types.structs[it->second.index];
-            return nullptr;
-        }
-        if (auto opt = std::get_if<std::shared_ptr<OptionalType>>(&type))
-            return resolveStructFromType((*opt)->innerType, types);
-        return nullptr;
-    }
-
-    static const EnumDef *resolveEnumFromType(const TypeRef &type, const TypeRegistry &types)
-    {
-        if (auto named = std::get_if<NamedType>(&type))
-        {
-            auto it = types.nameIndex.find(named->name);
-            if (it != types.nameIndex.end() && it->second.kind == TypeKind::Enum)
-                return &types.enums[it->second.index];
-            return nullptr;
-        }
-        if (auto opt = std::get_if<std::shared_ptr<OptionalType>>(&type))
-            return resolveEnumFromType((*opt)->innerType, types);
-        return nullptr;
-    }
-
-    // Returns the first undefined named type found in a TypeRef, or nullopt if all are known.
-    static std::optional<std::string> findUndefinedNamedType(const TypeRef &tr, const TypeRegistry &types)
-    {
-        if (auto named = std::get_if<NamedType>(&tr))
-            return types.nameIndex.find(named->name) == types.nameIndex.end()
-                       ? std::make_optional(named->name) : std::nullopt;
-        if (auto opt = std::get_if<std::shared_ptr<OptionalType>>(&tr))
-            return findUndefinedNamedType((*opt)->innerType, types);
-        if (auto list = std::get_if<std::shared_ptr<ListType>>(&tr))
-            return findUndefinedNamedType((*list)->elementType, types);
-        return std::nullopt;
-    }
-
-    static const VariantDef *findEnumVariant(const EnumDef *ed, const std::string &tag)
-    {
-        if (!ed)
-            return nullptr;
-        for (const auto &variant : ed->variants)
-        {
-            if (variant.tag == tag)
-                return &variant;
-        }
-        return nullptr;
-    }
-
     static const EnumDef *findNearestSwitchEnum(const std::vector<ValidationFrame> &frames,
-                                                const TypeRegistry &types)
+                                                const SemanticModel &types)
     {
         for (auto it = frames.rbegin(); it != frames.rend(); ++it)
         {
             if (it->kind != ScopeKind::Switch || !it->switchExprType.has_value())
                 continue;
-            return resolveEnumFromType(it->switchExprType.value(), types);
+            return types.resolve_enum(it->switchExprType.value());
         }
         return nullptr;
-    }
-
-    static std::vector<const TemplateFunction *> findTemplateOverloads(const std::vector<TemplateFunction> &functions,
-                                                                       const std::string &name)
-    {
-        std::vector<const TemplateFunction *> overloads;
-        for (const auto &function : functions)
-        {
-            if (function.name == name)
-                overloads.push_back(&function);
-        }
-        return overloads;
     }
 
     static bool hasWholeEnumRenderViaOverload(const std::vector<const TemplateFunction *> &overloads,
@@ -1443,7 +1379,7 @@ namespace tpp::compiler
 
     static bool validatePathExpressionType(const std::string &path,
                                            const std::vector<ValidationFrame> &frames,
-                                           const TypeRegistry &types,
+                                           const SemanticModel &types,
                                            const std::set<std::string> &activeNarrowing,
                                            const std::set<std::string> &activeAbsent,
                                            bool allowOptionalTerminal,
@@ -1495,11 +1431,11 @@ namespace tpp::compiler
                 current = unwrapOptionalType(current);
             }
 
-            const StructDef *sd = resolveStructFromType(current, types);
+            const StructDef *sd = types.resolve_struct(current);
             if (!sd)
             {
                 if (auto named = std::get_if<NamedType>(&current))
-                    if (types.nameIndex.find(named->name) == types.nameIndex.end())
+                    if (!types.has_named_type(named->name))
                     {
                         error = "undefined type '" + named->name + "'";
                         return false;
@@ -1574,7 +1510,7 @@ namespace tpp::compiler
     static void validateTemplateSemantics(const TemplateFunction &f,
                                           const std::vector<TemplateLine> &templateLines,
                                           size_t bodyStartLine,
-                                          const TypeRegistry &types,
+                                          const SemanticModel &types,
                                           const PolicyRegistry &policies,
                                           std::vector<Diagnostic> &diags,
                                           const std::vector<TemplateFunction> &allFunctions,
@@ -1606,7 +1542,7 @@ namespace tpp::compiler
         std::set<std::string> undefinedTypeVars;
         for (const auto &param : f.params)
         {
-            if (auto undef = findUndefinedNamedType(param.type, types))
+            if (auto undef = types.find_undefined_named_type(param.type))
             {
                 int col = 0;
                 if (!headerText.empty())
@@ -1894,7 +1830,7 @@ namespace tpp::compiler
                         {
                             const EnumDef *switchEnum = nullptr;
                             if (it->switchExprType.has_value())
-                                switchEnum = resolveEnumFromType(it->switchExprType.value(), types);
+                                switchEnum = types.resolve_enum(it->switchExprType.value());
                             if (switchEnum)
                             {
                                 std::vector<std::string> missing;
@@ -1925,7 +1861,7 @@ namespace tpp::compiler
                 {
                     ValidationFrame frame{ScopeKind::Case};
                     const EnumDef *switchEnum = findNearestSwitchEnum(frames, types);
-                    const VariantDef *variant = findEnumVariant(switchEnum, d->tag);
+                    const VariantDef *variant = types.find_variant(switchEnum, d->tag);
                     for (auto it = frames.rbegin(); it != frames.rend(); ++it)
                     {
                         if (it->kind == ScopeKind::Switch)
@@ -1965,7 +1901,7 @@ namespace tpp::compiler
                         addTemplateDiagnostic(diags, bodyStartLine, li, seg, msg, s, e);
                     validatePolicyTag(d->policy, li, seg);
                     const EnumDef *switchEnum = findNearestSwitchEnum(frames, types);
-                    const VariantDef *variant = findEnumVariant(switchEnum, d->exprText);
+                    const VariantDef *variant = types.find_variant(switchEnum, d->exprText);
                     if (switchEnum && variant)
                     {
                         for (auto it = frames.rbegin(); it != frames.rend(); ++it)
@@ -1989,14 +1925,14 @@ namespace tpp::compiler
                     TypeRef renderElemType = exprType;
                     if (auto listType = std::get_if<std::shared_ptr<ListType>>(&exprType))
                         renderElemType = (*listType)->elementType;
-                    else if (!resolveEnumFromType(exprType, types))
+                    else if (!types.resolve_enum(exprType))
                     {
                         addTemplateDiagnostic(diags, bodyStartLine, li, seg, "render expression must be a list or enum");
                         continue;
                     }
 
-                    const EnumDef *renderEnum = resolveEnumFromType(renderElemType, types);
-                    auto overloads = findTemplateOverloads(allFunctions, d->func);
+                    const EnumDef *renderEnum = types.resolve_enum(renderElemType);
+                    auto overloads = SemanticModel::find_template_overloads(allFunctions, d->func);
                     if (!renderEnum)
                     {
                         if (!hasDirectRenderViaOverload(overloads, renderElemType))
@@ -2281,6 +2217,7 @@ namespace tpp
 {
     void Compiler::clear_templates() noexcept
     {
+        semanticModel_.mutable_functions().clear();
         pendingSources_.erase(
             std::remove_if(pendingSources_.begin(), pendingSources_.end(),
                            [](const PendingSource &s)
@@ -2298,8 +2235,11 @@ namespace tpp
     {
         try
         {
-            // Rebuild type registry from scratch on each compile
-            types = compiler::TypeRegistry{};
+            // Rebuild semantic type state from scratch on each compile
+            semanticModel_.clear_types();
+            semanticModel_.mutable_functions().clear();
+            semanticModel_.mutable_type_source_files().clear();
+            semanticModel_.clear_raw_typedefs();
 
             std::vector<compiler::TemplateFunction> pendingFunctions;
             struct PendingTemplateValidation
@@ -2344,11 +2284,14 @@ namespace tpp
                 {
                     continue;
                 }
+
+                semanticModel_.mutable_type_source_files().push_back(classifyTypeSource(src.content));
+
                 // ── Process type definitions ──────────────────────────
                 if (src.content.empty())
                     continue;
                 auto tokens = compiler::tokenize_typedefs(src.content);
-                compiler::TypedefParser parser{tokens, 0, types, *src.diagnostics};
+                compiler::TypedefParser parser{tokens, 0, semanticModel_, *src.diagnostics};
                 parser.parse();
                 if (!parser.ok)
                 {
@@ -2512,8 +2455,8 @@ namespace tpp
                         pendingFunctions[pendingValidation.functionIndex],
                         pendingValidation.templateLines,
                         pendingValidation.bodyStartLine,
-                        types,
-                        policies_,
+                        semanticModel_,
+                        semanticModel_.policies(),
                         *pendingValidation.diagnostics,
                         pendingFunctions,
                         (int)pendingValidation.bodyStartLine - 1,
@@ -2535,22 +2478,21 @@ namespace tpp
                 return false;
 
             // Lower AST directly to public IR functions
-            std::string lowerError;
             std::vector<FunctionDef> irFunctions;
-            compiler::lowerToFunctions(pendingFunctions, types,
-                                       irFunctions, includeSourceRanges,
-                                       lowerError);
+            compiler::lowerToFunctions(pendingFunctions, semanticModel_,
+                                       irFunctions, includeSourceRanges);
 
-            auto irStructs = to_public_structs(types.structs, includeSourceRanges);
-            auto irEnums = to_public_enums(types.enums, includeSourceRanges);
-            auto irPolicies = to_public_policies(policies_);
+            auto irStructs = to_public_structs(semanticModel_.structs, includeSourceRanges);
+            auto irEnums = to_public_enums(semanticModel_.enums, includeSourceRanges);
+            auto irPolicies = to_public_policies(semanticModel_.policies());
 
-            output = build_ir(std::move(irStructs), std::move(irEnums),
-                              std::move(irFunctions), std::move(irPolicies),
-                              rawTypedefs, includeSourceRanges);
+            output = assemble_ir(std::move(irStructs), std::move(irEnums),
+                                 std::move(irFunctions), std::move(irPolicies),
+                                 rawTypedefs, includeSourceRanges);
 
             // Retain AST-level functions for LSP consumers
-            functions = std::move(pendingFunctions);
+            semanticModel_.mutable_functions() = std::move(pendingFunctions);
+            semanticModel_.set_raw_typedefs(std::move(rawTypedefs));
 
             return true;
         }

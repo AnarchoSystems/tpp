@@ -35,7 +35,8 @@ using ForNode           = compiler::ForNode;
 using IfNode            = compiler::IfNode;
 using SwitchNode        = compiler::SwitchNode;
 using RenderViaNode     = compiler::RenderViaNode;
-using TypeRegistry      = compiler::TypeRegistry;
+using CompilerParamDef  = compiler::ParamDef;
+using TemplateFunction  = compiler::TemplateFunction;
 
 // Each raw token: {line, startChar, length, tokenType, modifiers}
 using RawToken = std::tuple<int, int, int, int, int>;
@@ -426,7 +427,8 @@ static void walkNodes(std::vector<RawToken> &out, const std::vector<ASTNode> &no
 // Emit: "template" as keyword, "main" as function, param names as parameter,
 // type names as type, and punctuation as operator.
 static void emitTemplateHeader(std::vector<RawToken> &out,
-                                const ParsedTemplateSource &tpl,
+                                const std::string &templateName,
+                                const std::vector<CompilerParamDef> &params,
                                 const std::string &headerText,
                                 int line)
 {
@@ -435,16 +437,16 @@ static void emitTemplateHeader(std::vector<RawToken> &out,
 
     // Function name
     const int nameStart = 9;
-    out.push_back({line, nameStart, (int)tpl.name.size(), TT_FUNCTION, 0});
+    out.push_back({line, nameStart, (int)templateName.size(), TT_FUNCTION, 0});
 
     // Find '(' after name
-    int col = (int)(nameStart + tpl.name.size());
+    int col = (int)(nameStart + templateName.size());
     if (col < (int)headerText.size() && headerText[col] == '(')
     {
         out.push_back({line, col, 1, TT_OPERATOR, 0}); // '('
         ++col;
         bool first = true;
-        for (const auto &param : tpl.params)
+        for (const auto &param : params)
         {
             if (!first)
             {
@@ -621,115 +623,42 @@ static void emitUncoveredStructuralDirectiveTokens(std::vector<RawToken> &out,
 }
 
 // ── .tpp.types semantic tokens ────────────────────────────────────────────────
-static void emitTypeTokens(std::vector<RawToken> &out, const std::string &src,
-                            const TypeRegistry *reg)
+static int tokenTypeForTypeSpan(TypeSourceSemanticKind kind)
 {
-    const auto tokens = tokenizeTypeSource(src);
-
-    // State machine to distinguish struct/enum names, field names, tag names, type refs.
-    bool inEnum = false;           // inside an enum { } body
-    int  depth  = 0;               // brace depth
-    bool expectDeclName = false;   // next Ident is a struct/enum type name
-    bool expectMemberName = false; // next Ident at depth=1 is a field or tag name
-
-    for (const auto &tok : tokens)
+    switch (kind)
     {
-        if (tok.kind == TypeSourceTokenKind::Eof) break;
-        int len = (int)tok.text.size();
-        if (len <= 0) continue;
-        int type = -1;
-        int line = tok.range.start.line;
-        int col = tok.range.start.character;
+    case TypeSourceSemanticKind::Keyword:
+        return TT_KEYWORD;
+    case TypeSourceSemanticKind::Type:
+        return TT_TYPE;
+    case TypeSourceSemanticKind::Property:
+        return TT_PROPERTY;
+    case TypeSourceSemanticKind::EnumMember:
+        return TT_ENUM_MEMBER;
+    case TypeSourceSemanticKind::Operator:
+        return TT_OPERATOR;
+    case TypeSourceSemanticKind::Comment:
+        return TT_COMMENT;
+    }
+    return -1;
+}
 
-        switch (tok.kind)
-        {
-        case TypeSourceTokenKind::Struct:
-            inEnum = false;
-            expectDeclName = true;
-            expectMemberName = false;
-            type = TT_KEYWORD;
-            break;
-        case TypeSourceTokenKind::Enum:
-            inEnum = true;
-            expectDeclName = true;
-            expectMemberName = false;
-            type = TT_KEYWORD;
-            break;
-        case TypeSourceTokenKind::KwOptional: case TypeSourceTokenKind::KwList:
-        case TypeSourceTokenKind::KwString: case TypeSourceTokenKind::KwInt: case TypeSourceTokenKind::KwBool:
-            type = TT_KEYWORD;
-            break;
-        case TypeSourceTokenKind::LBrace:
-            depth++;
-            if (depth == 1) expectMemberName = true;
-            type = TT_OPERATOR;
-            break;
-        case TypeSourceTokenKind::RBrace:
-            depth--;
-            if (depth == 0) { inEnum = false; expectMemberName = false; }
-            type = TT_OPERATOR;
-            break;
-        case TypeSourceTokenKind::Semi:
-            if (depth == 1) { expectMemberName = true; }
-            type = TT_OPERATOR;
-            break;
-        case TypeSourceTokenKind::LParen: case TypeSourceTokenKind::RParen:
-            type = TT_OPERATOR;
-            break;
-        case TypeSourceTokenKind::Colon:
-            type = TT_OPERATOR;
-            break;
-        case TypeSourceTokenKind::Comma:
-            if (inEnum && depth == 1) { expectMemberName = true; }
-            type = TT_OPERATOR;
-            break;
-        case TypeSourceTokenKind::LAngle: case TypeSourceTokenKind::RAngle:
-            type = TT_OPERATOR;
-            break;
-        case TypeSourceTokenKind::Comment:
-        case TypeSourceTokenKind::DocComment:
-        {
-            // Emit one TT_COMMENT token per source line (semantic tokens are single-line)
-            int curLine = line;
-            int curCol  = col;
-            std::string remaining = tok.text;
-            while (!remaining.empty())
-            {
-                size_t nl = remaining.find('\n');
-                std::string lineText = (nl == std::string::npos) ? remaining : remaining.substr(0, nl);
-                if (!lineText.empty())
-                    out.push_back({curLine, curCol, (int)lineText.size(), TT_COMMENT, 0});
-                if (nl == std::string::npos) break;
-                remaining = remaining.substr(nl + 1);
-                ++curLine;
-                curCol = 0;
-            }
-            break;
-        }
-        case TypeSourceTokenKind::Ident:
-            if (expectDeclName)
-            {
-                type = TT_TYPE;            // struct/enum declaration name
-                expectDeclName = false;
-            }
-            else if (expectMemberName && depth == 1)
-            {
-                type = inEnum ? TT_ENUM_MEMBER : TT_PROPERTY;
-                expectMemberName = false;
-            }
-            else
-            {
-                // Type reference (field type, tag payload, generic param)
-                type = TT_TYPE;
-            }
-            break;
-        default:
-            break;
-        }
+static void emitTypeTokens(std::vector<RawToken> &out, const std::vector<TypeSourceSemanticSpan> &spans)
+{
+    for (const auto &span : spans)
+    {
+        int len = span.range.end.character - span.range.start.character;
+        if (len <= 0) continue;
+        int type = tokenTypeForTypeSpan(span.kind);
 
         if (type >= 0)
-            out.push_back({line, col, len, type, 0});
+            out.push_back({span.range.start.line, span.range.start.character, len, type, 0});
     }
+}
+
+static void emitTypeTokens(std::vector<RawToken> &out, const std::string &src)
+{
+    emitTypeTokens(out, classifyTypeSource(src));
 }
 
 static bool lineIsWithinTemplate(const std::vector<std::pair<int, int>> &templateLineRanges,
@@ -810,14 +739,30 @@ static void emitTopLevelCommentTokens(std::vector<RawToken> &out, const std::str
     }
 }
 
-static nlohmann::json tokensForTypes(const std::string &src, const TypeRegistry *reg)
+static nlohmann::json tokensForTypes(const std::string &src)
 {
     if (src.empty()) return {{"data", nlohmann::json::array()}};
     std::vector<RawToken> out;
-    emitTypeTokens(out, src, reg);
+    emitTypeTokens(out, src);
     convertTokenColumnsToUtf16(out, src);
     return encodeTokens(out);
 }
+
+static nlohmann::json tokensForTypes(const std::string &src,
+                                     const std::vector<TypeSourceSemanticSpan> *tokens)
+{
+    if (src.empty()) return {{"data", nlohmann::json::array()}};
+    std::vector<RawToken> out;
+    if (tokens)
+        emitTypeTokens(out, *tokens);
+    else
+        emitTypeTokens(out, src);
+    convertTokenColumnsToUtf16(out, src);
+    return encodeTokens(out);
+}
+
+static nlohmann::json tokensForTemplate(const std::string &src,
+                                        const std::vector<TemplateFunction> *semanticFunctions);
 
 // ── .tpp template semantic tokens ────────────────────────────────────────────
 // Parse the raw source text of a template file and emit tokens including:
@@ -827,19 +772,35 @@ static nlohmann::json tokensForTypes(const std::string &src, const TypeRegistry 
 // - END as keyword
 static nlohmann::json tokensForTemplate(const std::string &src)
 {
+    return tokensForTemplate(src, nullptr);
+}
+
+static nlohmann::json tokensForTemplate(const std::string &src,
+                                        const std::vector<TemplateFunction> *semanticFunctions)
+{
     std::vector<RawToken> out;
     std::vector<ParsedTemplateSource> templates;
     parseTemplateSource(src, templates);
     std::vector<std::pair<int, int>> templateLineRanges;
-    for (const auto &tpl : templates)
+    const bool useSemanticModel = semanticFunctions && semanticFunctions->size() == templates.size();
+
+    for (size_t index = 0; index < templates.size(); ++index)
     {
+        const auto &tpl = templates[index];
+        const auto *semanticFunction = useSemanticModel ? &(*semanticFunctions)[index] : nullptr;
         int bodyLineCount = 0;
         for (char c : tpl.bodyText) if (c == '\n') ++bodyLineCount;
         int endLine = (int)tpl.bodyStartLine + 1 + bodyLineCount;
-        templateLineRanges.emplace_back(tpl.sourceRange.start.line, endLine);
+        const int startLine = semanticFunction ? semanticFunction->sourceRange.start.line
+                                               : tpl.sourceRange.start.line;
+        templateLineRanges.emplace_back(startLine, endLine);
 
-        emitTemplateHeader(out, tpl, tpl.headerText, tpl.sourceRange.start.line);
-        walkNodes(out, tpl.body);
+        emitTemplateHeader(out,
+                           semanticFunction ? semanticFunction->name : tpl.name,
+                           semanticFunction ? semanticFunction->params : tpl.params,
+                           tpl.headerText,
+                           startLine);
+        walkNodes(out, semanticFunction ? semanticFunction->body : tpl.body);
         emitUncoveredStructuralDirectiveTokens(out, tpl.bodyText, static_cast<int>(tpl.bodyStartLine));
 
         out.push_back({endLine, 0, 3, TT_KEYWORD, 0});
@@ -860,12 +821,18 @@ nlohmann::json computeSemanticTokens(const std::string &uri, const TppProject &p
     {
         // Get the source for this specific file
         std::string src = project.getContent(uri);
+        if (auto typeFileIndex = project.typeFileIndex(uri))
+        {
+            const auto &typeSourceFiles = project.compiler().semantic_model().type_source_files();
+            if (*typeFileIndex < typeSourceFiles.size())
+                return tokensForTypes(src, &typeSourceFiles[*typeFileIndex]);
+        }
         return tokensForTypes(src, nullptr);
     }
     else
     {
         std::string src = project.getContent(uri);
-        return tokensForTemplate(src);
+        return tokensForTemplate(src, &project.compiler().semantic_model().functions());
     }
 }
 
@@ -878,7 +845,7 @@ nlohmann::json computeSemanticTokensFromText(const std::string &uri, const std::
     bool hasTypesExt = uri.size() >= 10 && uri.substr(uri.size() - 10) == ".tpp.types";
 
     if (looksLikeTypes || hasTypesExt)
-        return tokensForTypes(text, nullptr);
+        return tokensForTypes(text);
     else
         return tokensForTemplate(text);
 }

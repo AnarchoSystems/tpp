@@ -1,7 +1,6 @@
 #pragma once
 
-#include <tpp/AST.h>
-#include <tpp/Policy.h>
+#include <tpp/SemanticModel.h>
 #include <tpp/Diagnostic.h>
 #include <nlohmann/json.hpp>
 #include <string>
@@ -31,18 +30,15 @@ namespace tpp
 
         void clear_policies() noexcept;
 
-        // Load a single policy from its parsed JSON object.
-        // Validates structure and checks tag uniqueness. Appends to error on failure.
-        bool add_policy(const nlohmann::json &policyJson, std::string &error) noexcept;
+        // Load a single policy from raw file text.
+        // Parses JSON, validates structure, and appends diagnostics on failure.
+        bool add_policy_text(const std::string &policyText,
+                     std::vector<Diagnostic> &diagnostics) noexcept;
 
         [[nodiscard]]
         bool compile(IR &output, bool includeSourceRanges = false) noexcept;
 
-        compiler::TypeRegistry types;
-
-        // Retained after compile() for consumers that need AST-level access
-        // (e.g. LSP autocomplete, jump-to-definition).
-        std::vector<compiler::TemplateFunction> functions;
+        const compiler::SemanticModel &semantic_model() const noexcept { return semanticModel_; }
 
     private:
         struct PendingSource
@@ -52,6 +48,6 @@ namespace tpp
             bool isTypes;
         };
         std::vector<PendingSource> pendingSources_;
-        compiler::PolicyRegistry policies_;
+        compiler::SemanticModel semanticModel_;
     };
 }

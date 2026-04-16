@@ -188,28 +188,12 @@ int main(int argc, char *argv[])
     for (const auto &policyEntry : config.value("replacement-policies", nlohmann::json::array()))
     {
         std::filesystem::path policyPath = testDir / policyEntry.get<std::string>();
-        std::ifstream pf(policyPath);
-        if (!pf.is_open())
+        std::string policyText = readFile(policyPath);
+        std::vector<tpp::Diagnostic> policyDiagnostics;
+        if (!compiler.add_policy_text(policyText, policyDiagnostics))
         {
-            std::cerr << policyPath.string() << ": error: policy file not found" << std::endl;
-            return EXIT_FAILURE;
-        }
-        nlohmann::json policyJson;
-        try
-        {
-            policyJson = nlohmann::json::parse(std::string(
-                (std::istreambuf_iterator<char>(pf)),
-                std::istreambuf_iterator<char>()));
-        }
-        catch (const std::exception &e)
-        {
-            std::cerr << policyPath.string() << ": error: invalid JSON: " << e.what() << std::endl;
-            return EXIT_FAILURE;
-        }
-        std::string policyError;
-        if (!compiler.add_policy(policyJson, policyError))
-        {
-            std::cerr << policyPath.string() << ": error: " << policyError << std::endl;
+            for (const auto &diagnostic : policyDiagnostics)
+                std::cerr << policyPath.string() << ": error: " << diagnostic.message << std::endl;
             return EXIT_FAILURE;
         }
     }
