@@ -130,7 +130,7 @@ foreach(test_name IN LISTS tpp_success_cases)
     set(out_impl ${CMAKE_CURRENT_BINARY_DIR}/${test_name}_implementation.cc)
 
     tpp_add(tpp_acceptance_test
-        NAME      ${test_name}
+        NAME       ${test_name}
         SOURCE_DIR ${test_dir}
         NAMESPACE  ${test_name}
     )
@@ -256,32 +256,21 @@ add_custom_command(
 foreach(test_name IN LISTS tpp_success_cases)
     set(test_dir ${CMAKE_CURRENT_SOURCE_DIR}/TestCases/${test_name})
     file(GLOB test_case_files ${test_dir}/*)
+    set(shared_ir "${CMAKE_CURRENT_BINARY_DIR}/${test_name}-tpp.json")
 
     set(java_namespace "Java_${test_name}")
     set(java_runner_class "JavaTest_${test_name}")
-    set(java_ir "${java_runner_dir}/${test_name}-tpp.json")
     set(java_bundle "${java_runner_dir}/${test_name}_bundle.java")
     set(java_fragment "${java_runner_dir}/${test_name}_fragment.java")
-
-    add_custom_command(
-        OUTPUT "${java_ir}"
-        COMMAND ${CMAKE_COMMAND}
-            -DCMD=$<TARGET_FILE:tpp>
-            "-DARGS=${test_dir}"
-            -DOUT=${java_ir}
-            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
-        DEPENDS $<TARGET_FILE:tpp> ${test_case_files}
-        COMMENT "tpp ${test_name} → Java IR"
-        VERBATIM)
 
     add_custom_command(
         OUTPUT "${java_bundle}"
         COMMAND ${CMAKE_COMMAND}
             -DCMD=$<TARGET_FILE:tpp2java>
-            "-DARGS=bundle;-ns;${java_namespace};--extern-runtime;--input;${java_ir}"
+            "-DARGS=bundle;-ns;${java_namespace};--extern-runtime;--input;${shared_ir}"
             -DOUT=${java_bundle}
             -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
-        DEPENDS $<TARGET_FILE:tpp2java> "${java_ir}"
+        DEPENDS $<TARGET_FILE:tpp2java> "${shared_ir}"
         COMMENT "tpp2java bundle ${test_name}"
         VERBATIM)
 
@@ -301,29 +290,17 @@ foreach(test_name IN LISTS tpp_success_cases)
 
     set(swift_namespace "Swift_${test_name}")
     set(swift_runner_name "SwiftTest_${test_name}")
-    set(swift_ir "${swift_runner_dir}/${test_name}-tpp.json")
     set(swift_bundle "${swift_runner_dir}/${test_name}_bundle.swift")
     set(swift_fragment "${swift_runner_dir}/${test_name}_fragment.swift")
-
-    add_custom_command(
-        OUTPUT "${swift_ir}"
-        COMMAND ${CMAKE_COMMAND}
-            -DCMD=$<TARGET_FILE:tpp>
-            "-DARGS=${test_dir}"
-            -DOUT=${swift_ir}
-            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
-        DEPENDS $<TARGET_FILE:tpp> ${test_case_files}
-        COMMENT "tpp ${test_name} → Swift IR"
-        VERBATIM)
 
     add_custom_command(
         OUTPUT "${swift_bundle}"
         COMMAND ${CMAKE_COMMAND}
             -DCMD=$<TARGET_FILE:tpp2swift>
-            "-DARGS=source;-ns;${swift_namespace};--extern-runtime;--input;${swift_ir}"
+            "-DARGS=source;-ns;${swift_namespace};--extern-runtime;--input;${shared_ir}"
             -DOUT=${swift_bundle}
             -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
-        DEPENDS $<TARGET_FILE:tpp2swift> "${swift_ir}"
+        DEPENDS $<TARGET_FILE:tpp2swift> "${shared_ir}"
         COMMENT "tpp2swift source ${test_name}"
         VERBATIM)
 
