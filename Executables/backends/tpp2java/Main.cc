@@ -73,7 +73,7 @@ int main(int argc, char *argv[])
 
     if (cli.mode == Mode::RuntimeShared)
     {
-        std::cout << codegen::reindent(codegen::render_java_shared_runtime(), 4) << std::endl;
+        std::cout << codegen::render_java_shared_runtime() << std::endl;
         return EXIT_SUCCESS;
     }
 
@@ -86,12 +86,9 @@ int main(int argc, char *argv[])
     if (cli.mode == Mode::Runtime)
     {
         auto funcCtx = buildFunctionsContext(ir, functionPrefix, namespaceName);
-        std::cout << codegen::reindent(codegen::render_java_runtime(funcCtx), 4) << std::endl;
+        std::cout << codegen::render_java_runtime(funcCtx) << std::endl;
         return EXIT_SUCCESS;
     }
-
-    // Build codegen context and render types
-    codegen::CodegenInput ctx = codegen::buildCodegenInput(ir);
 
     // Generate rendering functions from instruction IR
     auto funcCtx = buildFunctionsContext(ir, functionPrefix, namespaceName);
@@ -105,13 +102,13 @@ int main(int argc, char *argv[])
             std::cerr << "bundle requires -ns <name>\n";
             return EXIT_FAILURE;
         }
-        std::cout << codegen::reindent(codegen::render_java_bundle(ctx, funcCtx), 4) << std::endl;
+        std::cout << codegen::render_java_bundle(ir, funcCtx) << std::endl;
         return EXIT_SUCCESS;
     }
 
-    std::cout << codegen::render_java_source(ctx);
+    std::cout << codegen::render_java_source(ir);
 
-    std::cout << codegen::reindent(codegen::render_java_functions(funcCtx), 4);
+    std::cout << codegen::render_java_functions(funcCtx);
 
     return EXIT_SUCCESS;
 }

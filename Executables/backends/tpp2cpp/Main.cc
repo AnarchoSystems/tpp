@@ -103,7 +103,7 @@ void tpp2cpp::run()
 {
     const auto &iRep = mainIR();
 
-    auto renderFunction = [&](const std::string &fnName, const nlohmann::json &ctx, bool reindentOutput = false) {
+    auto renderFunction = [&](const std::string &fnName, const nlohmann::json &ctx) {
         const tpp::FunctionDef *fn = nullptr;
         std::string error, output;
         if (!(tpp::get_function(iRep, fnName, fn, error) && tpp::render_function(iRep, *fn, ctx, output, error)))
@@ -111,7 +111,7 @@ void tpp2cpp::run()
             std::cerr << "defs.tpp: error: Failed to render " << fnName << ": " << error << std::endl;
             exit(EXIT_FAILURE);
         }
-        std::cout << (reindentOutput ? codegen::reindent(output) : output) << std::endl;
+        std::cout << output << std::endl;
     };
 
     switch (mode)
@@ -131,14 +131,14 @@ void tpp2cpp::run()
         auto ctx = buildFunctionsContext(input, "", includes, namespaceName);
         if (externalRuntime)
             ctx.externalRuntime = true;
-        renderFunction("render_cpp_native_implementation", nlohmann::json(ctx), true);
+        renderFunction("render_cpp_native_implementation", nlohmann::json(ctx));
         break;
     }
     case Mode::Runtime:
     {
         auto ctx = buildFunctionsContext(input, "", includes, namespaceName);
         ctx.externalRuntime = false;
-        renderFunction("render_cpp_runtime", nlohmann::json(ctx), true);
+        renderFunction("render_cpp_runtime", nlohmann::json(ctx));
         break;
     }
     }
@@ -158,33 +158,68 @@ static std::string toCppStringLiteral(const std::string &s)
     return result + "\"";
 }
 
+static bool hasRecursiveVariant(const tpp::EnumDef &enumDef)
+{
+    for (const auto &variant : enumDef.variants)
+        if (variant.recursive)
+            return true;
+    return false;
+}
+
+static void qualifyNamedTypeJson(nlohmann::json &typeJson)
+{
+    if (typeJson.contains("Named"))
+    {
+        typeJson["Named"] = codegen::qualifyPublicIRTypeName(typeJson["Named"].get<std::string>());
+        return;
+    }
+    if (typeJson.contains("List"))
+    {
+        qualifyNamedTypeJson(typeJson["List"]);
+        return;
+    }
+    if (typeJson.contains("Optional"))
+        qualifyNamedTypeJson(typeJson["Optional"]);
+}
+
 static nlohmann::json to_render_cpp_type_input(const tpp::IR &iRep,
                                                const std::vector<std::string> &includes,
                                                const std::string &namespaceName)
 {
-    codegen::CodegenInput ctx = codegen::buildCodegenInput(iRep);
-    for (auto &s : ctx.structs)
-        s.rawTypedefs = toCppStringLiteral(s.rawTypedefs);
-    for (auto &e : ctx.enums)
-        e.rawTypedefs = toCppStringLiteral(e.rawTypedefs);
-    nlohmann::json ns = namespaceName.empty() ? nlohmann::json() : nlohmann::json(namespaceName);
-    return nlohmann::json::array({nlohmann::json(ctx), nlohmann::json(includes), ns});
-}
+    nlohmann::json irJson = iRep;
+    nlohmann::json structs = irJson["structs"];
+    for (auto &structDef : structs)
+        structDef["rawTypedefs"] = toCppStringLiteral(structDef["rawTypedefs"].get<std::string>());
 
-static nlohmann::json buildFunctionsInputJson(const tpp::IR &iRep,
-                                          const std::vector<std::string> &includes,
-                                          const std::string &namespaceName)
-{
-    codegen::CodegenInput ctx = codegen::buildCodegenInput(iRep);
+    nlohmann::json preStructEnums = nlohmann::json::array();
+    nlohmann::json postStructEnums = nlohmann::json::array();
+    const nlohmann::json &allEnums = irJson["enums"];
+    for (size_t enumIndex = 0; enumIndex < iRep.enums.size(); ++enumIndex)
+    {
+        auto enumJson = allEnums[enumIndex];
+        enumJson["rawTypedefs"] = toCppStringLiteral(enumJson["rawTypedefs"].get<std::string>());
+        if (hasRecursiveVariant(iRep.enums[enumIndex]))
+            postStructEnums.push_back(std::move(enumJson));
+        else
+            preStructEnums.push_back(std::move(enumJson));
+    }
+
     nlohmann::json ns = namespaceName.empty() ? nlohmann::json() : nlohmann::json(namespaceName);
-    return nlohmann::json::array({nlohmann::json(ctx), nlohmann::json(includes), ns, ""});
+    return nlohmann::json::array({preStructEnums, structs, postStructEnums, nlohmann::json(includes), ns});
 }
 
 static nlohmann::json to_render_cpp_functions_input(const tpp::IR &iRep,
                                                     const std::vector<std::string> &includes,
                                                     const std::string &namespaceName)
 {
-    return buildFunctionsInputJson(iRep, includes, namespaceName);
+    nlohmann::json irJson = iRep;
+    nlohmann::json functions = irJson["functions"];
+    for (auto &function : functions)
+        for (auto &param : function["params"])
+            qualifyNamedTypeJson(param["type"]);
+
+    nlohmann::json ns = namespaceName.empty() ? nlohmann::json() : nlohmann::json(namespaceName);
+    return nlohmann::json::array({functions, nlohmann::json(includes), ns, ""});
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

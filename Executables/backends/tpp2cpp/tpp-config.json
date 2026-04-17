@@ -3,6 +3,7 @@
         "defs.tpp"
     ],
     "types": [
+        "../../../Libraries/lib_tpp/ir.tpp.types",
         "../codegen/codegen.tpp.types"
     ]
 }

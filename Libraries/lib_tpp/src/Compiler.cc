@@ -316,23 +316,23 @@ namespace
 
     void populate_type_definitions(ParsedTypeArtifact &artifact)
     {
-        for (auto &structDef : artifact.structs)
-            structDef.rawTypedefs = extract_type_definition(artifact.source.content, "struct", structDef.name);
-        for (auto &enumDef : artifact.enums)
-            enumDef.rawTypedefs = extract_type_definition(artifact.source.content, "enum", enumDef.name);
+        for (auto &structDef : artifact.mutable_structs())
+            structDef.rawTypedefs = extract_type_definition(artifact.source().content, "struct", structDef.name);
+        for (auto &enumDef : artifact.mutable_enums())
+            enumDef.rawTypedefs = extract_type_definition(artifact.source().content, "enum", enumDef.name);
     }
 
     void merge_type_artifact(const ParsedTypeArtifact &artifact,
                              compiler::SemanticModel &semanticModel,
                              std::vector<Diagnostic> &diagnostics)
     {
-        for (const auto &structDef : artifact.structs)
+        for (const auto &structDef : artifact.structs())
         {
             if (semanticModel.nameIndex.count(structDef.name) != 0)
             {
                 add_duplicate_type_diagnostic(diagnostics,
                                               structDef.name,
-                                              find_type_name_range(artifact.tokens, structDef.name));
+                                              find_type_name_range(artifact.tokens(), structDef.name));
                 continue;
             }
 
@@ -341,13 +341,13 @@ namespace
             semanticModel.nameIndex[structDef.name] = {compiler::TypeKind::Struct, index};
         }
 
-        for (const auto &enumDef : artifact.enums)
+        for (const auto &enumDef : artifact.enums())
         {
             if (semanticModel.nameIndex.count(enumDef.name) != 0)
             {
                 add_duplicate_type_diagnostic(diagnostics,
                                               enumDef.name,
-                                              find_type_name_range(artifact.tokens, enumDef.name));
+                                              find_type_name_range(artifact.tokens(), enumDef.name));
                 continue;
             }
 
@@ -450,19 +450,19 @@ bool lex(const TppProject &project,
     {
         for (const auto &source : project.type_sources())
         {
-            output.typeSources.push_back({source, tokenizeTypeSource(source.content)});
+            output.add_type_source({source, tokenizeTypeSource(source.content)});
             diagnostics_for(diagnostics, source.uri);
         }
 
         for (const auto &source : project.template_sources())
         {
-            output.templateSources.push_back({source, tokenizeTemplateSource(source.content)});
+            output.add_template_source({source, tokenizeTemplateSource(source.content)});
             diagnostics_for(diagnostics, source.uri);
         }
 
         for (const auto &source : project.policy_sources())
         {
-            output.policySources.push_back(source);
+            output.add_policy_source(source);
             diagnostics_for(diagnostics, source.uri);
         }
     }
@@ -491,32 +491,32 @@ bool parse(const LexedProject &project,
 
     try
     {
-        for (const auto &source : project.typeSources)
+        for (const auto &source : project.type_sources())
         {
             ParsedTypeArtifact artifact;
-            artifact.source = source.source;
-            artifact.tokens = source.tokens;
+            artifact.mutable_source() = source.source();
+            artifact.mutable_tokens() = source.tokens();
 
-            auto tokens = to_internal_tokens(source.tokens);
+            auto tokens = to_internal_tokens(source.tokens());
             compiler::SemanticModel semanticModel;
-            auto &sourceDiagnostics = diagnostics_for(diagnostics, source.source.uri);
+            auto &sourceDiagnostics = diagnostics_for(diagnostics, source.source().uri);
             compiler::TypedefParser parser{tokens, 0, semanticModel, sourceDiagnostics};
             parser.parse();
 
-            artifact.structs = std::move(semanticModel.structs);
-            artifact.enums = std::move(semanticModel.enums);
+            artifact.mutable_structs() = std::move(semanticModel.structs);
+            artifact.mutable_enums() = std::move(semanticModel.enums);
             populate_type_definitions(artifact);
             if (!options.includeSourceRanges)
-                strip_type_ranges(artifact.structs, artifact.enums);
+                strip_type_ranges(artifact.mutable_structs(), artifact.mutable_enums());
 
-            output.typeSources.push_back(std::move(artifact));
+            output.add_type_source(std::move(artifact));
         }
 
-        for (const auto &source : project.templateSources)
+        for (const auto &source : project.template_sources())
         {
             std::vector<ParsedTemplateSource> templates;
-            auto &sourceDiagnostics = diagnostics_for(diagnostics, source.source.uri);
-            parseTemplateSource(source.source.content, templates, sourceDiagnostics);
+            auto &sourceDiagnostics = diagnostics_for(diagnostics, source.source().uri);
+            parseTemplateSource(source.source().content, templates, sourceDiagnostics);
 
             for (auto &templateSource : templates)
             {
@@ -524,17 +524,17 @@ bool parse(const LexedProject &project,
                     strip_template_ranges(templateSource);
 
                 ParsedTemplateArtifact artifact;
-                artifact.source = source.source;
-                artifact.tokens = source.tokens;
-                artifact.value = std::move(templateSource);
-                output.templateSources.push_back(std::move(artifact));
+                artifact.mutable_source() = source.source();
+                artifact.mutable_tokens() = source.tokens();
+                artifact.mutable_value() = std::move(templateSource);
+                output.add_template_source(std::move(artifact));
             }
         }
 
-        for (const auto &source : project.policySources)
+        for (const auto &source : project.policy_sources())
         {
             ParsedPolicyArtifact artifact;
-            artifact.source = source;
+            artifact.mutable_source() = source;
 
             auto &sourceDiagnostics = diagnostics_for(diagnostics, source.uri);
             if (source.content.empty())
@@ -545,7 +545,7 @@ bool parse(const LexedProject &project,
             {
                 try
                 {
-                    artifact.value = nlohmann::json::parse(source.content);
+                    artifact.mutable_value() = nlohmann::json::parse(source.content);
                 }
                 catch (const std::exception &error)
                 {
@@ -553,7 +553,7 @@ bool parse(const LexedProject &project,
                 }
             }
 
-            output.policySources.push_back(std::move(artifact));
+            output.add_policy_source(std::move(artifact));
         }
     }
     catch (const std::exception &error)
@@ -581,38 +581,38 @@ bool analyze(const ParsedProject &project,
 
     try
     {
-        auto &semanticModel = output.semanticModel;
+        auto &semanticModel = output.mutable_semantic_model();
         std::vector<compiler::TemplateFunction> pendingFunctions;
 
-        for (const auto &artifact : project.policySources)
+        for (const auto &artifact : project.policy_sources())
         {
-            if (!artifact.value.has_value())
+            if (!artifact.value().has_value())
                 continue;
-            auto &sourceDiagnostics = diagnostics_for(diagnostics, artifact.source.uri);
+            auto &sourceDiagnostics = diagnostics_for(diagnostics, artifact.source().uri);
             compiler::load_policy_json(semanticModel.mutable_policies(),
-                                       *artifact.value,
+                                       *artifact.value(),
                                        sourceDiagnostics);
         }
 
         if (options.includeSourceRanges)
         {
-            for (const auto &artifact : project.typeSources)
-                semanticModel.mutable_type_source_files().push_back(classifyTypeSourceTokens(artifact.tokens));
+            for (const auto &artifact : project.type_sources())
+                semanticModel.mutable_type_source_files().push_back(classifyTypeSourceTokens(artifact.tokens()));
         }
 
-        for (const auto &artifact : project.typeSources)
+        for (const auto &artifact : project.type_sources())
         {
-            auto &sourceDiagnostics = diagnostics_for(diagnostics, artifact.source.uri);
+            auto &sourceDiagnostics = diagnostics_for(diagnostics, artifact.source().uri);
             merge_type_artifact(artifact, semanticModel, sourceDiagnostics);
         }
 
         bool hasSemanticErrors = false;
         if (!hasSemanticErrors)
         {
-            for (const auto &artifact : project.typeSources)
+            for (const auto &artifact : project.type_sources())
             {
-                auto tokens = to_internal_tokens(artifact.tokens);
-                auto &sourceDiagnostics = diagnostics_for(diagnostics, artifact.source.uri);
+                auto tokens = to_internal_tokens(artifact.tokens());
+                auto &sourceDiagnostics = diagnostics_for(diagnostics, artifact.source().uri);
                 compiler::TypedefParser validator{tokens, 0, semanticModel, sourceDiagnostics};
                 if (!validator.validateTypes())
                     hasSemanticErrors = true;
@@ -621,17 +621,17 @@ bool analyze(const ParsedProject &project,
 
         if (!hasSemanticErrors)
         {
-            for (const auto &artifact : project.typeSources)
+            for (const auto &artifact : project.type_sources())
             {
-                auto tokens = to_internal_tokens(artifact.tokens);
-                auto &sourceDiagnostics = diagnostics_for(diagnostics, artifact.source.uri);
+                auto tokens = to_internal_tokens(artifact.tokens());
+                auto &sourceDiagnostics = diagnostics_for(diagnostics, artifact.source().uri);
                 compiler::TypedefParser validator{tokens, 0, semanticModel, sourceDiagnostics};
                 if (!validator.computeFiniteTypes())
                     hasSemanticErrors = true;
             }
         }
 
-        if (!hasSemanticErrors && !project.typeSources.empty())
+        if (!hasSemanticErrors && !project.type_sources().empty())
             compiler::annotateRecursiveFields(semanticModel);
 
         if (!hasSemanticErrors)
@@ -646,9 +646,10 @@ bool analyze(const ParsedProject &project,
             };
 
             std::vector<PendingTemplateValidation> pendingValidations;
-            for (const auto &artifact : project.templateSources)
+            for (const auto &artifact : project.template_sources())
             {
-                auto function = to_template_function(artifact.value);
+                const auto &templateSource = artifact.value();
+                auto function = to_template_function(templateSource);
                 auto duplicate = std::find_if(pendingFunctions.begin(), pendingFunctions.end(),
                                               [&](const compiler::TemplateFunction &existing)
                 {
@@ -658,10 +659,10 @@ bool analyze(const ParsedProject &project,
                 if (duplicate != pendingFunctions.end())
                 {
                     Diagnostic diagnostic;
-                    diagnostic.range = artifact.value.headerRange;
+                    diagnostic.range = templateSource.headerRange;
                     diagnostic.message = "function '" + function.name + "' is already defined";
                     diagnostic.severity = DiagnosticSeverity::Error;
-                    diagnostics_for(diagnostics, artifact.source.uri).push_back(std::move(diagnostic));
+                    diagnostics_for(diagnostics, artifact.source().uri).push_back(std::move(diagnostic));
                     hasSemanticErrors = true;
                     continue;
                 }
@@ -669,10 +670,10 @@ bool analyze(const ParsedProject &project,
                 pendingFunctions.push_back(std::move(function));
                 pendingValidations.push_back({
                     pendingFunctions.size() - 1,
-                    artifact.source.uri,
-                    artifact.value.bodyStartLine,
-                    compiler::parseTemplateLines(artifact.value.bodyText),
-                    artifact.value.headerText
+                    artifact.source().uri,
+                    templateSource.bodyStartLine,
+                    compiler::parseTemplateLines(templateSource.bodyText),
+                    templateSource.headerText
                 });
             }
 
@@ -722,9 +723,10 @@ bool compile(const AnalyzedProject &project,
 
     try
     {
+        const auto &semanticModel = project.semantic_model();
         std::vector<FunctionDef> functions;
-        if (!compiler::lowerToFunctions(project.semanticModel.functions(),
-                                        project.semanticModel,
+        if (!compiler::lowerToFunctions(semanticModel.functions(),
+                                        semanticModel,
                                         functions,
                                         options.includeSourceRanges))
         {
@@ -732,13 +734,13 @@ bool compile(const AnalyzedProject &project,
             return false;
         }
 
-        auto structs = to_public_structs(project.semanticModel.structs,
+        auto structs = to_public_structs(semanticModel.structs_view(),
                         options.includeSourceRanges,
                         options.includeRawTypedefs);
-        auto enums = to_public_enums(project.semanticModel.enums,
+        auto enums = to_public_enums(semanticModel.enums_view(),
                          options.includeSourceRanges,
                          options.includeRawTypedefs);
-        auto policies = to_public_policies(project.semanticModel.policies());
+        auto policies = to_public_policies(semanticModel.policies());
 
         output = assemble_ir(std::move(structs),
                              std::move(enums),

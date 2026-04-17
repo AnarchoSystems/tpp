@@ -52,7 +52,7 @@ namespace tpp
             step.rx = std::regex(r.regex);
             step.replace = r.replace;
             if (!r.replace.empty())
-                step.compiled_replace = compiler::precompile_replace(r.replace);
+                step.compiled_replace = tpp::precompile_replace(r.replace);
             cp.require.push_back(std::move(step));
         }
         cp.replacements = def.replacements;

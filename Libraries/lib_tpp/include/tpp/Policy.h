@@ -8,6 +8,40 @@
 #include <regex>
 #include <nlohmann/json.hpp>
 
+namespace tpp
+{
+
+    // Transforms @subexpr_N@ -> $N for use with regex replacement APIs.
+    inline std::string precompile_replace(const std::string &replace)
+    {
+        std::string out;
+        out.reserve(replace.size());
+        size_t p = 0;
+        while (p < replace.size())
+        {
+            if (replace[p] == '@')
+            {
+                size_t end = replace.find('@', p + 1);
+                if (end != std::string::npos)
+                {
+                    std::string inner = replace.substr(p + 1, end - p - 1);
+                    if (inner.size() > 8 && inner.substr(0, 8) == "subexpr_")
+                    {
+                        out += '$';
+                        out += inner.substr(8);
+                        p = end + 1;
+                        continue;
+                    }
+                }
+            }
+            out += replace[p];
+            ++p;
+        }
+        return out;
+    }
+
+}
+
 namespace tpp::compiler
 {
 
@@ -40,36 +74,6 @@ namespace tpp::compiler
         std::regex compiled_rx;
         std::string compiled_replace; // replace with @subexpr_N@ → $N transformed
     };
-
-    // Transforms @subexpr_N@ → $N for use with std::regex_replace.
-    // Called once at policy-load time.
-    inline std::string precompile_replace(const std::string &replace)
-    {
-        std::string out;
-        out.reserve(replace.size());
-        size_t p = 0;
-        while (p < replace.size())
-        {
-            if (replace[p] == '@')
-            {
-                size_t end = replace.find('@', p + 1);
-                if (end != std::string::npos)
-                {
-                    std::string inner = replace.substr(p + 1, end - p - 1);
-                    if (inner.size() > 8 && inner.substr(0, 8) == "subexpr_")
-                    {
-                        out += '$';
-                        out += inner.substr(8);
-                        p = end + 1;
-                        continue;
-                    }
-                }
-            }
-            out += replace[p];
-            ++p;
-        }
-        return out;
-    }
 
     // One entry in the `replacements` array: literal-string find/replace.
     struct PolicyReplacement
@@ -152,7 +156,7 @@ namespace tpp::compiler
         j.at("regex").get_to(v.regex);
         if (j.contains("replace")) j.at("replace").get_to(v.replace);
         v.compiled_rx = std::regex(v.regex);
-        if (!v.replace.empty()) v.compiled_replace = precompile_replace(v.replace);
+        if (!v.replace.empty()) v.compiled_replace = tpp::precompile_replace(v.replace);
     }
     inline void to_json(nlohmann::json &j, const PolicyReplacement &v)
     { j = {{"find", v.find}, {"replace", v.replace}}; }

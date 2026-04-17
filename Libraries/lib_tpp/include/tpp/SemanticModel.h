@@ -21,6 +21,9 @@ namespace tpp::compiler
             nameIndex.clear();
         }
 
+        const std::vector<StructDef> &structs_view() const noexcept { return structs; }
+        const std::vector<EnumDef> &enums_view() const noexcept { return enums; }
+
         const std::vector<TemplateFunction> &functions() const noexcept { return functions_; }
         std::vector<TemplateFunction> &mutable_functions() noexcept { return functions_; }
 

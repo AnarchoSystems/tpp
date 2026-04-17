@@ -1,6 +1,8 @@
 project(tpp2swift)
 
-set(SHARED_TYPES "${CMAKE_CURRENT_SOURCE_DIR}/../codegen/codegen.tpp.types")
+set(SHARED_TYPES
+    "${CMAKE_CURRENT_SOURCE_DIR}/../codegen/codegen.tpp.types"
+    "${CMAKE_SOURCE_DIR}/Libraries/lib_tpp/ir.tpp.types")
 
 add_executable(tpp2swift Main.cc)
 target_link_libraries(tpp2swift PRIVATE tpp_codegen)
@@ -16,13 +18,13 @@ add_custom_command(OUTPUT "${swift_ir}"
         "-DARGS=${CMAKE_CURRENT_SOURCE_DIR}"
         -DOUT=${swift_ir}
         -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
-    DEPENDS $<TARGET_FILE:tpp> ${swift_tpp_sources}
+    DEPENDS $<TARGET_FILE:tpp> ${swift_tpp_sources} ${SHARED_TYPES}
     COMMENT "tpp swift_defs"
     VERBATIM)
 
 # Step 2: generate C++ functions header (uses CodegenTypes.h, no separate types header)
 set(swift_funs "${CMAKE_CURRENT_BINARY_DIR}/swift_defs_functions.h")
-set(_swift_funs_args functions -ns codegen -i CodegenTypes.h --input "${swift_ir}")
+set(_swift_funs_args functions -ns codegen -i CodegenTypes.h -i tpp/IR.h --input "${swift_ir}")
 add_custom_command(OUTPUT "${swift_funs}"
     COMMAND ${CMAKE_COMMAND}
         -DCMD=$<TARGET_FILE:tpp2cpp>

@@ -1,6 +1,8 @@
 project(tpp2cpp)
 
-set(SHARED_TYPES "${CMAKE_CURRENT_SOURCE_DIR}/../codegen/codegen.tpp.types")
+set(SHARED_TYPES
+    "${CMAKE_CURRENT_SOURCE_DIR}/../codegen/codegen.tpp.types"
+    "${CMAKE_SOURCE_DIR}/Libraries/lib_tpp/ir.tpp.types")
 
 add_executable(tpp2cpp Main.cc)
 

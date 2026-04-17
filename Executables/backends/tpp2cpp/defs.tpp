@@ -1,4 +1,146 @@
-template render_cpp_types(input: CodegenInput, includes: list<string>, namespaceName: optional<string>)
+template cpp_ir_type(t: TypeKind)
+@switch t@@case Str@std::string@end case@@case Int@int@end case@@case Bool@bool@end case@@case Named(n)@@n@@end case@@case List(e)@std::vector<@cpp_ir_type(e)@>@end case@@case Optional(inner)@std::optional<@cpp_ir_type(inner)@>@end case@@end switch@
+END
+
+template cpp_ir_inner_type(t: TypeKind)
+@switch t@@case Optional(inner)@@cpp_ir_type(inner)@@end case@@case Str@std::string@end case@@case Int@int@end case@@case Bool@bool@end case@@case Named(n)@@n@@end case@@case List(e)@std::vector<@cpp_ir_type(e)@>@end case@@end switch@
+END
+
+template cpp_struct_field_decl(field: FieldDef)
+@if field.recursive@
+std::unique_ptr<@cpp_ir_inner_type(field.type)@> @field.name@;
+@else@
+@cpp_ir_type(field.type)@ @field.name@;
+@end if@
+END
+
+template cpp_read_field(field: FieldDef)
+@if field.recursive@
+@switch field.type@
+@case Optional(inner)@
+if (j.contains("@field.name@") && !j.at("@field.name@").is_null()) v.@field.name@ = std::make_unique<@cpp_ir_type(inner)@>(j.at("@field.name@").get<@cpp_ir_type(inner)@>());
+@end case@
+@case Str@
+v.@field.name@ = std::make_unique<std::string>(j.at("@field.name@").get<std::string>());
+@end case@
+@case Int@
+v.@field.name@ = std::make_unique<int>(j.at("@field.name@").get<int>());
+@end case@
+@case Bool@
+v.@field.name@ = std::make_unique<bool>(j.at("@field.name@").get<bool>());
+@end case@
+@case Named(n)@
+v.@field.name@ = std::make_unique<@n@>(j.at("@field.name@").get<@n@>());
+@end case@
+@case List(e)@
+v.@field.name@ = std::make_unique<std::vector<@cpp_ir_type(e)@>>(j.at("@field.name@").get<std::vector<@cpp_ir_type(e)@>>());
+@end case@
+@end switch@
+@else@
+@switch field.type@
+@case Optional(inner)@
+if (j.contains("@field.name@") && !j.at("@field.name@").is_null()) v.@field.name@ = j.at("@field.name@").get<@cpp_ir_type(inner)@>();
+@end case@
+@case Str@
+v.@field.name@ = j.at("@field.name@").get<std::string>();
+@end case@
+@case Int@
+v.@field.name@ = j.at("@field.name@").get<int>();
+@end case@
+@case Bool@
+v.@field.name@ = j.at("@field.name@").get<bool>();
+@end case@
+@case Named(n)@
+v.@field.name@ = j.at("@field.name@").get<@n@>();
+@end case@
+@case List(e)@
+v.@field.name@ = j.at("@field.name@").get<std::vector<@cpp_ir_type(e)@>>();
+@end case@
+@end switch@
+@end if@
+END
+
+template cpp_write_field(field: FieldDef)
+@if field.recursive@
+@switch field.type@
+@case Optional(inner)@
+if (v.@field.name@) j["@field.name@"] = *v.@field.name@;
+@end case@
+@case Str@
+j["@field.name@"] = *v.@field.name@;
+@end case@
+@case Int@
+j["@field.name@"] = *v.@field.name@;
+@end case@
+@case Bool@
+j["@field.name@"] = *v.@field.name@;
+@end case@
+@case Named(n)@
+j["@field.name@"] = *v.@field.name@;
+@end case@
+@case List(e)@
+j["@field.name@"] = *v.@field.name@;
+@end case@
+@end switch@
+@else@
+@switch field.type@
+@case Optional(inner)@
+if (v.@field.name@.has_value()) j["@field.name@"] = *v.@field.name@;
+@end case@
+@case Str@
+j["@field.name@"] = v.@field.name@;
+@end case@
+@case Int@
+j["@field.name@"] = v.@field.name@;
+@end case@
+@case Bool@
+j["@field.name@"] = v.@field.name@;
+@end case@
+@case Named(n)@
+j["@field.name@"] = v.@field.name@;
+@end case@
+@case List(e)@
+j["@field.name@"] = v.@field.name@;
+@end case@
+@end switch@
+@end if@
+END
+
+template render_cpp_enum(e: EnumDef)
+@for variant in e.variants@
+@if not variant.payload@
+struct @e.name@_@variant.tag@
+{
+    friend void to_json(nlohmann::json& j, const @e.name@_@variant.tag@&) { j = nlohmann::json::object(); }
+    friend void from_json(const nlohmann::json&, @e.name@_@variant.tag@&) {}
+};
+@end if@
+@end for@
+struct @e.name@
+{
+    using Value = std::variant<@for variant in e.variants | enumerator=variantIndex sep=", "@@if not variant.payload@@e.name@_@variant.tag@@else@@if variant.recursive@std::unique_ptr<@cpp_ir_type(variant.payload)@>@else@@cpp_ir_type(variant.payload)@@end if@@end if@@end for@>;
+    Value value;
+    static std::string tpp_typedefs() noexcept
+    {
+        return @e.rawTypedefs@;
+    }
+};
+END
+
+template render_cpp_struct(s: StructDef)
+struct @s.name@
+{
+    @for field in s.fields@
+    @cpp_struct_field_decl(field)@
+    @end for@
+    static std::string tpp_typedefs() noexcept
+    {
+        return @s.rawTypedefs@;
+    }
+};
+END
+
+template render_cpp_types(preStructEnums: list<EnumDef>, structs: list<StructDef>, postStructEnums: list<EnumDef>, includes: list<string>, namespaceName: optional<string>)
 #pragma once
 @for inc in includes@
 #include "@inc@"
@@ -17,106 +159,44 @@ inline nlohmann::json _tpp_j(const _TppT& v) { return nlohmann::json(v); }
 template<typename _TppT>
 inline nlohmann::json _tpp_j(const std::unique_ptr<_TppT>& v) { return v ? nlohmann::json(*v) : nlohmann::json(); }
 
-@for e in input.enums@
+@for e in preStructEnums@
 struct @e.name@;
 @end for@
-@for s in input.structs@
+@for s in structs@
 struct @s.name@;
 @end for@
-
-@for e in input.enums@
-@if not e.hasRecursiveVariants@
-@if e.doc@
-/// @e.doc@
-@end if@
-@for variant in e.variants@
-@if not variant.payload@
-@if variant.doc@
-/// @variant.doc@
-@end if@
-struct @e.name@_@variant.tag@
-{
-    friend void to_json(nlohmann::json& j, const @e.name@_@variant.tag@&) { j = nlohmann::json::object(); }
-    friend void from_json(const nlohmann::json&, @e.name@_@variant.tag@&) {}
-};
-@end if@
-@end for@
-struct @e.name@
-{
-    using Value = std::variant<@for variant in e.variants | sep=", "@@if not variant.payload@@e.name@_@variant.tag@@else@@if variant.recursive@std::unique_ptr<@cpp_type(variant.payload)@>@else@@cpp_type(variant.payload)@@end if@@end if@@end for@>;
-    Value value;
-    static std::string tpp_typedefs() noexcept
-    {
-        return @e.rawTypedefs@;
-    }
-};
-@end if@
-@end for@
-@for s in input.structs@
-@if s.doc@
-/// @s.doc@
-@end if@
-struct @s.name@
-{
-    @for field in s.fields@
-    @if field.doc@
-    /// @field.doc@
-    @end if@
-    @if field.recursive@
-    std::unique_ptr<@cpp_type(field.innerType)@> @field.name@;
-    @else@
-    @cpp_type(field.type)@ @field.name@;
-    @end if@
-    @end for@
-    static std::string tpp_typedefs() noexcept
-    {
-        return @s.rawTypedefs@;
-    }
-};
-@end for@
-@for e in input.enums@
-@if e.hasRecursiveVariants@
-@if e.doc@
-/// @e.doc@
-@end if@
-@for variant in e.variants@
-@if not variant.payload@
-@if variant.doc@
-/// @variant.doc@
-@end if@
-struct @e.name@_@variant.tag@
-{
-    friend void to_json(nlohmann::json& j, const @e.name@_@variant.tag@&) { j = nlohmann::json::object(); }
-    friend void from_json(const nlohmann::json&, @e.name@_@variant.tag@&) {}
-};
-@end if@
-@end for@
-struct @e.name@
-{
-    using Value = std::variant<@for variant in e.variants | sep=", "@@if not variant.payload@@e.name@_@variant.tag@@else@@if variant.recursive@std::unique_ptr<@cpp_type(variant.payload)@>@else@@cpp_type(variant.payload)@@end if@@end if@@end for@>;
-    Value value;
-    static std::string tpp_typedefs() noexcept
-    {
-        return @e.rawTypedefs@;
-    }
-};
-@end if@
+@for e in postStructEnums@
+struct @e.name@;
 @end for@
 
-@for e in input.enums@
+@for e in preStructEnums@
+@render_cpp_enum(e)@
+@end for@
+@for s in structs@
+@render_cpp_struct(s)@
+@end for@
+@for e in postStructEnums@
+@render_cpp_enum(e)@
+@end for@
+
+@for e in preStructEnums@
 inline void from_json(const nlohmann::json& j, @e.name@& v);
 inline void to_json(nlohmann::json& j, const @e.name@& v);
 @end for@
-@for s in input.structs@
+@for e in postStructEnums@
+inline void from_json(const nlohmann::json& j, @e.name@& v);
+inline void to_json(nlohmann::json& j, const @e.name@& v);
+@end for@
+@for s in structs@
 inline void from_json(const nlohmann::json& j, @s.name@& v);
 inline void to_json(nlohmann::json& j, const @s.name@& v);
 @end for@
 
-@for e in input.enums@
+@for e in preStructEnums@
 inline void from_json(const nlohmann::json& j, @e.name@& v)
 {
-    @for variant in e.variants | sep="\n    else "@
-    if (j.contains("@variant.tag@")) @if not variant.payload@v.value.emplace<@variant.index@>();@else@@if variant.recursive@v.value.emplace<@variant.index@>(std::make_unique<@cpp_type(variant.payload)@>(j["@variant.tag@"].get<@cpp_type(variant.payload)@>()));@else@v.value.emplace<@variant.index@>(j["@variant.tag@"].get<@cpp_type(variant.payload)@>());@end if@@end if@
+    @for variant in e.variants | enumerator=variantIndex sep="\n    else "@
+    if (j.contains("@variant.tag@")) @if not variant.payload@v.value.emplace<@variantIndex@>();@else@@if variant.recursive@v.value.emplace<@variantIndex@>(std::make_unique<@cpp_ir_type(variant.payload)@>(j["@variant.tag@"].get<@cpp_ir_type(variant.payload)@>()));@else@v.value.emplace<@variantIndex@>(j["@variant.tag@"].get<@cpp_ir_type(variant.payload)@>());@end if@@end if@
     @end for@
 }
 inline void to_json(nlohmann::json& j, const @e.name@& v)
@@ -128,42 +208,34 @@ inline void to_json(nlohmann::json& j, const @e.name@& v)
     }, v.value);
 }
 @end for@
-@for s in input.structs@
+@for e in postStructEnums@
+inline void from_json(const nlohmann::json& j, @e.name@& v)
+{
+    @for variant in e.variants | enumerator=variantIndex sep="\n    else "@
+    if (j.contains("@variant.tag@")) @if not variant.payload@v.value.emplace<@variantIndex@>();@else@@if variant.recursive@v.value.emplace<@variantIndex@>(std::make_unique<@cpp_ir_type(variant.payload)@>(j["@variant.tag@"].get<@cpp_ir_type(variant.payload)@>()));@else@v.value.emplace<@variantIndex@>(j["@variant.tag@"].get<@cpp_ir_type(variant.payload)@>());@end if@@end if@
+    @end for@
+}
+inline void to_json(nlohmann::json& j, const @e.name@& v)
+{
+    const char* _tags[] = {@for variant in e.variants | sep=", "@"@variant.tag@"@end for@};
+    std::visit([&](const auto& arg) {
+        j = nlohmann::json::object();
+        j[_tags[v.value.index()]] = _tpp_j(arg);
+    }, v.value);
+}
+@end for@
+@for s in structs@
 inline void from_json(const nlohmann::json& j, @s.name@& v)
 {
     @for field in s.fields@
-    @if field.recursive@
-    @if field.isOptional@
-    if (j.contains("@field.name@") && !j.at("@field.name@").is_null()) v.@field.name@ = std::make_unique<@cpp_type(field.innerType)@>(j.at("@field.name@").get<@cpp_type(field.innerType)@>());
-    @else@
-    v.@field.name@ = std::make_unique<@cpp_type(field.innerType)@>(j.at("@field.name@").get<@cpp_type(field.innerType)@>());
-    @end if@
-    @else@
-    @if field.isOptional@
-    if (j.contains("@field.name@") && !j.at("@field.name@").is_null()) v.@field.name@ = j.at("@field.name@").get<@cpp_type(field.innerType)@>();
-    @else@
-    j.at("@field.name@").get_to(v.@field.name@);
-    @end if@
-    @end if@
+    @cpp_read_field(field)@
     @end for@
 }
 inline void to_json(nlohmann::json& j, const @s.name@& v)
 {
     j = nlohmann::json{};
     @for field in s.fields@
-    @if field.recursive@
-    @if field.isOptional@
-    if (v.@field.name@) j["@field.name@"] = *v.@field.name@;
-    @else@
-    j["@field.name@"] = *v.@field.name@;
-    @end if@
-    @else@
-    @if field.isOptional@
-    if (v.@field.name@.has_value()) j["@field.name@"] = *v.@field.name@;
-    @else@
-    j["@field.name@"] = v.@field.name@;
-    @end if@
-    @end if@
+    @cpp_write_field(field)@
     @end for@
 }
 @end for@
@@ -172,7 +244,7 @@ inline void to_json(nlohmann::json& j, const @s.name@& v)
 @end if@
 END
 
-template render_cpp_functions(input: CodegenInput, includes: list<string>, namespaceName: optional<string>, functionPrefix: string)
+template render_cpp_functions(functions: list<FunctionDef>, includes: list<string>, namespaceName: optional<string>, functionPrefix: string)
 #pragma once
 #include <tpp/ArgType.h>
 @for inc in includes@
@@ -182,11 +254,8 @@ template render_cpp_functions(input: CodegenInput, includes: list<string>, names
 @if namespaceName@
 namespace @namespaceName@ {
 @end if@
-@for function in input.functions@
-@if function.doc@
-/// @function.doc@
-@end if@
-std::string @functionPrefix@@function.name@(@for param in function.params | sep=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@);
+@for function in functions@
+std::string @functionPrefix@@function.name@(@for param in function.params | sep=", "@typename tpp::ArgType<@cpp_ir_type(param.type)@>::type @param.name@@end for@);
 @end for@
 @if namespaceName@
 } // namespace @namespaceName@
@@ -203,7 +272,7 @@ template cpp_value_path(path: string, isRecursive: bool, isOptional: bool)
 @if isRecursive@*@path@@else@@if isOptional@*@path@@else@@path@@end if@@end if@
 END
 
-template cpp_optional_to_str(expr: ExprInfo, inner: TypeKind)
+template cpp_optional_to_str(expr: RenderExprInfo, inner: RenderTypeKind)
 @switch inner@
 @case Str@
 @if expr.isRecursive@(@expr.path@ ? *@expr.path@ : std::string{})@else@(@expr.path@.has_value() ? *@expr.path@ : std::string{})@end if@@end case@
@@ -220,7 +289,7 @@ template cpp_optional_to_str(expr: ExprInfo, inner: TypeKind)
 @end switch@
 END
 
-template cpp_expr_to_str(expr: ExprInfo)
+template cpp_expr_to_str(expr: RenderExprInfo)
 @switch expr.type@
 @case Str@
 @cpp_value_path(expr.path, expr.isRecursive, expr.isOptional)@@end case@
@@ -273,7 +342,7 @@ END
 
 // ── Recursive instruction dispatcher (block-style switch — avoids bug) ───────
 
-template emit_instr(instr: Instruction)
+template emit_instr(instr: RenderInstruction)
 @switch instr@
 @case Emit(e)@
 @emit_emit(e)@
@@ -300,12 +369,12 @@ END
 
 // ── For loop ─────────────────────────────────────────────────────────────────
 
-template cpp_type(t: TypeKind)
+template cpp_type(t: RenderTypeKind)
 @switch t@@case Str@std::string@end case@@case Int@int@end case@@case Bool@bool@end case@@case Named(n)@@n@@end case@@case List(e)@std::vector<@cpp_type(e)@>@end case@@case Optional(inner)@std::optional<@cpp_type(inner)@>@end case@@end switch@
 END
 
 template emit_for(f: ForData)
-@if f.hasAlign@
+@if f.cells@
 @emit_aligned_for(f)@
 @else@
 @if f.isBlock@
@@ -317,53 +386,58 @@ template emit_for(f: ForData)
 END
 
 template emit_for_inline(f: ForData)
+@if f.body@
 for (size_t _i@f.scopeId@ = 0; _i@f.scopeId@ < (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@).size(); _i@f.scopeId@++) {
     [[maybe_unused]] const auto& @f.varName@ = (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@)[_i@f.scopeId@];
-    @if f.hasEnum@
+    @if f.enumeratorName@
     int @f.enumeratorName@ = (int)_i@f.scopeId@;
     @end if@
-    @if f.hasPreceded@
+    @if f.precededByLit@
     @f.sb@ += @f.precededByLit@;
     @end if@
     @for instr in f.body@
     @emit_instr(instr)@
     @end for@
-    @if f.hasSep@
+    @if f.sepLit@
     if (_i@f.scopeId@ + 1 < (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@).size()) @f.sb@ += @f.sepLit@;
-    @if f.hasFollowed@
+    @if f.followedByLit@
     else if (!(@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@).empty()) @f.sb@ += @f.followedByLit@;
     @end if@
     @else@
-    @if f.hasFollowed@
+    @if f.followedByLit@
     if (_i@f.scopeId@ + 1 >= (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@).size() && !(@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@).empty()) @f.sb@ += @f.followedByLit@;
     @end if@
     @end if@
 }
+@end if@
 END
 
 template emit_for_block_sep(f: ForData)
+@if f.sepLit@
 bool _stripped@f.scopeId@ = false;
 if (!_iter@f.scopeId@.empty() && _iter@f.scopeId@.back() == '\n') {
     if (std::count(_iter@f.scopeId@.begin(), _iter@f.scopeId@.end(), '\n') == 1) { _iter@f.scopeId@.pop_back(); _stripped@f.scopeId@ = true; }
 }
-@if f.hasPreceded@
+@if f.precededByLit@
 @f.sb@ += @f.precededByLit@;
 @end if@
 @f.sb@ += _iter@f.scopeId@;
 if (_i@f.scopeId@ + 1 < (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@).size()) {
     @f.sb@ += @f.sepLit@;
 } else {
-    @if f.hasFollowed@
+    @if f.followedByLit@
     if (!(@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@).empty()) @f.sb@ += @f.followedByLit@;
     @end if@
     if (_stripped@f.scopeId@) @f.sb@ += "\n";
 }
+@end if@
 END
 
 template emit_for_block(f: ForData)
+@if f.body@
 for (size_t _i@f.scopeId@ = 0; _i@f.scopeId@ < (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@).size(); _i@f.scopeId@++) {
     [[maybe_unused]] const auto& @f.varName@ = (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@)[_i@f.scopeId@];
-    @if f.hasEnum@
+    @if f.enumeratorName@
     int @f.enumeratorName@ = (int)_i@f.scopeId@;
     @end if@
     std::string _blk@f.scopeId@;
@@ -371,18 +445,19 @@ for (size_t _i@f.scopeId@ = 0; _i@f.scopeId@ < (@cpp_value_path(f.collPath, f.co
     @emit_instr(instr)@
     @end for@
     std::string _iter@f.scopeId@ = _tppBlockIndent(_blk@f.scopeId@, @f.insertCol@);
-    @if f.hasSep@
+    @if f.sepLit@
     @emit_for_block_sep(f)@
     @else@
-    @if f.hasPreceded@
+    @if f.precededByLit@
     @f.sb@ += @f.precededByLit@;
     @end if@
     @f.sb@ += _iter@f.scopeId@;
-    @if f.hasFollowed@
+    @if f.followedByLit@
     if (_i@f.scopeId@ + 1 >= (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@).size() && !(@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@).empty()) @f.sb@ += @f.followedByLit@;
     @end if@
     @end if@
 }
+@end if@
 END
 
 // ── Aligned for ──────────────────────────────────────────────────────────────
@@ -398,10 +473,11 @@ template emit_align_cell(scopeId: int, cell: AlignCellInfo)
 END
 
 template emit_aligned_for(f: ForData)
+@if f.cells@
 std::vector<std::vector<std::string>> _rows@f.scopeId@;
 for (size_t _i@f.scopeId@ = 0; _i@f.scopeId@ < (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@).size(); _i@f.scopeId@++) {
     [[maybe_unused]] const auto& @f.varName@ = (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@)[_i@f.scopeId@];
-    @if f.hasEnum@
+    @if f.enumeratorName@
     int @f.enumeratorName@ = (int)_i@f.scopeId@;
     @end if@
     std::vector<std::string> _row@f.scopeId@(@f.numCols@);
@@ -434,21 +510,22 @@ for (size_t _i@f.scopeId@ = 0; _i@f.scopeId@ < _rows@f.scopeId@.size(); _i@f.sco
             _line@f.scopeId@ += _r[_c];
         }
     }
-    @if f.hasPreceded@
+    @if f.precededByLit@
     @f.sb@ += @f.precededByLit@;
     @end if@
     @f.sb@ += _line@f.scopeId@;
-    @if f.hasSep@
+    @if f.sepLit@
     if (_i@f.scopeId@ + 1 < _rows@f.scopeId@.size()) @f.sb@ += @f.sepLit@;
-    @if f.hasFollowed@
+    @if f.followedByLit@
     else if (!_rows@f.scopeId@.empty()) @f.sb@ += @f.followedByLit@;
     @end if@
     @else@
-    @if f.hasFollowed@
+    @if f.followedByLit@
     if (_i@f.scopeId@ + 1 >= _rows@f.scopeId@.size() && !_rows@f.scopeId@.empty()) @f.sb@ += @f.followedByLit@;
     @end if@
     @end if@
 }
+@end if@
 END
 
 // ── If / Else ────────────────────────────────────────────────────────────────
@@ -470,7 +547,7 @@ if (@i.condPath@) {
     @for instr in i.thenBody@
     @emit_instr(instr)@
     @end for@
-@if i.hasElse@
+@if i.elseBody@
 } else {
     @for instr in i.elseBody@
     @emit_instr(instr)@
@@ -490,7 +567,7 @@ if (@i.condPath@) {
     @emit_instr(instr)@
     @end for@
     @i.sb@ += _tppBlockIndent(_blk@i.thenScopeId@, @i.insertCol@);
-@if i.hasElse@
+@if i.elseBody@
 } else {
     std::string _blk@i.elseScopeId@;
     @for instr in i.elseBody@
@@ -505,9 +582,11 @@ END
 
 template emit_switch_case_block(s: SwitchData, c: CaseData)
 std::string _blk@c.scopeId@;
+@if c.body@
 @for instr in c.body@
 @emit_instr(instr)@
 @end for@
+@end if@
 @s.sb@ += _tppBlockIndent(_blk@c.scopeId@, @s.insertCol@);
 END
 
@@ -525,9 +604,11 @@ switch ((@cpp_value_path(s.exprPath, s.exprIsRecursive, s.exprIsOptional)@).valu
         @if s.isBlock@
         @emit_switch_case_block(s, c)@
         @else@
+        @if c.body@
         @for instr in c.body@
         @emit_instr(instr)@
         @end for@
+        @end if@
         @end if@
         break;
     }
@@ -545,20 +626,24 @@ template emit_policy_instance_def(pol: PolicyInfo)
 inline const TppPolicy TppPolicy::@pol.identifier@ = [] {
     TppPolicy p;
     p.tag = @pol.tagLit@;
-    @if pol.hasLength@
+    @if pol.minVal@
     p.minLength = @pol.minVal@;
+    @end if@
+    @if pol.maxVal@
     p.maxLength = @pol.maxVal@;
     @end if@
-    @if pol.hasRejectIf@
+    @if pol.rejectIfRegexLit@
+    @if pol.rejectMsgLit@
     p.rejectIf = TppPolicy::RejectRule{std::regex(@pol.rejectIfRegexLit@), @pol.rejectMsgLit@};
     @end if@
-    @if pol.hasRequire@
-    p.require = { @for r in pol.require | sep=", "@{std::regex(@r.regexLit@), @if r.hasReplace@@r.replaceLit@@else@""@end if@, @if r.hasReplace@true@else@false@end if@}@end for@ };
     @end if@
-    @if pol.hasReplacements@
+    @if pol.require@
+    p.require = { @for r in pol.require | sep=", "@{std::regex(@r.regexLit@), @if r.replaceLit@std::optional<std::string>{@r.replaceLit@}@else@std::nullopt@end if@}@end for@ };
+    @end if@
+    @if pol.replacements@
     p.replacements = { @for r in pol.replacements | sep=", "@{@r.findLit@, @r.replaceLit@}@end for@ };
     @end if@
-    @if pol.hasOutputFilter@
+    @if pol.outputFilter@
     p.outputFilter = { @for f in pol.outputFilter | sep=", "@std::regex(@f.regexLit@)@end for@ };
     @end if@
     return p;
@@ -571,7 +656,7 @@ struct TppPolicy {
     std::optional<int> minLength, maxLength;
     struct RejectRule { std::regex pattern; std::string message; };
     std::optional<RejectRule> rejectIf;
-    struct RequireStep { std::regex pattern; std::string replace; bool hasReplace; };
+    struct RequireStep { std::regex pattern; std::optional<std::string> replace; };
     std::vector<RequireStep> require;
     std::vector<std::pair<std::string, std::string>> replacements;
     std::vector<std::regex> outputFilter;
@@ -586,7 +671,7 @@ struct TppPolicy {
         for (const auto& step : require) {
             if (!std::regex_search(v, step.pattern))
                 throw std::runtime_error("[policy " + tag + "] value does not match required pattern");
-            if (step.hasReplace) v = std::regex_replace(v, step.pattern, step.replace);
+            if (step.replace) v = std::regex_replace(v, step.pattern, *step.replace);
         }
         for (const auto& [find, repl] : replacements) {
             std::string::size_type pos = 0;
@@ -601,15 +686,19 @@ struct TppPolicy {
         }
         return v;
     }
+@if ctx.policies@
 @for pol in ctx.policies@
     @emit_policy_instance_decl(pol)@
 @end for@
+@end if@
     static const TppPolicy pure;
 };
+@if ctx.policies@
 @for pol in ctx.policies@
 
 @emit_policy_instance_def(pol)@
 @end for@
+@end if@
 
 inline const TppPolicy TppPolicy::pure{};
 END
@@ -690,7 +779,7 @@ namespace @ctx.namespaceName@ {
 @end if@
 
 @emit_runtime_helpers(ctx)@
-@if ctx.hasPolicies@
+@if ctx.policies@
 
 @emit_policies(ctx)@
 @end if@
@@ -712,7 +801,7 @@ template render_cpp_native_implementation(ctx: RenderFunctionsInput)
 #include <optional>
 #include <variant>
 #include <algorithm>
-@if ctx.hasPolicies@
+@if ctx.policies@
 #include <regex>
 #include <stdexcept>
 @end if@
@@ -722,13 +811,13 @@ namespace @ctx.namespaceName@ {
 @if not ctx.externalRuntime@
 
 @emit_runtime_helpers(ctx)@
-@if ctx.hasPolicies@
+@if ctx.policies@
 
 @emit_policies(ctx)@
 @end if@
 @end if@
 @for fn in ctx.functions@
-@if ctx.hasPolicies@
+@if ctx.policies@
 @ctx.staticModifier@std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", " followedBy=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@const TppPolicy& _policy);
 @ctx.staticModifier@std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@);
 @else@
@@ -737,7 +826,7 @@ namespace @ctx.namespaceName@ {
 @end for@
 @for fn in ctx.functions@
 
-@if ctx.hasPolicies@
+@if ctx.policies@
 @ctx.staticModifier@std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", " followedBy=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@const TppPolicy& _policy) {
 @else@
 @ctx.staticModifier@std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@) {
@@ -750,7 +839,7 @@ namespace @ctx.namespaceName@ {
         _sb.pop_back();
     return _sb;
 }
-@if ctx.hasPolicies@
+@if ctx.policies@
 
 @ctx.staticModifier@std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@) {
     return @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", " followedBy=", "@@param.name@@end for@TppPolicy::pure);

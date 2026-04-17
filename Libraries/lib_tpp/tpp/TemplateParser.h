@@ -37,8 +37,7 @@ namespace tpp::compiler
         std::string precededBy;
         std::string enumerator;
         std::string policy;
-        std::string alignSpec; // empty = no alignment; "" with hasAlign=true = default left
-        bool        hasAlign = false;
+        std::optional<std::string> alignSpec; // nullopt = no alignment; "" = default left
         // Option-parse errors stored here for recovery: body still processes
         // so that variables bound by the loop remain in scope.
         std::vector<std::tuple<std::string,int,int>> parseErrors; // {message, start, end}

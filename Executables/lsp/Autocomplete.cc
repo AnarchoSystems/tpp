@@ -204,7 +204,7 @@ nlohmann::json computeCompletions(const std::string &uri,
         // Also try all struct fields as fallback
         if (result.empty())
         {
-            for (const auto &sd : model.structs)
+            for (const auto &sd : model.structs_view())
                 for (const auto &f : sd.fields)
                     result.push_back(makeItem(f.name, 5 /*Field*/, sd.name + "." + f.name));
         }
@@ -222,9 +222,9 @@ nlohmann::json computeCompletions(const std::string &uri,
     // Type names — only useful in .tpp.types files, not in templates
     if (project.isTypeUri(uri))
     {
-        for (const auto &sd : model.structs)
+        for (const auto &sd : model.structs_view())
             result.push_back(makeItem(sd.name, 7 /*Class*/, {}, 2));
-        for (const auto &ed : model.enums)
+        for (const auto &ed : model.enums_view())
             result.push_back(makeItem(ed.name, 13 /*Enum*/, {}, 2));
     }
 

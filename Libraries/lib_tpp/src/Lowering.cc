@@ -61,6 +61,13 @@ namespace tpp::compiler
         return std::holds_alternative<std::shared_ptr<OptionalType>>(type);
     }
 
+    static TypeRef unwrapOptionalTypeRef(const TypeRef &type)
+    {
+        if (auto optionalType = std::get_if<std::shared_ptr<OptionalType>>(&type))
+            return (*optionalType)->innerType;
+        return type;
+    }
+
     static std::string typeRefToString(const TypeRef &type)
     {
         return std::visit([&](const auto &arg) -> std::string
@@ -326,7 +333,7 @@ namespace tpp::compiler
     {
         std::vector<tpp::Instruction> out;
         ResolvedExpr collectionExpr = resolvePublicExpr(node.collectionExpr, env);
-        TypeRef collectionType = collectionExpr.type;
+        TypeRef collectionType = unwrapOptionalTypeRef(collectionExpr.type);
         const auto *listType = std::get_if<std::shared_ptr<ListType>>(&collectionType);
         TypeRef renderElemType = listType ? (*listType)->elementType : collectionType;
         const EnumDef *renderEnum = env.semanticModel.resolve_enum(renderElemType);
@@ -445,7 +452,7 @@ namespace tpp::compiler
                 else if constexpr (std::is_same_v<T, std::shared_ptr<ForNode>>)
                 {
                     TypeRef elementType{StringType{}};
-                    TypeRef collectionType = resolveExprType(arg->collectionExpr, env);
+                    TypeRef collectionType = unwrapOptionalTypeRef(resolveExprType(arg->collectionExpr, env));
                     if (auto *listType = std::get_if<std::shared_ptr<ListType>>(&collectionType))
                         elementType = (*listType)->elementType;
 
@@ -470,8 +477,7 @@ namespace tpp::compiler
                     forInstr->isBlock = arg->isBlock;
                     forInstr->insertCol = arg->insertCol;
                     forInstr->policy = arg->policy;
-                    if (arg->hasAlign)
-                        forInstr->alignSpec = arg->alignSpec;
+                    forInstr->alignSpec = arg->alignSpec;
                     out.push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<3>, std::move(forInstr)}});
                 }
                 else if constexpr (std::is_same_v<T, std::shared_ptr<IfNode>>)

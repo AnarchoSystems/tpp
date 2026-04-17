@@ -51,8 +51,7 @@ namespace tpp::compiler
         bool isBlock = false;
         int insertCol = 0;
         std::string policy;
-        std::string alignSpec; // empty = no alignment; "" with hasAlign=true = left-align all
-        bool hasAlign = false;
+        std::optional<std::string> alignSpec; // nullopt = no alignment; "" = left-align all
         Range sourceRange{};
         Range endRange{};
     };
@@ -178,7 +177,7 @@ namespace tpp::compiler
                a.collectionExpr == b.collectionExpr && a.body == b.body &&
                a.sep == b.sep && a.followedBy == b.followedBy && a.precededBy == b.precededBy &&
                a.isBlock == b.isBlock && a.insertCol == b.insertCol && a.policy == b.policy &&
-               a.hasAlign == b.hasAlign && a.alignSpec == b.alignSpec;
+             a.alignSpec == b.alignSpec;
     }
     inline bool operator==(const IfNode &a, const IfNode &b)
     {

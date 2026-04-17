@@ -1,25 +1,25 @@
-// Shared type definitions for all tpp code generation backends.
-// Contains instruction IR types and policy types used identically
-// by tpp2swift, tpp2java, and any future backend.
+// Shared render-model definitions for all tpp code generation backends.
+// These types are not semantic IR; they are the execution-oriented adapter
+// used only for lowering template instruction trees into backend emitters.
 
-enum TypeKind
+enum RenderTypeKind
 {
     Str,
     Int,
     Bool,
     Named(string),
-    List(TypeKind),
-    Optional(TypeKind)
+    List(RenderTypeKind),
+    Optional(RenderTypeKind)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Instruction IR types — for rendering function generation
 // ═══════════════════════════════════════════════════════════════════════════════
 
-struct ExprInfo
+struct RenderExprInfo
 {
     path : string;
-    type : TypeKind;
+    type : RenderTypeKind;
     isRecursive : bool;
     isOptional : bool;
 }
@@ -32,7 +32,7 @@ struct EmitData
 
 struct EmitExprData
 {
-    expr : ExprInfo;
+    expr : RenderExprInfo;
     sb : string;
     staticPolicyLit : optional<string>;
     staticPolicyId : optional<string>;
@@ -42,7 +42,7 @@ struct EmitExprData
 struct AlignCellInfo
 {
     cellIndex : int;
-    body : list<Instruction>;
+    body : list<RenderInstruction>;
 }
 
 struct ForData
@@ -51,23 +51,18 @@ struct ForData
     collPath : string;
     collIsRecursive : bool;
     collIsOptional : bool;
-    elemType : TypeKind;
+    elemType : RenderTypeKind;
     varName : string;
-    hasEnum : bool;
-    enumeratorName : string;
-    body : list<Instruction>;
-    hasSep : bool;
-    sepLit : string;
-    hasFollowed : bool;
-    followedByLit : string;
-    hasPreceded : bool;
-    precededByLit : string;
+    enumeratorName : optional<string>;
+    body : optional<list<RenderInstruction>>;
+    sepLit : optional<string>;
+    followedByLit : optional<string>;
+    precededByLit : optional<string>;
     isBlock : bool;
     insertCol : int;
     sb : string;
-    hasAlign : bool;
-    alignSpec : string;
-    cells : list<AlignCellInfo>;
+    alignSpec : optional<string>;
+    cells : optional<list<AlignCellInfo>>;
     numCols : int;
     alignSpecChars : list<string>;
     singleAlignChar : bool;
@@ -78,8 +73,8 @@ struct CaseData
     tag : string;
     tagLit : string;
     bindingName : optional<string>;
-    payloadType : optional<TypeKind>;
-    body : list<Instruction>;
+    payloadType : optional<RenderTypeKind>;
+    body : optional<list<RenderInstruction>>;
     scopeId : int;
     isFirst : bool;
     variantIndex : int;
@@ -91,9 +86,8 @@ struct IfData
     condPath : string;
     condIsBool : bool;
     isNegated : bool;
-    thenBody : list<Instruction>;
-    elseBody : list<Instruction>;
-    hasElse : bool;
+    thenBody : list<RenderInstruction>;
+    elseBody : optional<list<RenderInstruction>>;
     isBlock : bool;
     insertCol : int;
     sb : string;
@@ -136,7 +130,7 @@ struct CallData
     needsTry : bool;
 }
 
-enum Instruction
+enum RenderInstruction
 {
     Emit(EmitData),
     EmitExpr(EmitExprData),
@@ -160,8 +154,7 @@ struct PolicyReplacementInfo
 struct PolicyRequireInfo
 {
     regexLit : string;
-    replaceLit : string;
-    hasReplace : bool;
+    replaceLit : optional<string>;
 }
 
 struct PolicyOutputFilterInfo
@@ -173,80 +166,19 @@ struct PolicyInfo
 {
     tagLit : string;
     identifier : string;
-    hasLength : bool;
-    minVal : string;
-    maxVal : string;
-    hasRejectIf : bool;
-    rejectIfRegexLit : string;
-    rejectMsgLit : string;
-    require : list<PolicyRequireInfo>;
-    hasRequire : bool;
-    replacements : list<PolicyReplacementInfo>;
-    hasReplacements : bool;
-    outputFilter : list<PolicyOutputFilterInfo>;
-    hasOutputFilter : bool;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Codegen input types — shared type-generation data across all backends
-// ═══════════════════════════════════════════════════════════════════════════════
-
-struct FieldInfo
-{
-    name : string;
-    type : TypeKind;
-    recursive : bool;
-    isOptional : bool;
-    recursiveOptional : bool;
-    innerType : TypeKind;
-    doc : optional<string>;
-}
-
-struct StructInfo
-{
-    name : string;
-    fields : list<FieldInfo>;
-    doc : optional<string>;
-    rawTypedefs : string;
-}
-
-struct VariantInfo
-{
-    tag : string;
-    payload : optional<TypeKind>;
-    recursive : bool;
-    index : int;
-    doc : optional<string>;
-}
-
-struct EnumInfo
-{
-    name : string;
-    variants : list<VariantInfo>;
-    hasRecursiveVariants : bool;
-    doc : optional<string>;
-    rawTypedefs : string;
+    minVal : optional<string>;
+    maxVal : optional<string>;
+    rejectIfRegexLit : optional<string>;
+    rejectMsgLit : optional<string>;
+    require : optional<list<PolicyRequireInfo>>;
+    replacements : optional<list<PolicyReplacementInfo>>;
+    outputFilter : optional<list<PolicyOutputFilterInfo>>;
 }
 
 struct ParamInfo
 {
     name : string;
-    type : TypeKind;
-}
-
-struct FunctionInfo
-{
-    name : string;
-    params : list<ParamInfo>;
-    doc : optional<string>;
-}
-
-struct CodegenInput
-{
-    structs : list<StructInfo>;
-    enums : list<EnumInfo>;
-    functions : list<FunctionInfo>;
-    hasRecursiveTypes : bool;
+    type : RenderTypeKind;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -257,14 +189,14 @@ struct RenderFunctionDef
 {
     name : string;
     params : list<ParamInfo>;
-    body : list<Instruction>;
+    body : list<RenderInstruction>;
+    doc : optional<string>;
 }
 
 struct RenderFunctionsInput
 {
     functions : list<RenderFunctionDef>;
-    hasPolicies : bool;
-    policies : list<PolicyInfo>;
+    policies : optional<list<PolicyInfo>>;
     functionPrefix : string;
     namespaceName : optional<string>;
     staticModifier : string;

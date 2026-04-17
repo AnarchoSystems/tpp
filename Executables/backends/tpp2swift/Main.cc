@@ -89,12 +89,10 @@ int main(int argc, char *argv[])
         return EXIT_SUCCESS;
     }
 
-    // Build codegen context and render types
-    codegen::CodegenInput ctx = codegen::buildCodegenInput(ir);
     if (namespaceName.empty())
-        std::cout << codegen::render_swift_source(ctx) << '\n';
+        std::cout << codegen::render_swift_source(ir) << '\n';
     else
-        std::cout << codegen::render_swift_namespaced_source(ctx, namespaceName) << '\n';
+        std::cout << codegen::render_swift_namespaced_source(ir, namespaceName) << '\n';
 
     // Generate rendering functions from instruction IR
     auto funcCtx = buildFunctionsContext(ir, functionPrefix, namespaceName);

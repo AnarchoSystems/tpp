@@ -409,10 +409,8 @@ namespace tpp::compiler
                 d.precededBy = values["precededBy"];
                 d.enumerator = values["enumerator"];
                 d.policy = values["policy"];
-                if (flags.count("align") || values.count("align")) {
-                    d.hasAlign = true;
-                    d.alignSpec = values["align"]; // empty if bare flag
-                }
+                if (flags.count("align") || values.count("align"))
+                    d.alignSpec = values.count("align") ? values["align"] : std::string{};
             }
             return d;
         }
@@ -735,7 +733,6 @@ namespace tpp::compiler
                     forNode->precededBy = d->precededBy;
                     forNode->policy = d->policy;
                     forNode->alignSpec = d->alignSpec;
-                    forNode->hasAlign = d->hasAlign;
                     forNode->isBlock = false;
                     forNode->sourceRange = makeRange(lineIndex, s);
                     ++pos;
@@ -915,7 +912,6 @@ namespace tpp::compiler
                         forNode->precededBy = d->precededBy;
                         forNode->policy = d->policy;
                         forNode->alignSpec = d->alignSpec;
-                        forNode->hasAlign = d->hasAlign;
                         forNode->isBlock = true;
                         forNode->insertCol = tl.indent;
                         forNode->sourceRange = makeRange((int)pos, seg);
@@ -1262,8 +1258,7 @@ namespace tpp::compiler
         bool switchCheckExhaustive = false;
         bool switchHasDefault = false;
         std::set<std::string> switchCaseTags;
-        bool hasAlign = false; // true when this For frame has the align option
-        std::string alignSpec;    // the align spec string (e.g. "rl"); empty = bare 'align'
+        std::optional<std::string> alignSpec; // present when this For frame has the align option
         int alignCellCount = 0;  // number of @&@ separators seen inside this for body
         int openLineIndex = -1;
         LineSeg openSeg;
@@ -1658,7 +1653,6 @@ namespace tpp::compiler
                     frame.vars[d->var] = listType->elementType;
                     if (!d->enumerator.empty())
                         frame.vars[d->enumerator] = IntType{};
-                    frame.hasAlign = d->hasAlign;
                     frame.alignSpec = d->alignSpec;
                     frame.openLineIndex = (int)li;
                     frame.openSeg = seg;
@@ -1671,13 +1665,13 @@ namespace tpp::compiler
                     {
                         if (it->kind == ScopeKind::For)
                         {
-                            if (it->hasAlign && it->alignSpec.size() > 1)
+                            if (it->alignSpec.has_value() && it->alignSpec->size() > 1)
                             {
                                 size_t numCols = (size_t)it->alignCellCount + 1;
-                                if (it->alignSpec.size() != numCols)
+                                if (it->alignSpec->size() != numCols)
                                     addTemplateDiagnostic(diags, bodyStartLine,
                                         it->openLineIndex, it->openSeg,
-                                        "align spec has " + std::to_string(it->alignSpec.size()) +
+                                        "align spec has " + std::to_string(it->alignSpec->size()) +
                                         " column(s) but the loop body has " + std::to_string(numCols));
                             }
                             break;
@@ -1690,7 +1684,7 @@ namespace tpp::compiler
                     // @&@ is only valid inside a for loop that has the align option.
                     bool inAlignFor = false;
                     for (auto it = frames.rbegin(); it != frames.rend(); ++it)
-                        if (it->kind == ScopeKind::For) { inAlignFor = it->hasAlign; break; }
+                        if (it->kind == ScopeKind::For) { inAlignFor = it->alignSpec.has_value(); break; }
                     if (!inAlignFor)
                         addTemplateDiagnostic(diags, bodyStartLine, li, seg,
                             "@&@ is only allowed inside a for loop with the 'align' option");
@@ -1700,13 +1694,13 @@ namespace tpp::compiler
                         // If a multi-char alignSpec is present and this @&@ exceeds it, report it.
                         for (auto it = frames.rbegin(); it != frames.rend(); ++it)
                         {
-                            if (it->kind == ScopeKind::For && it->hasAlign)
+                            if (it->kind == ScopeKind::For && it->alignSpec.has_value())
                             {
-                                if (it->alignSpec.size() > 1 &&
-                                    it->alignCellCount >= (int)it->alignSpec.size() - 1)
+                                if (it->alignSpec->size() > 1 &&
+                                    it->alignCellCount >= (int)it->alignSpec->size() - 1)
                                     addTemplateDiagnostic(diags, bodyStartLine, li, seg,
                                         "@&@ exceeds align spec — spec only covers " +
-                                        std::to_string(it->alignSpec.size()) + " column(s)");
+                                        std::to_string(it->alignSpec->size()) + " column(s)");
                                 ++it->alignCellCount;
                                 break;
                             }

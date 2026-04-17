@@ -11,10 +11,8 @@ inline nlohmann::json _tpp_j(const _TppT& v) { return nlohmann::json(v); }
 template<typename _TppT>
 inline nlohmann::json _tpp_j(const std::unique_ptr<_TppT>& v) { return v ? nlohmann::json(*v) : nlohmann::json(); }
 
-struct TypeKind;
 struct PolicyRef;
-struct Instruction;
-struct ExprInfo;
+struct RenderExprInfo;
 struct EmitData;
 struct EmitExprData;
 struct AlignCellInfo;
@@ -28,15 +26,11 @@ struct PolicyReplacementInfo;
 struct PolicyRequireInfo;
 struct PolicyOutputFilterInfo;
 struct PolicyInfo;
-struct FieldInfo;
-struct StructInfo;
-struct VariantInfo;
-struct EnumInfo;
 struct ParamInfo;
-struct FunctionInfo;
-struct CodegenInput;
 struct RenderFunctionDef;
 struct RenderFunctionsInput;
+struct RenderTypeKind;
+struct RenderInstruction;
 
 struct PolicyRef_Pure
 {
@@ -57,15 +51,15 @@ struct PolicyRef
         return "enum PolicyRef\n{\n    Named(string),\n    Pure,\n    Runtime\n}";
     }
 };
-struct ExprInfo
+struct RenderExprInfo
 {
     std::string path;
-    std::unique_ptr<TypeKind> type;
+    std::unique_ptr<RenderTypeKind> type;
     bool isRecursive;
     bool isOptional;
     static std::string tpp_typedefs() noexcept
     {
-        return "// ═══════════════════════════════════════════════════════════════════════════════\n// Instruction IR types — for rendering function generation\n// ═══════════════════════════════════════════════════════════════════════════════\n\nstruct ExprInfo\n{\n    path : string;\n    type : TypeKind;\n    isRecursive : bool;\n    isOptional : bool;\n}";
+        return "// ═══════════════════════════════════════════════════════════════════════════════\n// Instruction IR types — for rendering function generation\n// ═══════════════════════════════════════════════════════════════════════════════\n\nstruct RenderExprInfo\n{\n    path : string;\n    type : RenderTypeKind;\n    isRecursive : bool;\n    isOptional : bool;\n}";
     }
 };
 struct EmitData
@@ -79,23 +73,23 @@ struct EmitData
 };
 struct EmitExprData
 {
-    ExprInfo expr;
+    RenderExprInfo expr;
     std::string sb;
     std::optional<std::string> staticPolicyLit;
     std::optional<std::string> staticPolicyId;
     bool useRuntimePolicy;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct EmitExprData\n{\n    expr : ExprInfo;\n    sb : string;\n    staticPolicyLit : optional<string>;\n    staticPolicyId : optional<string>;\n    useRuntimePolicy : bool;\n}";
+        return "struct EmitExprData\n{\n    expr : RenderExprInfo;\n    sb : string;\n    staticPolicyLit : optional<string>;\n    staticPolicyId : optional<string>;\n    useRuntimePolicy : bool;\n}";
     }
 };
 struct AlignCellInfo
 {
     int cellIndex;
-    std::unique_ptr<std::vector<Instruction>> body;
+    std::unique_ptr<std::vector<RenderInstruction>> body;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct AlignCellInfo\n{\n    cellIndex : int;\n    body : list<Instruction>;\n}";
+        return "struct AlignCellInfo\n{\n    cellIndex : int;\n    body : list<RenderInstruction>;\n}";
     }
 };
 struct ForData
@@ -104,29 +98,24 @@ struct ForData
     std::string collPath;
     bool collIsRecursive;
     bool collIsOptional;
-    std::unique_ptr<TypeKind> elemType;
+    std::unique_ptr<RenderTypeKind> elemType;
     std::string varName;
-    bool hasEnum;
-    std::string enumeratorName;
-    std::unique_ptr<std::vector<Instruction>> body;
-    bool hasSep;
-    std::string sepLit;
-    bool hasFollowed;
-    std::string followedByLit;
-    bool hasPreceded;
-    std::string precededByLit;
+    std::optional<std::string> enumeratorName;
+    std::unique_ptr<std::vector<RenderInstruction>> body;
+    std::optional<std::string> sepLit;
+    std::optional<std::string> followedByLit;
+    std::optional<std::string> precededByLit;
     bool isBlock;
     int insertCol;
     std::string sb;
-    bool hasAlign;
-    std::string alignSpec;
+    std::optional<std::string> alignSpec;
     std::unique_ptr<std::vector<AlignCellInfo>> cells;
     int numCols;
     std::vector<std::string> alignSpecChars;
     bool singleAlignChar;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct ForData\n{\n    scopeId : int;\n    collPath : string;\n    collIsRecursive : bool;\n    collIsOptional : bool;\n    elemType : TypeKind;\n    varName : string;\n    hasEnum : bool;\n    enumeratorName : string;\n    body : list<Instruction>;\n    hasSep : bool;\n    sepLit : string;\n    hasFollowed : bool;\n    followedByLit : string;\n    hasPreceded : bool;\n    precededByLit : string;\n    isBlock : bool;\n    insertCol : int;\n    sb : string;\n    hasAlign : bool;\n    alignSpec : string;\n    cells : list<AlignCellInfo>;\n    numCols : int;\n    alignSpecChars : list<string>;\n    singleAlignChar : bool;\n}";
+        return "struct ForData\n{\n    scopeId : int;\n    collPath : string;\n    collIsRecursive : bool;\n    collIsOptional : bool;\n    elemType : RenderTypeKind;\n    varName : string;\n    enumeratorName : optional<string>;\n    body : optional<list<RenderInstruction>>;\n    sepLit : optional<string>;\n    followedByLit : optional<string>;\n    precededByLit : optional<string>;\n    isBlock : bool;\n    insertCol : int;\n    sb : string;\n    alignSpec : optional<string>;\n    cells : optional<list<AlignCellInfo>>;\n    numCols : int;\n    alignSpecChars : list<string>;\n    singleAlignChar : bool;\n}";
     }
 };
 struct CaseData
@@ -134,15 +123,15 @@ struct CaseData
     std::string tag;
     std::string tagLit;
     std::optional<std::string> bindingName;
-    std::unique_ptr<TypeKind> payloadType;
-    std::unique_ptr<std::vector<Instruction>> body;
+    std::unique_ptr<RenderTypeKind> payloadType;
+    std::unique_ptr<std::vector<RenderInstruction>> body;
     int scopeId;
     bool isFirst;
     int variantIndex;
     bool isRecursivePayload;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct CaseData\n{\n    tag : string;\n    tagLit : string;\n    bindingName : optional<string>;\n    payloadType : optional<TypeKind>;\n    body : list<Instruction>;\n    scopeId : int;\n    isFirst : bool;\n    variantIndex : int;\n    isRecursivePayload : bool;\n}";
+        return "struct CaseData\n{\n    tag : string;\n    tagLit : string;\n    bindingName : optional<string>;\n    payloadType : optional<RenderTypeKind>;\n    body : optional<list<RenderInstruction>>;\n    scopeId : int;\n    isFirst : bool;\n    variantIndex : int;\n    isRecursivePayload : bool;\n}";
     }
 };
 struct IfData
@@ -150,9 +139,8 @@ struct IfData
     std::string condPath;
     bool condIsBool;
     bool isNegated;
-    std::unique_ptr<std::vector<Instruction>> thenBody;
-    std::unique_ptr<std::vector<Instruction>> elseBody;
-    bool hasElse;
+    std::unique_ptr<std::vector<RenderInstruction>> thenBody;
+    std::unique_ptr<std::vector<RenderInstruction>> elseBody;
     bool isBlock;
     int insertCol;
     std::string sb;
@@ -160,7 +148,7 @@ struct IfData
     int elseScopeId;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct IfData\n{\n    condPath : string;\n    condIsBool : bool;\n    isNegated : bool;\n    thenBody : list<Instruction>;\n    elseBody : list<Instruction>;\n    hasElse : bool;\n    isBlock : bool;\n    insertCol : int;\n    sb : string;\n    thenScopeId : int;\n    elseScopeId : int;\n}";
+        return "struct IfData\n{\n    condPath : string;\n    condIsBool : bool;\n    isNegated : bool;\n    thenBody : list<RenderInstruction>;\n    elseBody : optional<list<RenderInstruction>>;\n    isBlock : bool;\n    insertCol : int;\n    sb : string;\n    thenScopeId : int;\n    elseScopeId : int;\n}";
     }
 };
 struct SwitchData
@@ -212,11 +200,10 @@ struct PolicyReplacementInfo
 struct PolicyRequireInfo
 {
     std::string regexLit;
-    std::string replaceLit;
-    bool hasReplace;
+    std::optional<std::string> replaceLit;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct PolicyRequireInfo\n{\n    regexLit : string;\n    replaceLit : string;\n    hasReplace : bool;\n}";
+        return "struct PolicyRequireInfo\n{\n    regexLit : string;\n    replaceLit : optional<string>;\n}";
     }
 };
 struct PolicyOutputFilterInfo
@@ -231,117 +218,42 @@ struct PolicyInfo
 {
     std::string tagLit;
     std::string identifier;
-    bool hasLength;
-    std::string minVal;
-    std::string maxVal;
-    bool hasRejectIf;
-    std::string rejectIfRegexLit;
-    std::string rejectMsgLit;
-    std::vector<PolicyRequireInfo> require;
-    bool hasRequire;
-    std::vector<PolicyReplacementInfo> replacements;
-    bool hasReplacements;
-    std::vector<PolicyOutputFilterInfo> outputFilter;
-    bool hasOutputFilter;
+    std::optional<std::string> minVal;
+    std::optional<std::string> maxVal;
+    std::optional<std::string> rejectIfRegexLit;
+    std::optional<std::string> rejectMsgLit;
+    std::optional<std::vector<PolicyRequireInfo>> require;
+    std::optional<std::vector<PolicyReplacementInfo>> replacements;
+    std::optional<std::vector<PolicyOutputFilterInfo>> outputFilter;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct PolicyInfo\n{\n    tagLit : string;\n    identifier : string;\n    hasLength : bool;\n    minVal : string;\n    maxVal : string;\n    hasRejectIf : bool;\n    rejectIfRegexLit : string;\n    rejectMsgLit : string;\n    require : list<PolicyRequireInfo>;\n    hasRequire : bool;\n    replacements : list<PolicyReplacementInfo>;\n    hasReplacements : bool;\n    outputFilter : list<PolicyOutputFilterInfo>;\n    hasOutputFilter : bool;\n}";
-    }
-};
-struct FieldInfo
-{
-    std::string name;
-    std::unique_ptr<TypeKind> type;
-    bool recursive;
-    bool isOptional;
-    bool recursiveOptional;
-    std::unique_ptr<TypeKind> innerType;
-    std::optional<std::string> doc;
-    static std::string tpp_typedefs() noexcept
-    {
-        return "// ═══════════════════════════════════════════════════════════════════════════════\n// Codegen input types — shared type-generation data across all backends\n// ═══════════════════════════════════════════════════════════════════════════════\n\nstruct FieldInfo\n{\n    name : string;\n    type : TypeKind;\n    recursive : bool;\n    isOptional : bool;\n    recursiveOptional : bool;\n    innerType : TypeKind;\n    doc : optional<string>;\n}";
-    }
-};
-struct StructInfo
-{
-    std::string name;
-    std::vector<FieldInfo> fields;
-    std::optional<std::string> doc;
-    std::string rawTypedefs;
-    static std::string tpp_typedefs() noexcept
-    {
-        return "struct StructInfo\n{\n    name : string;\n    fields : list<FieldInfo>;\n    doc : optional<string>;\n    rawTypedefs : string;\n}";
-    }
-};
-struct VariantInfo
-{
-    std::string tag;
-    std::unique_ptr<TypeKind> payload;
-    bool recursive;
-    int index;
-    std::optional<std::string> doc;
-    static std::string tpp_typedefs() noexcept
-    {
-        return "struct VariantInfo\n{\n    tag : string;\n    payload : optional<TypeKind>;\n    recursive : bool;\n    index : int;\n    doc : optional<string>;\n}";
-    }
-};
-struct EnumInfo
-{
-    std::string name;
-    std::vector<VariantInfo> variants;
-    bool hasRecursiveVariants;
-    std::optional<std::string> doc;
-    std::string rawTypedefs;
-    static std::string tpp_typedefs() noexcept
-    {
-        return "struct EnumInfo\n{\n    name : string;\n    variants : list<VariantInfo>;\n    hasRecursiveVariants : bool;\n    doc : optional<string>;\n    rawTypedefs : string;\n}";
+        return "struct PolicyInfo\n{\n    tagLit : string;\n    identifier : string;\n    minVal : optional<string>;\n    maxVal : optional<string>;\n    rejectIfRegexLit : optional<string>;\n    rejectMsgLit : optional<string>;\n    require : optional<list<PolicyRequireInfo>>;\n    replacements : optional<list<PolicyReplacementInfo>>;\n    outputFilter : optional<list<PolicyOutputFilterInfo>>;\n}";
     }
 };
 struct ParamInfo
 {
     std::string name;
-    std::unique_ptr<TypeKind> type;
+    std::unique_ptr<RenderTypeKind> type;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct ParamInfo\n{\n    name : string;\n    type : TypeKind;\n}";
-    }
-};
-struct FunctionInfo
-{
-    std::string name;
-    std::vector<ParamInfo> params;
-    std::optional<std::string> doc;
-    static std::string tpp_typedefs() noexcept
-    {
-        return "struct FunctionInfo\n{\n    name : string;\n    params : list<ParamInfo>;\n    doc : optional<string>;\n}";
-    }
-};
-struct CodegenInput
-{
-    std::vector<StructInfo> structs;
-    std::vector<EnumInfo> enums;
-    std::vector<FunctionInfo> functions;
-    bool hasRecursiveTypes;
-    static std::string tpp_typedefs() noexcept
-    {
-        return "struct CodegenInput\n{\n    structs : list<StructInfo>;\n    enums : list<EnumInfo>;\n    functions : list<FunctionInfo>;\n    hasRecursiveTypes : bool;\n}";
+        return "struct ParamInfo\n{\n    name : string;\n    type : RenderTypeKind;\n}";
     }
 };
 struct RenderFunctionDef
 {
     std::string name;
     std::vector<ParamInfo> params;
-    std::unique_ptr<std::vector<Instruction>> body;
+    std::unique_ptr<std::vector<RenderInstruction>> body;
+    std::optional<std::string> doc;
     static std::string tpp_typedefs() noexcept
     {
-        return "// ═══════════════════════════════════════════════════════════════════════════════\n// Function rendering context (shared across all backends)\n// ═══════════════════════════════════════════════════════════════════════════════\n\nstruct RenderFunctionDef\n{\n    name : string;\n    params : list<ParamInfo>;\n    body : list<Instruction>;\n}";
+        return "// ═══════════════════════════════════════════════════════════════════════════════\n// Function rendering context (shared across all backends)\n// ═══════════════════════════════════════════════════════════════════════════════\n\nstruct RenderFunctionDef\n{\n    name : string;\n    params : list<ParamInfo>;\n    body : list<RenderInstruction>;\n    doc : optional<string>;\n}";
     }
 };
 struct RenderFunctionsInput
 {
     std::vector<RenderFunctionDef> functions;
-    bool hasPolicies;
-    std::vector<PolicyInfo> policies;
+    std::optional<std::vector<PolicyInfo>> policies;
     std::string functionPrefix;
     std::optional<std::string> namespaceName;
     std::string staticModifier;
@@ -349,56 +261,56 @@ struct RenderFunctionsInput
     std::optional<bool> externalRuntime;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct RenderFunctionsInput\n{\n    functions : list<RenderFunctionDef>;\n    hasPolicies : bool;\n    policies : list<PolicyInfo>;\n    functionPrefix : string;\n    namespaceName : optional<string>;\n    staticModifier : string;\n    includes : optional<list<string>>;\n    externalRuntime : optional<bool>;\n}";
+        return "struct RenderFunctionsInput\n{\n    functions : list<RenderFunctionDef>;\n    policies : optional<list<PolicyInfo>>;\n    functionPrefix : string;\n    namespaceName : optional<string>;\n    staticModifier : string;\n    includes : optional<list<string>>;\n    externalRuntime : optional<bool>;\n}";
     }
 };
-struct TypeKind_Str
+struct RenderTypeKind_Str
 {
-    friend void to_json(nlohmann::json& j, const TypeKind_Str&) { j = nlohmann::json::object(); }
-    friend void from_json(const nlohmann::json&, TypeKind_Str&) {}
+    friend void to_json(nlohmann::json& j, const RenderTypeKind_Str&) { j = nlohmann::json::object(); }
+    friend void from_json(const nlohmann::json&, RenderTypeKind_Str&) {}
 };
-struct TypeKind_Int
+struct RenderTypeKind_Int
 {
-    friend void to_json(nlohmann::json& j, const TypeKind_Int&) { j = nlohmann::json::object(); }
-    friend void from_json(const nlohmann::json&, TypeKind_Int&) {}
+    friend void to_json(nlohmann::json& j, const RenderTypeKind_Int&) { j = nlohmann::json::object(); }
+    friend void from_json(const nlohmann::json&, RenderTypeKind_Int&) {}
 };
-struct TypeKind_Bool
+struct RenderTypeKind_Bool
 {
-    friend void to_json(nlohmann::json& j, const TypeKind_Bool&) { j = nlohmann::json::object(); }
-    friend void from_json(const nlohmann::json&, TypeKind_Bool&) {}
+    friend void to_json(nlohmann::json& j, const RenderTypeKind_Bool&) { j = nlohmann::json::object(); }
+    friend void from_json(const nlohmann::json&, RenderTypeKind_Bool&) {}
 };
-struct TypeKind
+struct RenderTypeKind
 {
-    using Value = std::variant<TypeKind_Str, TypeKind_Int, TypeKind_Bool, std::string, std::unique_ptr<TypeKind>, std::unique_ptr<TypeKind>>;
+    using Value = std::variant<RenderTypeKind_Str, RenderTypeKind_Int, RenderTypeKind_Bool, std::string, std::unique_ptr<RenderTypeKind>, std::unique_ptr<RenderTypeKind>>;
     Value value;
     static std::string tpp_typedefs() noexcept
     {
-        return "// Shared type definitions for all tpp code generation backends.\n// Contains instruction IR types and policy types used identically\n// by tpp2swift, tpp2java, and any future backend.\n\nenum TypeKind\n{\n    Str,\n    Int,\n    Bool,\n    Named(string),\n    List(TypeKind),\n    Optional(TypeKind)\n}";
+        return "// Shared render-model definitions for all tpp code generation backends.\n// These types are not semantic IR; they are the execution-oriented adapter\n// used only for lowering template instruction trees into backend emitters.\n\nenum RenderTypeKind\n{\n    Str,\n    Int,\n    Bool,\n    Named(string),\n    List(RenderTypeKind),\n    Optional(RenderTypeKind)\n}";
     }
 };
-struct Instruction_AlignCell
+struct RenderInstruction_AlignCell
 {
-    friend void to_json(nlohmann::json& j, const Instruction_AlignCell&) { j = nlohmann::json::object(); }
-    friend void from_json(const nlohmann::json&, Instruction_AlignCell&) {}
+    friend void to_json(nlohmann::json& j, const RenderInstruction_AlignCell&) { j = nlohmann::json::object(); }
+    friend void from_json(const nlohmann::json&, RenderInstruction_AlignCell&) {}
 };
-struct Instruction
+struct RenderInstruction
 {
-    using Value = std::variant<EmitData, EmitExprData, Instruction_AlignCell, std::unique_ptr<ForData>, std::unique_ptr<IfData>, std::unique_ptr<SwitchData>, CallData>;
+    using Value = std::variant<EmitData, EmitExprData, RenderInstruction_AlignCell, std::unique_ptr<ForData>, std::unique_ptr<IfData>, std::unique_ptr<SwitchData>, CallData>;
     Value value;
     static std::string tpp_typedefs() noexcept
     {
-        return "enum Instruction\n{\n    Emit(EmitData),\n    EmitExpr(EmitExprData),\n    AlignCell,\n    For(ForData),\n    If(IfData),\n    Switch(SwitchData),\n    Call(CallData)\n}";
+        return "enum RenderInstruction\n{\n    Emit(EmitData),\n    EmitExpr(EmitExprData),\n    AlignCell,\n    For(ForData),\n    If(IfData),\n    Switch(SwitchData),\n    Call(CallData)\n}";
     }
 };
 
-inline void from_json(const nlohmann::json& j, TypeKind& v);
-inline void to_json(nlohmann::json& j, const TypeKind& v);
 inline void from_json(const nlohmann::json& j, PolicyRef& v);
 inline void to_json(nlohmann::json& j, const PolicyRef& v);
-inline void from_json(const nlohmann::json& j, Instruction& v);
-inline void to_json(nlohmann::json& j, const Instruction& v);
-inline void from_json(const nlohmann::json& j, ExprInfo& v);
-inline void to_json(nlohmann::json& j, const ExprInfo& v);
+inline void from_json(const nlohmann::json& j, RenderTypeKind& v);
+inline void to_json(nlohmann::json& j, const RenderTypeKind& v);
+inline void from_json(const nlohmann::json& j, RenderInstruction& v);
+inline void to_json(nlohmann::json& j, const RenderInstruction& v);
+inline void from_json(const nlohmann::json& j, RenderExprInfo& v);
+inline void to_json(nlohmann::json& j, const RenderExprInfo& v);
 inline void from_json(const nlohmann::json& j, EmitData& v);
 inline void to_json(nlohmann::json& j, const EmitData& v);
 inline void from_json(const nlohmann::json& j, EmitExprData& v);
@@ -425,42 +337,13 @@ inline void from_json(const nlohmann::json& j, PolicyOutputFilterInfo& v);
 inline void to_json(nlohmann::json& j, const PolicyOutputFilterInfo& v);
 inline void from_json(const nlohmann::json& j, PolicyInfo& v);
 inline void to_json(nlohmann::json& j, const PolicyInfo& v);
-inline void from_json(const nlohmann::json& j, FieldInfo& v);
-inline void to_json(nlohmann::json& j, const FieldInfo& v);
-inline void from_json(const nlohmann::json& j, StructInfo& v);
-inline void to_json(nlohmann::json& j, const StructInfo& v);
-inline void from_json(const nlohmann::json& j, VariantInfo& v);
-inline void to_json(nlohmann::json& j, const VariantInfo& v);
-inline void from_json(const nlohmann::json& j, EnumInfo& v);
-inline void to_json(nlohmann::json& j, const EnumInfo& v);
 inline void from_json(const nlohmann::json& j, ParamInfo& v);
 inline void to_json(nlohmann::json& j, const ParamInfo& v);
-inline void from_json(const nlohmann::json& j, FunctionInfo& v);
-inline void to_json(nlohmann::json& j, const FunctionInfo& v);
-inline void from_json(const nlohmann::json& j, CodegenInput& v);
-inline void to_json(nlohmann::json& j, const CodegenInput& v);
 inline void from_json(const nlohmann::json& j, RenderFunctionDef& v);
 inline void to_json(nlohmann::json& j, const RenderFunctionDef& v);
 inline void from_json(const nlohmann::json& j, RenderFunctionsInput& v);
 inline void to_json(nlohmann::json& j, const RenderFunctionsInput& v);
 
-inline void from_json(const nlohmann::json& j, TypeKind& v)
-{
-    if (j.contains("Str")) v.value.emplace<0>();
-    else     if (j.contains("Int")) v.value.emplace<1>();
-    else     if (j.contains("Bool")) v.value.emplace<2>();
-    else     if (j.contains("Named")) v.value.emplace<3>(j["Named"].get<std::string>());
-    else     if (j.contains("List")) v.value.emplace<4>(std::make_unique<TypeKind>(j["List"].get<TypeKind>()));
-    else     if (j.contains("Optional")) v.value.emplace<5>(std::make_unique<TypeKind>(j["Optional"].get<TypeKind>()));
-}
-inline void to_json(nlohmann::json& j, const TypeKind& v)
-{
-    const char* _tags[] = {"Str", "Int", "Bool", "Named", "List", "Optional"};
-    std::visit([&](const auto& arg) {
-        j = nlohmann::json::object();
-        j[_tags[v.value.index()]] = _tpp_j(arg);
-    }, v.value);
-}
 inline void from_json(const nlohmann::json& j, PolicyRef& v)
 {
     if (j.contains("Named")) v.value.emplace<0>(j["Named"].get<std::string>());
@@ -475,7 +358,24 @@ inline void to_json(nlohmann::json& j, const PolicyRef& v)
         j[_tags[v.value.index()]] = _tpp_j(arg);
     }, v.value);
 }
-inline void from_json(const nlohmann::json& j, Instruction& v)
+inline void from_json(const nlohmann::json& j, RenderTypeKind& v)
+{
+    if (j.contains("Str")) v.value.emplace<0>();
+    else     if (j.contains("Int")) v.value.emplace<1>();
+    else     if (j.contains("Bool")) v.value.emplace<2>();
+    else     if (j.contains("Named")) v.value.emplace<3>(j["Named"].get<std::string>());
+    else     if (j.contains("List")) v.value.emplace<4>(std::make_unique<RenderTypeKind>(j["List"].get<RenderTypeKind>()));
+    else     if (j.contains("Optional")) v.value.emplace<5>(std::make_unique<RenderTypeKind>(j["Optional"].get<RenderTypeKind>()));
+}
+inline void to_json(nlohmann::json& j, const RenderTypeKind& v)
+{
+    const char* _tags[] = {"Str", "Int", "Bool", "Named", "List", "Optional"};
+    std::visit([&](const auto& arg) {
+        j = nlohmann::json::object();
+        j[_tags[v.value.index()]] = _tpp_j(arg);
+    }, v.value);
+}
+inline void from_json(const nlohmann::json& j, RenderInstruction& v)
 {
     if (j.contains("Emit")) v.value.emplace<0>(j["Emit"].get<EmitData>());
     else     if (j.contains("EmitExpr")) v.value.emplace<1>(j["EmitExpr"].get<EmitExprData>());
@@ -485,7 +385,7 @@ inline void from_json(const nlohmann::json& j, Instruction& v)
     else     if (j.contains("Switch")) v.value.emplace<5>(std::make_unique<SwitchData>(j["Switch"].get<SwitchData>()));
     else     if (j.contains("Call")) v.value.emplace<6>(j["Call"].get<CallData>());
 }
-inline void to_json(nlohmann::json& j, const Instruction& v)
+inline void to_json(nlohmann::json& j, const RenderInstruction& v)
 {
     const char* _tags[] = {"Emit", "EmitExpr", "AlignCell", "For", "If", "Switch", "Call"};
     std::visit([&](const auto& arg) {
@@ -493,14 +393,14 @@ inline void to_json(nlohmann::json& j, const Instruction& v)
         j[_tags[v.value.index()]] = _tpp_j(arg);
     }, v.value);
 }
-inline void from_json(const nlohmann::json& j, ExprInfo& v)
+inline void from_json(const nlohmann::json& j, RenderExprInfo& v)
 {
-    j.at("path").get_to(v.path);
-    v.type = std::make_unique<TypeKind>(j.at("type").get<TypeKind>());
-    j.at("isRecursive").get_to(v.isRecursive);
-    j.at("isOptional").get_to(v.isOptional);
+    v.path = j.at("path").get<std::string>();
+    v.type = std::make_unique<RenderTypeKind>(j.at("type").get<RenderTypeKind>());
+    v.isRecursive = j.at("isRecursive").get<bool>();
+    v.isOptional = j.at("isOptional").get<bool>();
 }
-inline void to_json(nlohmann::json& j, const ExprInfo& v)
+inline void to_json(nlohmann::json& j, const RenderExprInfo& v)
 {
     j = nlohmann::json{};
     j["path"] = v.path;
@@ -510,8 +410,8 @@ inline void to_json(nlohmann::json& j, const ExprInfo& v)
 }
 inline void from_json(const nlohmann::json& j, EmitData& v)
 {
-    j.at("textLit").get_to(v.textLit);
-    j.at("sb").get_to(v.sb);
+    v.textLit = j.at("textLit").get<std::string>();
+    v.sb = j.at("sb").get<std::string>();
 }
 inline void to_json(nlohmann::json& j, const EmitData& v)
 {
@@ -521,11 +421,11 @@ inline void to_json(nlohmann::json& j, const EmitData& v)
 }
 inline void from_json(const nlohmann::json& j, EmitExprData& v)
 {
-    j.at("expr").get_to(v.expr);
-    j.at("sb").get_to(v.sb);
+    v.expr = j.at("expr").get<RenderExprInfo>();
+    v.sb = j.at("sb").get<std::string>();
     if (j.contains("staticPolicyLit") && !j.at("staticPolicyLit").is_null()) v.staticPolicyLit = j.at("staticPolicyLit").get<std::string>();
     if (j.contains("staticPolicyId") && !j.at("staticPolicyId").is_null()) v.staticPolicyId = j.at("staticPolicyId").get<std::string>();
-    j.at("useRuntimePolicy").get_to(v.useRuntimePolicy);
+    v.useRuntimePolicy = j.at("useRuntimePolicy").get<bool>();
 }
 inline void to_json(nlohmann::json& j, const EmitExprData& v)
 {
@@ -538,8 +438,8 @@ inline void to_json(nlohmann::json& j, const EmitExprData& v)
 }
 inline void from_json(const nlohmann::json& j, AlignCellInfo& v)
 {
-    j.at("cellIndex").get_to(v.cellIndex);
-    v.body = std::make_unique<std::vector<Instruction>>(j.at("body").get<std::vector<Instruction>>());
+    v.cellIndex = j.at("cellIndex").get<int>();
+    v.body = std::make_unique<std::vector<RenderInstruction>>(j.at("body").get<std::vector<RenderInstruction>>());
 }
 inline void to_json(nlohmann::json& j, const AlignCellInfo& v)
 {
@@ -549,30 +449,25 @@ inline void to_json(nlohmann::json& j, const AlignCellInfo& v)
 }
 inline void from_json(const nlohmann::json& j, ForData& v)
 {
-    j.at("scopeId").get_to(v.scopeId);
-    j.at("collPath").get_to(v.collPath);
-    j.at("collIsRecursive").get_to(v.collIsRecursive);
-    j.at("collIsOptional").get_to(v.collIsOptional);
-    v.elemType = std::make_unique<TypeKind>(j.at("elemType").get<TypeKind>());
-    j.at("varName").get_to(v.varName);
-    j.at("hasEnum").get_to(v.hasEnum);
-    j.at("enumeratorName").get_to(v.enumeratorName);
-    v.body = std::make_unique<std::vector<Instruction>>(j.at("body").get<std::vector<Instruction>>());
-    j.at("hasSep").get_to(v.hasSep);
-    j.at("sepLit").get_to(v.sepLit);
-    j.at("hasFollowed").get_to(v.hasFollowed);
-    j.at("followedByLit").get_to(v.followedByLit);
-    j.at("hasPreceded").get_to(v.hasPreceded);
-    j.at("precededByLit").get_to(v.precededByLit);
-    j.at("isBlock").get_to(v.isBlock);
-    j.at("insertCol").get_to(v.insertCol);
-    j.at("sb").get_to(v.sb);
-    j.at("hasAlign").get_to(v.hasAlign);
-    j.at("alignSpec").get_to(v.alignSpec);
-    v.cells = std::make_unique<std::vector<AlignCellInfo>>(j.at("cells").get<std::vector<AlignCellInfo>>());
-    j.at("numCols").get_to(v.numCols);
-    j.at("alignSpecChars").get_to(v.alignSpecChars);
-    j.at("singleAlignChar").get_to(v.singleAlignChar);
+    v.scopeId = j.at("scopeId").get<int>();
+    v.collPath = j.at("collPath").get<std::string>();
+    v.collIsRecursive = j.at("collIsRecursive").get<bool>();
+    v.collIsOptional = j.at("collIsOptional").get<bool>();
+    v.elemType = std::make_unique<RenderTypeKind>(j.at("elemType").get<RenderTypeKind>());
+    v.varName = j.at("varName").get<std::string>();
+    if (j.contains("enumeratorName") && !j.at("enumeratorName").is_null()) v.enumeratorName = j.at("enumeratorName").get<std::string>();
+    if (j.contains("body") && !j.at("body").is_null()) v.body = std::make_unique<std::vector<RenderInstruction>>(j.at("body").get<std::vector<RenderInstruction>>());
+    if (j.contains("sepLit") && !j.at("sepLit").is_null()) v.sepLit = j.at("sepLit").get<std::string>();
+    if (j.contains("followedByLit") && !j.at("followedByLit").is_null()) v.followedByLit = j.at("followedByLit").get<std::string>();
+    if (j.contains("precededByLit") && !j.at("precededByLit").is_null()) v.precededByLit = j.at("precededByLit").get<std::string>();
+    v.isBlock = j.at("isBlock").get<bool>();
+    v.insertCol = j.at("insertCol").get<int>();
+    v.sb = j.at("sb").get<std::string>();
+    if (j.contains("alignSpec") && !j.at("alignSpec").is_null()) v.alignSpec = j.at("alignSpec").get<std::string>();
+    if (j.contains("cells") && !j.at("cells").is_null()) v.cells = std::make_unique<std::vector<AlignCellInfo>>(j.at("cells").get<std::vector<AlignCellInfo>>());
+    v.numCols = j.at("numCols").get<int>();
+    v.alignSpecChars = j.at("alignSpecChars").get<std::vector<std::string>>();
+    v.singleAlignChar = j.at("singleAlignChar").get<bool>();
 }
 inline void to_json(nlohmann::json& j, const ForData& v)
 {
@@ -583,36 +478,31 @@ inline void to_json(nlohmann::json& j, const ForData& v)
     j["collIsOptional"] = v.collIsOptional;
     j["elemType"] = *v.elemType;
     j["varName"] = v.varName;
-    j["hasEnum"] = v.hasEnum;
-    j["enumeratorName"] = v.enumeratorName;
-    j["body"] = *v.body;
-    j["hasSep"] = v.hasSep;
-    j["sepLit"] = v.sepLit;
-    j["hasFollowed"] = v.hasFollowed;
-    j["followedByLit"] = v.followedByLit;
-    j["hasPreceded"] = v.hasPreceded;
-    j["precededByLit"] = v.precededByLit;
+    if (v.enumeratorName.has_value()) j["enumeratorName"] = *v.enumeratorName;
+    if (v.body) j["body"] = *v.body;
+    if (v.sepLit.has_value()) j["sepLit"] = *v.sepLit;
+    if (v.followedByLit.has_value()) j["followedByLit"] = *v.followedByLit;
+    if (v.precededByLit.has_value()) j["precededByLit"] = *v.precededByLit;
     j["isBlock"] = v.isBlock;
     j["insertCol"] = v.insertCol;
     j["sb"] = v.sb;
-    j["hasAlign"] = v.hasAlign;
-    j["alignSpec"] = v.alignSpec;
-    j["cells"] = *v.cells;
+    if (v.alignSpec.has_value()) j["alignSpec"] = *v.alignSpec;
+    if (v.cells) j["cells"] = *v.cells;
     j["numCols"] = v.numCols;
     j["alignSpecChars"] = v.alignSpecChars;
     j["singleAlignChar"] = v.singleAlignChar;
 }
 inline void from_json(const nlohmann::json& j, CaseData& v)
 {
-    j.at("tag").get_to(v.tag);
-    j.at("tagLit").get_to(v.tagLit);
+    v.tag = j.at("tag").get<std::string>();
+    v.tagLit = j.at("tagLit").get<std::string>();
     if (j.contains("bindingName") && !j.at("bindingName").is_null()) v.bindingName = j.at("bindingName").get<std::string>();
-    if (j.contains("payloadType") && !j.at("payloadType").is_null()) v.payloadType = std::make_unique<TypeKind>(j.at("payloadType").get<TypeKind>());
-    v.body = std::make_unique<std::vector<Instruction>>(j.at("body").get<std::vector<Instruction>>());
-    j.at("scopeId").get_to(v.scopeId);
-    j.at("isFirst").get_to(v.isFirst);
-    j.at("variantIndex").get_to(v.variantIndex);
-    j.at("isRecursivePayload").get_to(v.isRecursivePayload);
+    if (j.contains("payloadType") && !j.at("payloadType").is_null()) v.payloadType = std::make_unique<RenderTypeKind>(j.at("payloadType").get<RenderTypeKind>());
+    if (j.contains("body") && !j.at("body").is_null()) v.body = std::make_unique<std::vector<RenderInstruction>>(j.at("body").get<std::vector<RenderInstruction>>());
+    v.scopeId = j.at("scopeId").get<int>();
+    v.isFirst = j.at("isFirst").get<bool>();
+    v.variantIndex = j.at("variantIndex").get<int>();
+    v.isRecursivePayload = j.at("isRecursivePayload").get<bool>();
 }
 inline void to_json(nlohmann::json& j, const CaseData& v)
 {
@@ -621,7 +511,7 @@ inline void to_json(nlohmann::json& j, const CaseData& v)
     j["tagLit"] = v.tagLit;
     if (v.bindingName.has_value()) j["bindingName"] = *v.bindingName;
     if (v.payloadType) j["payloadType"] = *v.payloadType;
-    j["body"] = *v.body;
+    if (v.body) j["body"] = *v.body;
     j["scopeId"] = v.scopeId;
     j["isFirst"] = v.isFirst;
     j["variantIndex"] = v.variantIndex;
@@ -629,17 +519,16 @@ inline void to_json(nlohmann::json& j, const CaseData& v)
 }
 inline void from_json(const nlohmann::json& j, IfData& v)
 {
-    j.at("condPath").get_to(v.condPath);
-    j.at("condIsBool").get_to(v.condIsBool);
-    j.at("isNegated").get_to(v.isNegated);
-    v.thenBody = std::make_unique<std::vector<Instruction>>(j.at("thenBody").get<std::vector<Instruction>>());
-    v.elseBody = std::make_unique<std::vector<Instruction>>(j.at("elseBody").get<std::vector<Instruction>>());
-    j.at("hasElse").get_to(v.hasElse);
-    j.at("isBlock").get_to(v.isBlock);
-    j.at("insertCol").get_to(v.insertCol);
-    j.at("sb").get_to(v.sb);
-    j.at("thenScopeId").get_to(v.thenScopeId);
-    j.at("elseScopeId").get_to(v.elseScopeId);
+    v.condPath = j.at("condPath").get<std::string>();
+    v.condIsBool = j.at("condIsBool").get<bool>();
+    v.isNegated = j.at("isNegated").get<bool>();
+    v.thenBody = std::make_unique<std::vector<RenderInstruction>>(j.at("thenBody").get<std::vector<RenderInstruction>>());
+    if (j.contains("elseBody") && !j.at("elseBody").is_null()) v.elseBody = std::make_unique<std::vector<RenderInstruction>>(j.at("elseBody").get<std::vector<RenderInstruction>>());
+    v.isBlock = j.at("isBlock").get<bool>();
+    v.insertCol = j.at("insertCol").get<int>();
+    v.sb = j.at("sb").get<std::string>();
+    v.thenScopeId = j.at("thenScopeId").get<int>();
+    v.elseScopeId = j.at("elseScopeId").get<int>();
 }
 inline void to_json(nlohmann::json& j, const IfData& v)
 {
@@ -648,8 +537,7 @@ inline void to_json(nlohmann::json& j, const IfData& v)
     j["condIsBool"] = v.condIsBool;
     j["isNegated"] = v.isNegated;
     j["thenBody"] = *v.thenBody;
-    j["elseBody"] = *v.elseBody;
-    j["hasElse"] = v.hasElse;
+    if (v.elseBody) j["elseBody"] = *v.elseBody;
     j["isBlock"] = v.isBlock;
     j["insertCol"] = v.insertCol;
     j["sb"] = v.sb;
@@ -658,14 +546,14 @@ inline void to_json(nlohmann::json& j, const IfData& v)
 }
 inline void from_json(const nlohmann::json& j, SwitchData& v)
 {
-    j.at("exprPath").get_to(v.exprPath);
-    j.at("exprIsRecursive").get_to(v.exprIsRecursive);
-    j.at("exprIsOptional").get_to(v.exprIsOptional);
-    j.at("enumTypeName").get_to(v.enumTypeName);
+    v.exprPath = j.at("exprPath").get<std::string>();
+    v.exprIsRecursive = j.at("exprIsRecursive").get<bool>();
+    v.exprIsOptional = j.at("exprIsOptional").get<bool>();
+    v.enumTypeName = j.at("enumTypeName").get<std::string>();
     v.cases = std::make_unique<std::vector<CaseData>>(j.at("cases").get<std::vector<CaseData>>());
-    j.at("isBlock").get_to(v.isBlock);
-    j.at("insertCol").get_to(v.insertCol);
-    j.at("sb").get_to(v.sb);
+    v.isBlock = j.at("isBlock").get<bool>();
+    v.insertCol = j.at("insertCol").get<int>();
+    v.sb = j.at("sb").get<std::string>();
 }
 inline void to_json(nlohmann::json& j, const SwitchData& v)
 {
@@ -681,9 +569,9 @@ inline void to_json(nlohmann::json& j, const SwitchData& v)
 }
 inline void from_json(const nlohmann::json& j, CallArgInfo& v)
 {
-    j.at("path").get_to(v.path);
-    j.at("isRecursive").get_to(v.isRecursive);
-    j.at("isOptional").get_to(v.isOptional);
+    v.path = j.at("path").get<std::string>();
+    v.isRecursive = j.at("isRecursive").get<bool>();
+    v.isOptional = j.at("isOptional").get<bool>();
 }
 inline void to_json(nlohmann::json& j, const CallArgInfo& v)
 {
@@ -694,11 +582,11 @@ inline void to_json(nlohmann::json& j, const CallArgInfo& v)
 }
 inline void from_json(const nlohmann::json& j, CallData& v)
 {
-    j.at("functionName").get_to(v.functionName);
-    j.at("args").get_to(v.args);
+    v.functionName = j.at("functionName").get<std::string>();
+    v.args = j.at("args").get<std::vector<CallArgInfo>>();
     if (j.contains("policyArg") && !j.at("policyArg").is_null()) v.policyArg = j.at("policyArg").get<PolicyRef>();
-    j.at("sb").get_to(v.sb);
-    j.at("needsTry").get_to(v.needsTry);
+    v.sb = j.at("sb").get<std::string>();
+    v.needsTry = j.at("needsTry").get<bool>();
 }
 inline void to_json(nlohmann::json& j, const CallData& v)
 {
@@ -711,8 +599,8 @@ inline void to_json(nlohmann::json& j, const CallData& v)
 }
 inline void from_json(const nlohmann::json& j, PolicyReplacementInfo& v)
 {
-    j.at("findLit").get_to(v.findLit);
-    j.at("replaceLit").get_to(v.replaceLit);
+    v.findLit = j.at("findLit").get<std::string>();
+    v.replaceLit = j.at("replaceLit").get<std::string>();
 }
 inline void to_json(nlohmann::json& j, const PolicyReplacementInfo& v)
 {
@@ -722,20 +610,18 @@ inline void to_json(nlohmann::json& j, const PolicyReplacementInfo& v)
 }
 inline void from_json(const nlohmann::json& j, PolicyRequireInfo& v)
 {
-    j.at("regexLit").get_to(v.regexLit);
-    j.at("replaceLit").get_to(v.replaceLit);
-    j.at("hasReplace").get_to(v.hasReplace);
+    v.regexLit = j.at("regexLit").get<std::string>();
+    if (j.contains("replaceLit") && !j.at("replaceLit").is_null()) v.replaceLit = j.at("replaceLit").get<std::string>();
 }
 inline void to_json(nlohmann::json& j, const PolicyRequireInfo& v)
 {
     j = nlohmann::json{};
     j["regexLit"] = v.regexLit;
-    j["replaceLit"] = v.replaceLit;
-    j["hasReplace"] = v.hasReplace;
+    if (v.replaceLit.has_value()) j["replaceLit"] = *v.replaceLit;
 }
 inline void from_json(const nlohmann::json& j, PolicyOutputFilterInfo& v)
 {
-    j.at("regexLit").get_to(v.regexLit);
+    v.regexLit = j.at("regexLit").get<std::string>();
 }
 inline void to_json(nlohmann::json& j, const PolicyOutputFilterInfo& v)
 {
@@ -744,113 +630,33 @@ inline void to_json(nlohmann::json& j, const PolicyOutputFilterInfo& v)
 }
 inline void from_json(const nlohmann::json& j, PolicyInfo& v)
 {
-    j.at("tagLit").get_to(v.tagLit);
-    j.at("identifier").get_to(v.identifier);
-    j.at("hasLength").get_to(v.hasLength);
-    j.at("minVal").get_to(v.minVal);
-    j.at("maxVal").get_to(v.maxVal);
-    j.at("hasRejectIf").get_to(v.hasRejectIf);
-    j.at("rejectIfRegexLit").get_to(v.rejectIfRegexLit);
-    j.at("rejectMsgLit").get_to(v.rejectMsgLit);
-    j.at("require").get_to(v.require);
-    j.at("hasRequire").get_to(v.hasRequire);
-    j.at("replacements").get_to(v.replacements);
-    j.at("hasReplacements").get_to(v.hasReplacements);
-    j.at("outputFilter").get_to(v.outputFilter);
-    j.at("hasOutputFilter").get_to(v.hasOutputFilter);
+    v.tagLit = j.at("tagLit").get<std::string>();
+    v.identifier = j.at("identifier").get<std::string>();
+    if (j.contains("minVal") && !j.at("minVal").is_null()) v.minVal = j.at("minVal").get<std::string>();
+    if (j.contains("maxVal") && !j.at("maxVal").is_null()) v.maxVal = j.at("maxVal").get<std::string>();
+    if (j.contains("rejectIfRegexLit") && !j.at("rejectIfRegexLit").is_null()) v.rejectIfRegexLit = j.at("rejectIfRegexLit").get<std::string>();
+    if (j.contains("rejectMsgLit") && !j.at("rejectMsgLit").is_null()) v.rejectMsgLit = j.at("rejectMsgLit").get<std::string>();
+    if (j.contains("require") && !j.at("require").is_null()) v.require = j.at("require").get<std::vector<PolicyRequireInfo>>();
+    if (j.contains("replacements") && !j.at("replacements").is_null()) v.replacements = j.at("replacements").get<std::vector<PolicyReplacementInfo>>();
+    if (j.contains("outputFilter") && !j.at("outputFilter").is_null()) v.outputFilter = j.at("outputFilter").get<std::vector<PolicyOutputFilterInfo>>();
 }
 inline void to_json(nlohmann::json& j, const PolicyInfo& v)
 {
     j = nlohmann::json{};
     j["tagLit"] = v.tagLit;
     j["identifier"] = v.identifier;
-    j["hasLength"] = v.hasLength;
-    j["minVal"] = v.minVal;
-    j["maxVal"] = v.maxVal;
-    j["hasRejectIf"] = v.hasRejectIf;
-    j["rejectIfRegexLit"] = v.rejectIfRegexLit;
-    j["rejectMsgLit"] = v.rejectMsgLit;
-    j["require"] = v.require;
-    j["hasRequire"] = v.hasRequire;
-    j["replacements"] = v.replacements;
-    j["hasReplacements"] = v.hasReplacements;
-    j["outputFilter"] = v.outputFilter;
-    j["hasOutputFilter"] = v.hasOutputFilter;
-}
-inline void from_json(const nlohmann::json& j, FieldInfo& v)
-{
-    j.at("name").get_to(v.name);
-    v.type = std::make_unique<TypeKind>(j.at("type").get<TypeKind>());
-    j.at("recursive").get_to(v.recursive);
-    j.at("isOptional").get_to(v.isOptional);
-    j.at("recursiveOptional").get_to(v.recursiveOptional);
-    v.innerType = std::make_unique<TypeKind>(j.at("innerType").get<TypeKind>());
-    if (j.contains("doc") && !j.at("doc").is_null()) v.doc = j.at("doc").get<std::string>();
-}
-inline void to_json(nlohmann::json& j, const FieldInfo& v)
-{
-    j = nlohmann::json{};
-    j["name"] = v.name;
-    j["type"] = *v.type;
-    j["recursive"] = v.recursive;
-    j["isOptional"] = v.isOptional;
-    j["recursiveOptional"] = v.recursiveOptional;
-    j["innerType"] = *v.innerType;
-    if (v.doc.has_value()) j["doc"] = *v.doc;
-}
-inline void from_json(const nlohmann::json& j, StructInfo& v)
-{
-    j.at("name").get_to(v.name);
-    j.at("fields").get_to(v.fields);
-    if (j.contains("doc") && !j.at("doc").is_null()) v.doc = j.at("doc").get<std::string>();
-    j.at("rawTypedefs").get_to(v.rawTypedefs);
-}
-inline void to_json(nlohmann::json& j, const StructInfo& v)
-{
-    j = nlohmann::json{};
-    j["name"] = v.name;
-    j["fields"] = v.fields;
-    if (v.doc.has_value()) j["doc"] = *v.doc;
-    j["rawTypedefs"] = v.rawTypedefs;
-}
-inline void from_json(const nlohmann::json& j, VariantInfo& v)
-{
-    j.at("tag").get_to(v.tag);
-    if (j.contains("payload") && !j.at("payload").is_null()) v.payload = std::make_unique<TypeKind>(j.at("payload").get<TypeKind>());
-    j.at("recursive").get_to(v.recursive);
-    j.at("index").get_to(v.index);
-    if (j.contains("doc") && !j.at("doc").is_null()) v.doc = j.at("doc").get<std::string>();
-}
-inline void to_json(nlohmann::json& j, const VariantInfo& v)
-{
-    j = nlohmann::json{};
-    j["tag"] = v.tag;
-    if (v.payload) j["payload"] = *v.payload;
-    j["recursive"] = v.recursive;
-    j["index"] = v.index;
-    if (v.doc.has_value()) j["doc"] = *v.doc;
-}
-inline void from_json(const nlohmann::json& j, EnumInfo& v)
-{
-    j.at("name").get_to(v.name);
-    j.at("variants").get_to(v.variants);
-    j.at("hasRecursiveVariants").get_to(v.hasRecursiveVariants);
-    if (j.contains("doc") && !j.at("doc").is_null()) v.doc = j.at("doc").get<std::string>();
-    j.at("rawTypedefs").get_to(v.rawTypedefs);
-}
-inline void to_json(nlohmann::json& j, const EnumInfo& v)
-{
-    j = nlohmann::json{};
-    j["name"] = v.name;
-    j["variants"] = v.variants;
-    j["hasRecursiveVariants"] = v.hasRecursiveVariants;
-    if (v.doc.has_value()) j["doc"] = *v.doc;
-    j["rawTypedefs"] = v.rawTypedefs;
+    if (v.minVal.has_value()) j["minVal"] = *v.minVal;
+    if (v.maxVal.has_value()) j["maxVal"] = *v.maxVal;
+    if (v.rejectIfRegexLit.has_value()) j["rejectIfRegexLit"] = *v.rejectIfRegexLit;
+    if (v.rejectMsgLit.has_value()) j["rejectMsgLit"] = *v.rejectMsgLit;
+    if (v.require.has_value()) j["require"] = *v.require;
+    if (v.replacements.has_value()) j["replacements"] = *v.replacements;
+    if (v.outputFilter.has_value()) j["outputFilter"] = *v.outputFilter;
 }
 inline void from_json(const nlohmann::json& j, ParamInfo& v)
 {
-    j.at("name").get_to(v.name);
-    v.type = std::make_unique<TypeKind>(j.at("type").get<TypeKind>());
+    v.name = j.at("name").get<std::string>();
+    v.type = std::make_unique<RenderTypeKind>(j.at("type").get<RenderTypeKind>());
 }
 inline void to_json(nlohmann::json& j, const ParamInfo& v)
 {
@@ -858,39 +664,12 @@ inline void to_json(nlohmann::json& j, const ParamInfo& v)
     j["name"] = v.name;
     j["type"] = *v.type;
 }
-inline void from_json(const nlohmann::json& j, FunctionInfo& v)
-{
-    j.at("name").get_to(v.name);
-    j.at("params").get_to(v.params);
-    if (j.contains("doc") && !j.at("doc").is_null()) v.doc = j.at("doc").get<std::string>();
-}
-inline void to_json(nlohmann::json& j, const FunctionInfo& v)
-{
-    j = nlohmann::json{};
-    j["name"] = v.name;
-    j["params"] = v.params;
-    if (v.doc.has_value()) j["doc"] = *v.doc;
-}
-inline void from_json(const nlohmann::json& j, CodegenInput& v)
-{
-    j.at("structs").get_to(v.structs);
-    j.at("enums").get_to(v.enums);
-    j.at("functions").get_to(v.functions);
-    j.at("hasRecursiveTypes").get_to(v.hasRecursiveTypes);
-}
-inline void to_json(nlohmann::json& j, const CodegenInput& v)
-{
-    j = nlohmann::json{};
-    j["structs"] = v.structs;
-    j["enums"] = v.enums;
-    j["functions"] = v.functions;
-    j["hasRecursiveTypes"] = v.hasRecursiveTypes;
-}
 inline void from_json(const nlohmann::json& j, RenderFunctionDef& v)
 {
-    j.at("name").get_to(v.name);
-    j.at("params").get_to(v.params);
-    v.body = std::make_unique<std::vector<Instruction>>(j.at("body").get<std::vector<Instruction>>());
+    v.name = j.at("name").get<std::string>();
+    v.params = j.at("params").get<std::vector<ParamInfo>>();
+    v.body = std::make_unique<std::vector<RenderInstruction>>(j.at("body").get<std::vector<RenderInstruction>>());
+    if (j.contains("doc") && !j.at("doc").is_null()) v.doc = j.at("doc").get<std::string>();
 }
 inline void to_json(nlohmann::json& j, const RenderFunctionDef& v)
 {
@@ -898,15 +677,15 @@ inline void to_json(nlohmann::json& j, const RenderFunctionDef& v)
     j["name"] = v.name;
     j["params"] = v.params;
     j["body"] = *v.body;
+    if (v.doc.has_value()) j["doc"] = *v.doc;
 }
 inline void from_json(const nlohmann::json& j, RenderFunctionsInput& v)
 {
-    j.at("functions").get_to(v.functions);
-    j.at("hasPolicies").get_to(v.hasPolicies);
-    j.at("policies").get_to(v.policies);
-    j.at("functionPrefix").get_to(v.functionPrefix);
+    v.functions = j.at("functions").get<std::vector<RenderFunctionDef>>();
+    if (j.contains("policies") && !j.at("policies").is_null()) v.policies = j.at("policies").get<std::vector<PolicyInfo>>();
+    v.functionPrefix = j.at("functionPrefix").get<std::string>();
     if (j.contains("namespaceName") && !j.at("namespaceName").is_null()) v.namespaceName = j.at("namespaceName").get<std::string>();
-    j.at("staticModifier").get_to(v.staticModifier);
+    v.staticModifier = j.at("staticModifier").get<std::string>();
     if (j.contains("includes") && !j.at("includes").is_null()) v.includes = j.at("includes").get<std::vector<std::string>>();
     if (j.contains("externalRuntime") && !j.at("externalRuntime").is_null()) v.externalRuntime = j.at("externalRuntime").get<bool>();
 }
@@ -914,8 +693,7 @@ inline void to_json(nlohmann::json& j, const RenderFunctionsInput& v)
 {
     j = nlohmann::json{};
     j["functions"] = v.functions;
-    j["hasPolicies"] = v.hasPolicies;
-    j["policies"] = v.policies;
+    if (v.policies.has_value()) j["policies"] = *v.policies;
     j["functionPrefix"] = v.functionPrefix;
     if (v.namespaceName.has_value()) j["namespaceName"] = *v.namespaceName;
     j["staticModifier"] = v.staticModifier;
