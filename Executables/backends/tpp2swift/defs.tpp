@@ -267,10 +267,11 @@ for _i@f.scopeId@ in 0..<@swift_value_path(f.collPath, f.collIsRecursive, f.coll
     @for instr in f.body@
     @emit_instr(instr)@
     @end for@
-    var _iter@f.scopeId@ = _tppBlockIndent(_blk@f.scopeId@, @f.insertCol@)
     @if f.sepLit@
+    var _iter@f.scopeId@ = _tppBlockIndent(_blk@f.scopeId@, @f.insertCol@)
     @emit_for_block_sep(f)@
     @else@
+    let _iter@f.scopeId@ = _tppBlockIndent(_blk@f.scopeId@, @f.insertCol@)
     @if f.precededByLit@
     @f.sb@ += @f.precededByLit@
     @end if@
@@ -281,6 +282,19 @@ for _i@f.scopeId@ in 0..<@swift_value_path(f.collPath, f.collIsRecursive, f.coll
     @end if@
 }
 @end if@
+END
+
+template swift_align_spec(f: ForData)
+({
+    let _chars: [Character] = [@for ch in f.alignSpecChars | sep=", "@"@ch@"@end for@]
+    if _chars.count == 1 {
+        return [Character](repeating: _chars[0], count: @f.numCols@)
+    }
+    if _chars.isEmpty {
+        return [Character](repeating: "l", count: @f.numCols@)
+    }
+    return _chars
+})()
 END
 
 // ── Aligned for ──────────────────────────────────────────────────────────────
@@ -311,16 +325,7 @@ for _i@f.scopeId@ in 0..<@swift_value_path(f.collPath, f.collIsRecursive, f.coll
 }
 var _cw@f.scopeId@ = [Int](repeating: 0, count: @f.numCols@)
 for _r in _rows@f.scopeId@ { for _c in 0..<_r.count { _cw@f.scopeId@[_c] = max(_cw@f.scopeId@[_c], _r[_c].count) } }
-var _spec@f.scopeId@ = [Character](repeating: "l", count: @f.numCols@)
-@if f.singleAlignChar@
-@for ch in f.alignSpecChars@
-_spec@f.scopeId@ = [Character](repeating: "@ch@", count: @f.numCols@)
-@end for@
-@else@
-@for ch in f.alignSpecChars | enumerator=ci@
-_spec@f.scopeId@[@ci@] = "@ch@"
-@end for@
-@end if@
+let _spec@f.scopeId@ = @swift_align_spec(f)@
 for _i@f.scopeId@ in 0..<_rows@f.scopeId@.count {
     let _r = _rows@f.scopeId@[_i@f.scopeId@]
     var _line@f.scopeId@ = ""
@@ -420,13 +425,15 @@ END
 // ── Switch / Case ────────────────────────────────────────────────────────────
 
 template emit_switch_case_block(s: SwitchData, c: CaseData)
-var _blk@c.scopeId@ = ""
 @if c.body@
+var _blk@c.scopeId@ = ""
 @for instr in c.body@
 @emit_instr(instr)@
 @end for@
-@end if@
 @s.sb@ += _tppBlockIndent(_blk@c.scopeId@, @s.insertCol@)
+@else@
+break
+@end if@
 END
 
 template emit_switch(s: SwitchData)

@@ -169,13 +169,13 @@ inline RenderTypeKind typeKindToContext(const tpp::TypeKind &t)
     RenderTypeKind result;
     switch (t.value.index())
     {
-    case 0: result.value = RenderTypeKind_Str{}; break;
-    case 1: result.value = RenderTypeKind_Int{}; break;
-    case 2: result.value = RenderTypeKind_Bool{}; break;
+    case 0: result.value.emplace<0>(); break;
+    case 1: result.value.emplace<1>(); break;
+    case 2: result.value.emplace<2>(); break;
     case 3: result.value.emplace<3>(qualifyPublicIRTypeName(std::get<3>(t.value))); break;
     case 4: result.value.emplace<4>(std::make_unique<RenderTypeKind>(typeKindToContext(*std::get<4>(t.value)))); break;
     case 5: result.value.emplace<5>(std::make_unique<RenderTypeKind>(typeKindToContext(*std::get<5>(t.value)))); break;
-    default: result.value = RenderTypeKind_Str{}; break;
+    default: result.value.emplace<0>(); break;
     }
     return result;
 }
@@ -257,17 +257,17 @@ inline std::optional<PolicyRef> makePolicyRef(
     if (!activePolicy.empty() && activePolicy != "none")
     {
         PolicyRef ref;
-        ref.value = sanitizeIdentifier(activePolicy);
+        ref.value.emplace<0>(sanitizeIdentifier(activePolicy));
         return ref;
     }
     if (activePolicy == "none")
     {
         PolicyRef ref;
-        ref.value = PolicyRef_Pure{};
+        ref.value.emplace<1>();
         return ref;
     }
     PolicyRef ref;
-    ref.value = PolicyRef_Runtime{};
+    ref.value.emplace<2>();
     return ref;
 }
 
@@ -289,6 +289,100 @@ inline RenderExprInfo exprInfoToContext(const tpp::ExprInfo &expr)
     result.isRecursive = expr.isRecursive;
     result.isOptional = expr.isOptional;
     return result;
+}
+
+inline bool pathUsesBinding(const std::string &path, const std::string &bindingName)
+{
+    return path == bindingName ||
+           (path.size() > bindingName.size() &&
+            path.compare(0, bindingName.size(), bindingName) == 0 &&
+            path[bindingName.size()] == '.');
+}
+
+inline bool instructionListUsesBinding(
+    const std::vector<tpp::Instruction> &body,
+    const std::string &bindingName,
+    bool shadowed = false);
+
+inline bool instructionUsesBinding(
+    const tpp::Instruction &instr,
+    const std::string &bindingName,
+    bool shadowed = false)
+{
+    return std::visit([&](auto &&arg) -> bool
+    {
+        using T = std::decay_t<decltype(arg)>;
+
+        if constexpr (std::is_same_v<T, tpp::EmitExprInstr>)
+        {
+            return !shadowed && pathUsesBinding(arg.expr.path, bindingName);
+        }
+        else if constexpr (std::is_same_v<T, std::unique_ptr<tpp::ForInstr>>)
+        {
+            if (!arg)
+                return false;
+
+            const bool bodyShadowed = shadowed ||
+                arg->varName == bindingName ||
+                (arg->enumeratorName.has_value() && *arg->enumeratorName == bindingName);
+
+            return (!shadowed && pathUsesBinding(arg->collection.path, bindingName)) ||
+                   instructionListUsesBinding(*arg->body, bindingName, bodyShadowed);
+        }
+        else if constexpr (std::is_same_v<T, std::unique_ptr<tpp::IfInstr>>)
+        {
+            if (!arg)
+                return false;
+
+            return (!shadowed && pathUsesBinding(arg->condExpr.path, bindingName)) ||
+                   instructionListUsesBinding(*arg->thenBody, bindingName, shadowed) ||
+                   instructionListUsesBinding(*arg->elseBody, bindingName, shadowed);
+        }
+        else if constexpr (std::is_same_v<T, std::unique_ptr<tpp::SwitchInstr>>)
+        {
+            if (!arg)
+                return false;
+
+            if (!shadowed && pathUsesBinding(arg->expr.path, bindingName))
+                return true;
+
+            for (const auto &caseInstr : *arg->cases)
+            {
+                const bool caseShadowed = shadowed ||
+                    (caseInstr.bindingName.has_value() && caseInstr.bindingName->name == bindingName);
+                if (instructionListUsesBinding(*caseInstr.body, bindingName, caseShadowed))
+                    return true;
+            }
+            return false;
+        }
+        else if constexpr (std::is_same_v<T, tpp::CallInstr>)
+        {
+            if (shadowed)
+                return false;
+
+            for (const auto &callArg : arg.arguments)
+            {
+                if (pathUsesBinding(callArg.path, bindingName))
+                    return true;
+            }
+            return false;
+        }
+
+        return false;
+    }, instr.value);
+}
+
+inline bool instructionListUsesBinding(
+    const std::vector<tpp::Instruction> &body,
+    const std::string &bindingName,
+    bool shadowed)
+{
+    for (const auto &instr : body)
+    {
+        if (instructionUsesBinding(instr, bindingName, shadowed))
+            return true;
+    }
+    return false;
 }
 
 /// Recursively convert an IR instruction to the render-model instruction tree.
@@ -487,7 +581,7 @@ inline RenderInstruction convertInstruction(
                 CaseData caseData;
                 caseData.tag = c.tag;
                 caseData.tagLit = stringLiteral(c.tag);
-                caseData.bindingName = c.bindingName
+                caseData.bindingName = c.bindingName.has_value() && instructionListUsesBinding(*c.body, c.bindingName->name)
                     ? std::make_optional(c.bindingName->name)
                     : std::nullopt;
                 if (!caseBody->empty())
