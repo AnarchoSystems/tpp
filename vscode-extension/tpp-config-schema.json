@@ -48,6 +48,13 @@
             "type": "string",
             "description": "Name of the template function to render (e.g. \"main\")."
           },
+          "signature": {
+            "type": "array",
+            "description": "Optional parameter type signature used to disambiguate overloaded templates (e.g. [\"string\"] or [\"list<string>\"]).",
+            "items": {
+              "type": "string"
+            }
+          },
           "input": {
             "description": "Input data for the template. Either an inline JSON value or a path string pointing to a .json file relative to this config.",
             "oneOf": [

@@ -1,0 +1,14 @@
+{
+    "types": ["typedefs.tpp"],
+    "templates": ["template.tpp"],
+    "previews": [
+        {
+            "template": "main",
+            "input": {
+                "x": 1,
+                "y": 2
+            },
+            "name": "default"
+        }
+    ]
+}

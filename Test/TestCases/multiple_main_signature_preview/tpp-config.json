@@ -1,0 +1,16 @@
+{
+    "types": [],
+    "templates": [
+        "template.tpp"
+    ],
+    "previews": [
+        {
+            "template": "main",
+            "signature": [
+                "string"
+            ],
+            "input": "Ada",
+            "name": "default"
+        }
+    ]
+}

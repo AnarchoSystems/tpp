@@ -2,7 +2,7 @@ template render_test(defs: Defs)
 #include <gtest/gtest.h>
 #include <tpp/Compiler.h>
 #include <tpp/IR.h>
-#include <tpp/Rendering.h>
+#include <tpp/Runtime.h>
 #include "@defs.testName@_functions.h"
 
 TEST(static_tests, @defs.testName@_compiled)
@@ -19,7 +19,11 @@ TEST(static_tests, @defs.testName@_dynamic_binding)
     tpp::IR iRep = nlohmann::json::parse(@defs.iRepJson@).get<tpp::IR>();
     const tpp::FunctionDef *fn = nullptr;
     std::string lookupError;
-    ASSERT_TRUE(tpp::get_function(iRep, "main", fn, lookupError)) << lookupError;
+    @if defs.hasPreviewSignature@
+    ASSERT_TRUE(tpp::get_function(iRep, "@defs.previewFunctionName@", {@for sig in defs.previewSignature | sep=", "@"@sig@"@end for@}, fn, lookupError)) << lookupError;
+    @else@
+    ASSERT_TRUE(tpp::get_function(iRep, "@defs.previewFunctionName@", fn, lookupError)) << lookupError;
+    @end if@
     nlohmann::json inputArray = nlohmann::json::array({@for input in defs.inputs | sep=", "@nlohmann::json::parse(R"_(@input.value@)_")@end for@});
     std::string dynOutput, renderError;
     ASSERT_TRUE(tpp::render_function(iRep, *fn, inputArray, dynOutput, renderError)) << renderError;

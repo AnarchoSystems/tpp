@@ -235,13 +235,11 @@ void tppApp::run()
     options.includeSourceRanges = includeSourceRanges;
     LexedProject lexed;
     ParsedProject parsed;
-    AnalyzedProject analyzed;
     IR output;
 
     bool success = tpp::lex(project, lexed, diags, options) &&
                    tpp::parse(lexed, parsed, diags, options) &&
-                   tpp::analyze(parsed, analyzed, diags, options) &&
-                   tpp::compile(analyzed, output, diags, options) &&
+                   tpp::compile(parsed, output, diags, options) &&
                    !hasDiagnostics(diags);
     if (success)
     {

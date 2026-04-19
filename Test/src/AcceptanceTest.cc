@@ -1,5 +1,5 @@
 #include "TestUtils.h"
-#include <tpp/Rendering.h>
+#include <tpp/Runtime.h>
 #include <nlohmann/json.hpp>
 
 // ── AcceptanceTest — in-process compile + render ──────────────────────────────
@@ -28,13 +28,11 @@ protected:
 
         tpp::LexedProject lexed;
         tpp::ParsedProject parsed;
-        tpp::AnalyzedProject analyzed;
         diagnostics.clear();
         output = {};
         compileSuccess = tpp::lex(project, lexed, diagnostics) &&
                  tpp::parse(lexed, parsed, diagnostics) &&
-                 tpp::analyze(parsed, analyzed, diagnostics) &&
-                 tpp::compile(analyzed, output, diagnostics);
+                 tpp::compile(parsed, output, diagnostics);
     }
 };
 
@@ -43,9 +41,30 @@ TEST_P(AcceptanceTest, RunTestCase)
     std::string getFunctionError, renderError, renderedOutput;
     const tpp::FunctionDef *function = nullptr;
 
-    const bool isSuccess = compileSuccess &&
-                           tpp::get_function(output, "main", function, getFunctionError) &&
-                           tpp::render_function(output, *function, testCase.input, renderedOutput, renderError);
+    bool lookupSuccess = false;
+    if (compileSuccess)
+    {
+        if (testCase.previewSignature.empty())
+        {
+            lookupSuccess = tpp::get_function(output, testCase.previewTemplateName,
+                                              function, getFunctionError);
+        }
+        else
+        {
+            lookupSuccess = tpp::get_function(output, testCase.previewTemplateName,
+                                              testCase.previewSignature,
+                                              function, getFunctionError);
+        }
+    }
+
+    bool renderSuccess = false;
+    if (compileSuccess && lookupSuccess)
+    {
+        renderSuccess = tpp::render_function(output, *function, testCase.input,
+                                             renderedOutput, renderError);
+    }
+
+    const bool isSuccess = compileSuccess && lookupSuccess && renderSuccess;
 
     EXPECT_EQ(isSuccess, testCase.expectSuccess) << "Test case: " << testCase.name;
     if (isSuccess)

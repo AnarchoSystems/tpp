@@ -182,16 +182,6 @@ namespace tpp
         std::vector<ParsedPolicyArtifact> policySources_;
     };
 
-    struct AnalyzedProject
-    {
-    public:
-        const compiler::SemanticModel &semantic_model() const noexcept { return semanticModel_; }
-        compiler::SemanticModel &mutable_semantic_model() noexcept { return semanticModel_; }
-
-    private:
-        compiler::SemanticModel semanticModel_;
-    };
-
     [[nodiscard]] bool lex(const TppProject &project,
                            LexedProject &output,
                            std::vector<DiagnosticLSPMessage> &diagnostics,
@@ -202,13 +192,9 @@ namespace tpp
                              std::vector<DiagnosticLSPMessage> &diagnostics,
                              CompileOptions options = {}) noexcept;
 
-    [[nodiscard]] bool analyze(const ParsedProject &project,
-                               AnalyzedProject &output,
-                               std::vector<DiagnosticLSPMessage> &diagnostics,
-                               CompileOptions options = {}) noexcept;
-
-    [[nodiscard]] bool compile(const AnalyzedProject &project,
+    [[nodiscard]] bool compile(const ParsedProject &project,
                                IR &output,
                                std::vector<DiagnosticLSPMessage> &diagnostics,
-                               CompileOptions options = {}) noexcept;
+                               CompileOptions options = {},
+                               compiler::SemanticModel *semanticModelOut = nullptr) noexcept;
 }

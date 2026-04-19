@@ -1,5 +1,5 @@
 #include <tpp/IR.h>
-#include <tpp/Rendering.h>
+#include <tpp/Runtime.h>
 #include <tpp/RenderMapping.h>
 #include <tpp/Policy.h>
 #include <nlohmann/json.hpp>
@@ -305,6 +305,55 @@ namespace tpp
     static bool isOptionalType(const TypeKind &tk)
     {
         return tk.value.index() == 5; // Optional variant
+    }
+
+    static std::string type_signature_name(const TypeKind &tk)
+    {
+        switch (tk.value.index())
+        {
+        case 0: return "string";
+        case 1: return "int";
+        case 2: return "bool";
+        case 3: return std::get<3>(tk.value);
+        case 4:
+        {
+            const auto &inner = std::get<4>(tk.value);
+            return inner ? ("list<" + type_signature_name(*inner) + ">") : "list<?>";
+        }
+        case 5:
+        {
+            const auto &inner = std::get<5>(tk.value);
+            return inner ? ("optional<" + type_signature_name(*inner) + ">") : "optional<?>";
+        }
+        default:
+            return "?";
+        }
+    }
+
+    static std::string function_signature_text(const FunctionDef &f)
+    {
+        std::string text = f.name + "(";
+        for (std::size_t i = 0; i < f.params.size(); ++i)
+        {
+            if (i > 0)
+                text += ", ";
+            text += type_signature_name(*f.params[i].type);
+        }
+        text += ")";
+        return text;
+    }
+
+    static bool function_matches_signature(const FunctionDef &f,
+                                           const std::vector<std::string> &signature)
+    {
+        if (f.params.size() != signature.size())
+            return false;
+        for (std::size_t i = 0; i < signature.size(); ++i)
+        {
+            if (type_signature_name(*f.params[i].type) != signature[i])
+                return false;
+        }
+        return true;
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -781,15 +830,86 @@ namespace tpp
     bool get_function(const IR &ir, const std::string &functionName,
                       const FunctionDef *&function, std::string &error)
     {
+        const FunctionDef *match = nullptr;
+        int matchCount = 0;
+
         for (const auto &f : ir.functions)
         {
             if (f.name == functionName)
             {
-                function = &f;
-                return true;
+                match = &f;
+                ++matchCount;
             }
         }
+
+        if (matchCount == 1)
+        {
+            function = match;
+            return true;
+        }
+
+        if (matchCount > 1)
+        {
+            error = "function '" + functionName + "' is ambiguous; matching overloads: ";
+            bool first = true;
+            for (const auto &f : ir.functions)
+            {
+                if (f.name != functionName)
+                    continue;
+                if (!first)
+                    error += ", ";
+                first = false;
+                error += function_signature_text(f);
+            }
+            return false;
+        }
+
         error = "function '" + functionName + "' not found";
+        return false;
+    }
+
+    bool get_function(const IR &ir, const std::string &functionName,
+                      const std::vector<std::string> &signature,
+                      const FunctionDef *&function, std::string &error)
+    {
+        if (signature.empty())
+            return get_function(ir, functionName, function, error);
+
+        const FunctionDef *match = nullptr;
+        int matchCount = 0;
+
+        for (const auto &f : ir.functions)
+        {
+            if (f.name != functionName)
+                continue;
+            if (!function_matches_signature(f, signature))
+                continue;
+            match = &f;
+            ++matchCount;
+        }
+
+        if (matchCount == 1)
+        {
+            function = match;
+            return true;
+        }
+
+        std::string sigText = functionName + "(";
+        for (std::size_t i = 0; i < signature.size(); ++i)
+        {
+            if (i > 0)
+                sigText += ", ";
+            sigText += signature[i];
+        }
+        sigText += ")";
+
+        if (matchCount > 1)
+        {
+            error = "function signature '" + sigText + "' is ambiguous";
+            return false;
+        }
+
+        error = "function '" + functionName + "' with signature '" + sigText + "' not found";
         return false;
     }
 
@@ -797,9 +917,17 @@ namespace tpp
                               const nlohmann::json &input,
                               std::vector<RenderMapping> &mappings)
     {
+        return renderTracked(ir, functionName, {}, input, mappings);
+    }
+
+    std::string renderTracked(const IR &ir, const std::string &functionName,
+                              const std::vector<std::string> &signature,
+                              const nlohmann::json &input,
+                              std::vector<RenderMapping> &mappings)
+    {
         const FunctionDef *fn = nullptr;
         std::string error;
-        if (!get_function(ir, functionName, fn, error))
+        if (!get_function(ir, functionName, signature, fn, error))
             throw std::runtime_error(error);
         std::string output;
         mappings.clear();

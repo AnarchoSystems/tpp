@@ -121,11 +121,22 @@ tLoadedTestCase tTestCase::extract() const
             loaded.policies.push_back(readFile(policyPath));
     }
 
-    // Input: read from previews[0].input in tpp-config.json
+    // Preview selection: read template/signature/input from previews[0].
     if (config.contains("previews") && config["previews"].is_array() &&
-        !config["previews"].empty() && config["previews"][0].contains("input"))
+        !config["previews"].empty())
     {
-        loaded.input = config["previews"][0]["input"];
+        const auto &preview = config["previews"][0];
+        loaded.previewTemplateName = preview.value("template", "main");
+        if (preview.contains("signature") && preview["signature"].is_array())
+        {
+            for (const auto &entry : preview["signature"])
+                loaded.previewSignature.push_back(entry.get<std::string>());
+        }
+
+        if (preview.contains("input"))
+            loaded.input = preview["input"];
+        else
+            loaded.input = nlohmann::json::object();
     }
     else 
     {

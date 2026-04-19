@@ -32,6 +32,8 @@ struct tLoadedTestCase
     std::string name;
     std::vector<SourceFile> sources;
     std::vector<std::string> policies;
+    std::string previewTemplateName = "main";
+    std::vector<std::string> previewSignature;
     nlohmann::json input;
     bool expectSuccess = true;
     std::string expectedOutput;

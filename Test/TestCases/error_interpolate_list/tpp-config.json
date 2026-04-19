@@ -1,0 +1,13 @@
+{
+    "types": [],
+    "templates": ["template.tpp"],
+    "previews": [
+        {
+            "template": "main",
+            "input": {
+                "items": [1, 2, 3]
+            },
+            "name": "default"
+        }
+    ]
+}

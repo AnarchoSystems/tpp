@@ -13,9 +13,13 @@ TEST_P(AcceptanceTestOnlyPositives, CompareRenderByCLI)
     if (!testCase.expectSuccess)
         return; // failure cases are covered by AcceptanceTest
 
+    std::string signatureArgs;
+    for (const auto &sig : testCase.previewSignature)
+        signatureArgs += " '" + sig + "'";
+
     auto sCommand = TPP_EXE " " +
         std::filesystem::absolute("TestCases/" + testCase.name).string() +
-        " | " RENDER_TPP_EXE " main '" + testCase.input.dump() + "' 2>&1";
+        " | " RENDER_TPP_EXE " " + testCase.previewTemplateName + " '" + testCase.input.dump() + "'" + signatureArgs + " 2>&1";
     auto cliOutput = runCommand(sCommand);
 
     EXPECT_TRUE(cliOutput.success)

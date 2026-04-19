@@ -7,7 +7,7 @@
 
 #include <tpp/Compiler.h>
 #include <tpp/IR.h>
-#include <tpp/Rendering.h>
+#include <tpp/Runtime.h>
 #include <nlohmann/json.hpp>
 #include <filesystem>
 #include <fstream>
@@ -231,12 +231,10 @@ int main(int argc, char *argv[])
     std::vector<tpp::DiagnosticLSPMessage> diagnostics;
     tpp::LexedProject lexed;
     tpp::ParsedProject parsed;
-    tpp::AnalyzedProject analyzed;
     tpp::IR ir;
     if (!tpp::lex(project, lexed, diagnostics) ||
         !tpp::parse(lexed, parsed, diagnostics) ||
-        !tpp::analyze(parsed, analyzed, diagnostics) ||
-        !tpp::compile(analyzed, ir, diagnostics))
+        !tpp::compile(parsed, ir, diagnostics))
     {
         for (const auto &msg : diagnostics)
             for (const auto &d : msg.toGCCDiagnostics())
@@ -244,23 +242,40 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    // Find the main function
+    // Read function selection and input from previews[0]
+    const auto &previews = config.value("previews", nlohmann::json::array());
+    if (previews.empty())
+    {
+        std::cerr << configPath.string() << ": error: no previews[0] found" << std::endl;
+        return EXIT_FAILURE;
+    }
+    const auto &preview = previews[0];
+
+    std::string templateName = preview.value("template", "main");
+    std::vector<std::string> signature;
+    if (preview.contains("signature") && preview["signature"].is_array())
+    {
+        for (const auto &entry : preview["signature"])
+            signature.push_back(entry.get<std::string>());
+    }
+
     const tpp::FunctionDef *mainFunc = nullptr;
     std::string error;
-    if (!tpp::get_function(ir, "main", mainFunc, error))
+    const bool lookupOk = signature.empty()
+        ? tpp::get_function(ir, templateName, mainFunc, error)
+        : tpp::get_function(ir, templateName, signature, mainFunc, error);
+    if (!lookupOk)
     {
         std::cerr << testDir.string() << ": error: " << error << std::endl;
         return EXIT_FAILURE;
     }
 
-    // Read input from previews[0].input
-    const auto &previews = config.value("previews", nlohmann::json::array());
-    if (previews.empty() || !previews[0].contains("input"))
+    if (!preview.contains("input"))
     {
         std::cerr << configPath.string() << ": error: no previews[0].input found" << std::endl;
         return EXIT_FAILURE;
     }
-    nlohmann::json inputJson = previews[0].at("input");
+    nlohmann::json inputJson = preview.at("input");
 
     // Read expected_output.txt
     std::string expectedRaw = readFile(testDir / "expected_output.txt");

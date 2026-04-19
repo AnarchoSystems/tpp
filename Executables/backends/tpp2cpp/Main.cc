@@ -1,5 +1,5 @@
 #include <tpp/IR.h>
-#include <tpp/Rendering.h>
+#include <tpp/Runtime.h>
 #include <CodegenHelpers.h>
 #include "defs.h"
 #include <fstream>

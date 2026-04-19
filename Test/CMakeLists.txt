@@ -42,6 +42,13 @@ foreach(name IN LISTS tpp_diagnostic_cases)
     string(APPEND TPP_DIAGNOSTIC_CASE_ENTRIES "    \"${name}\",\n")
 endforeach()
 
+set(tpp_codegen_cases "")
+foreach(name IN LISTS tpp_success_cases)
+    if(NOT name MATCHES "^error_")
+        list(APPEND tpp_codegen_cases ${name})
+    endif()
+endforeach()
+
 configure_file(TestCases.h.in ${CMAKE_CURRENT_BINARY_DIR}/TestCases.h @ONLY)
 
 # ── LSP test spec: per-case lsp-test.json → LspTestSpec.h ────────────────────
@@ -93,6 +100,7 @@ configure_file(LspTestSpec.h.in ${CMAKE_CURRENT_BINARY_DIR}/LspTestSpec.h @ONLY)
 add_executable(tpp_acceptance_test
     src/TestUtils.cc
     src/AcceptanceTest.cc
+    src/FunctionLookupTest.cc
     src/RenderCLITest.cc
     src/IRStabilityTest.cc
     src/LspClient.cc
@@ -124,7 +132,7 @@ set(cpp_test_sources "")
 set(cpp_generated_impl_sources "")
 set(cpp_generated_test_sources "")
 
-foreach(test_name IN LISTS tpp_success_cases)
+foreach(test_name IN LISTS tpp_codegen_cases)
     set(test_dir ${CMAKE_CURRENT_SOURCE_DIR}/TestCases/${test_name})
     file(GLOB test_case_files ${test_dir}/*)
     set(out_impl ${CMAKE_CURRENT_BINARY_DIR}/${test_name}_implementation.cc)
@@ -253,7 +261,7 @@ add_custom_command(
     COMMENT "tpp2swift runtime-shared"
     VERBATIM)
 
-foreach(test_name IN LISTS tpp_success_cases)
+foreach(test_name IN LISTS tpp_codegen_cases)
     set(test_dir ${CMAKE_CURRENT_SOURCE_DIR}/TestCases/${test_name})
     file(GLOB test_case_files ${test_dir}/*)
     set(shared_ir "${CMAKE_CURRENT_BINARY_DIR}/${test_name}-tpp.json")
@@ -369,7 +377,7 @@ if(SWIFT_COMPILER)
     add_dependencies(swift_tests swift_tests_build)
 endif()
 
-foreach(test_name IN LISTS tpp_success_cases)
+foreach(test_name IN LISTS tpp_codegen_cases)
     if(JAVA_RUNTIME AND JAVA_COMPILER)
         add_test(
             NAME "java/${test_name}"

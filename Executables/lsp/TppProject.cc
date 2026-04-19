@@ -74,7 +74,7 @@ namespace tpp
     {
         project_.clear();
         diagnostics_.clear();
-        analyzed_ = {};
+        semanticModel_ = {};
         output_ = {};
 
         // Process type files
@@ -119,8 +119,7 @@ namespace tpp
         ParsedProject parsed;
         const bool success = tpp::lex(project_, lexed, diagnostics, options) &&
                      tpp::parse(lexed, parsed, diagnostics, options) &&
-                     tpp::analyze(parsed, analyzed_, diagnostics, options) &&
-                     tpp::compile(analyzed_, output_, diagnostics, options);
+                     tpp::compile(parsed, output_, diagnostics, options, &semanticModel_);
 
         for (const auto &message : diagnostics)
             diagnostics_[message.uri] = message.diagnostics;

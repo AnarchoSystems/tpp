@@ -1,0 +1,15 @@
+{
+    "types": ["typedefs.tpp"],
+    "templates": ["template.tpp"],
+    "previews": [
+        {
+            "template": "main",
+            "input": {
+                "shape": {
+                    "Circle": 4
+                }
+            },
+            "name": "default"
+        }
+    ]
+}

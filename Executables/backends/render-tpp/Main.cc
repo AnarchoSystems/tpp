@@ -1,22 +1,25 @@
 #include <tpp/IR.h>
-#include <tpp/Rendering.h>
+#include <tpp/Runtime.h>
 #include <iostream>
 
-// usage: render-tpp <template> <input>
+// usage: render-tpp <template> <input> [signature...]
 // intermediate representation is expected to be passed via stdin as json.
 
 using namespace tpp;
 
 int main(int argc, char *argv[])
 {
-    if (argc != 3)
+    if (argc < 3)
     {
-        std::cerr << "Usage: render-tpp <template> <input>" << std::endl;
+        std::cerr << "Usage: render-tpp <template> <input> [signature...]" << std::endl;
         return 1;
     }
 
     std::string templateName = argv[1];
     nlohmann::json inputData = nlohmann::json::parse(argv[2]);
+    std::vector<std::string> signature;
+    for (int i = 3; i < argc; ++i)
+        signature.emplace_back(argv[i]);
 
     // read stdin into a string
     std::string input((std::istreambuf_iterator<char>(std::cin)), std::istreambuf_iterator<char>());
@@ -27,7 +30,10 @@ int main(int argc, char *argv[])
         IR iRep = json.get<IR>();
         const FunctionDef *function = nullptr;
         std::string error;
-        if (!get_function(iRep, templateName, function, error))
+        bool found = signature.empty()
+            ? get_function(iRep, templateName, function, error)
+            : get_function(iRep, templateName, signature, function, error);
+        if (!found)
         {
             std::cerr << error << std::endl;
             return 1;

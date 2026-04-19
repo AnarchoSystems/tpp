@@ -569,10 +569,11 @@ bool parse(const LexedProject &project,
     return !has_any_diagnostics(diagnostics);
 }
 
-bool analyze(const ParsedProject &project,
-             AnalyzedProject &output,
+bool compile(const ParsedProject &project,
+             IR &output,
              std::vector<DiagnosticLSPMessage> &diagnostics,
-             CompileOptions options) noexcept
+             CompileOptions options,
+             compiler::SemanticModel *semanticModelOut) noexcept
 {
     output = {};
 
@@ -581,7 +582,11 @@ bool analyze(const ParsedProject &project,
 
     try
     {
-        auto &semanticModel = output.mutable_semantic_model();
+        // ─────────────────────────────────────────────────────────────────
+        // ANALYZE PHASE: Build semantic model
+        // ─────────────────────────────────────────────────────────────────
+
+        compiler::SemanticModel semanticModel;
         std::vector<compiler::TemplateFunction> pendingFunctions;
 
         for (const auto &artifact : project.policy_sources())
@@ -697,33 +702,17 @@ bool analyze(const ParsedProject &project,
 
         if (!options.includeSourceRanges)
             strip_semantic_model_ranges(semanticModel);
-    }
-    catch (const std::exception &error)
-    {
-        add_project_diagnostic(diagnostics,
-                               std::string("unexpected error during semantic analysis: ") + error.what());
-    }
-    catch (...)
-    {
-        add_project_diagnostic(diagnostics, "unexpected error during semantic analysis");
-    }
 
-    return !has_any_diagnostics(diagnostics);
-}
+        if (semanticModelOut != nullptr)
+            *semanticModelOut = semanticModel;
 
-bool compile(const AnalyzedProject &project,
-             IR &output,
-             std::vector<DiagnosticLSPMessage> &diagnostics,
-             CompileOptions options) noexcept
-{
-    output = {};
+        if (has_any_diagnostics(diagnostics))
+            return false;
 
-    if (has_any_diagnostics(diagnostics))
-        return false;
+        // ─────────────────────────────────────────────────────────────────
+        // COMPILE PHASE: Lower semantic model to IR
+        // ─────────────────────────────────────────────────────────────────
 
-    try
-    {
-        const auto &semanticModel = project.semantic_model();
         std::vector<FunctionDef> functions;
         if (!compiler::lowerToFunctions(semanticModel.functions(),
                                         semanticModel,
@@ -751,11 +740,11 @@ bool compile(const AnalyzedProject &project,
     catch (const std::exception &error)
     {
         add_project_diagnostic(diagnostics,
-                               std::string("unexpected error while compiling IR: ") + error.what());
+                               std::string("unexpected error during compilation: ") + error.what());
     }
     catch (...)
     {
-        add_project_diagnostic(diagnostics, "unexpected error while compiling IR");
+        add_project_diagnostic(diagnostics, "unexpected error during compilation");
     }
 
     return !has_any_diagnostics(diagnostics);

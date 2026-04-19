@@ -40,7 +40,7 @@ namespace tpp
         const std::map<std::string, std::vector<Diagnostic>> &diagnostics() const { return diagnostics_; }
 
         const IR &output() const { return output_; }
-        const compiler::SemanticModel &semantic_model() const { return analyzed_.semantic_model(); }
+        const compiler::SemanticModel &semantic_model() const { return semanticModel_; }
         const std::filesystem::path &configPath() const { return configPath_; }
         const std::filesystem::path &root() const { return root_; }
 
@@ -73,9 +73,9 @@ namespace tpp
         std::map<std::string, std::string> dirtyBuffer_; // URI -> text
 
         TppProject project_;
-        AnalyzedProject analyzed_;
-        IR output_;
-        std::map<std::string, std::vector<Diagnostic>> diagnostics_;
+            compiler::SemanticModel semanticModel_;  // Built during compile() for LSP queries
+            IR output_;
+            std::map<std::string, std::vector<Diagnostic>> diagnostics_;
 
         std::string readFile(const std::filesystem::path &path) const;
         std::string pathToUri(const std::filesystem::path &path) const;

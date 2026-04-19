@@ -14,9 +14,15 @@ string(JSON _patch GET "${_json}" "patch")
 set(_header
 "#pragma once
 // Auto-generated from version.json — do not edit.
+#ifndef TPP_VERSION_MAJOR
 #define TPP_VERSION_MAJOR ${_major}
+#endif
+#ifndef TPP_VERSION_MINOR
 #define TPP_VERSION_MINOR ${_minor}
+#endif
+#ifndef TPP_VERSION_PATCH
 #define TPP_VERSION_PATCH ${_patch}
+#endif
 ")
 
 # Only write if content changed, to avoid unnecessary rebuilds.

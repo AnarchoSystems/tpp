@@ -1,6 +1,6 @@
 #include "Preview.h"
 #include <tpp/IR.h>
-#include <tpp/Rendering.h>
+#include <tpp/Runtime.h>
 #include <tpp/RenderMapping.h>
 #include <fstream>
 #include <sstream>
@@ -35,6 +35,13 @@ nlohmann::json renderPreview(const nlohmann::json &params, WorkspaceProject *pro
     if (templateName.empty())
         return {{"error", "Preview entry has no 'template' key"}};
 
+    std::vector<std::string> signature;
+    if (preview.contains("signature") && preview["signature"].is_array())
+    {
+        for (const auto &entry : preview["signature"])
+            signature.push_back(entry.get<std::string>());
+    }
+
     // ── Resolve input JSON ─────────────────────────────────────────────────────
     nlohmann::json inputJson;
     if (preview.contains("input"))
@@ -51,7 +58,7 @@ nlohmann::json renderPreview(const nlohmann::json &params, WorkspaceProject *pro
     std::string output;
     try
     {
-        output = renderTracked(project->output(), templateName, inputJson, mappings);
+        output = renderTracked(project->output(), templateName, signature, inputJson, mappings);
     }
     catch (const std::exception &e)
     {

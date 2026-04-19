@@ -303,7 +303,7 @@ This backend is used by the Swift acceptance-test pipeline in `Test/MakeSwiftTes
 |---|---|
 | `<tpp/Compiler.h>` | Compile type definitions, templates, and policies |
 | `<tpp/IR.h>` | Compiled template IR (types, functions, policies) |
-| `<tpp/Rendering.h>` | Render template functions from the IR |
+| `<tpp/Runtime.h>` | Render template functions from the IR |
 | `<tpp/Types.h>` | Type definitions (`StructDef`, `EnumDef`, `TypeRef`) |
 | `<tpp/SemanticModel.h>` | Retained semantic model plus lookup/query helpers used by compiler and tooling |
 | `<tpp/Policy.h>` | Policy data model and registry |
@@ -328,13 +328,11 @@ options.includeSourceRanges = true;
 std::vector<tpp::DiagnosticLSPMessage> diagnostics;
 tpp::LexedProject lexed;
 tpp::ParsedProject parsed;
-tpp::AnalyzedProject analyzed;
 tpp::IR output;
 
 bool ok = tpp::lex(project, lexed, diagnostics, options) &&
           tpp::parse(lexed, parsed, diagnostics, options) &&
-          tpp::analyze(parsed, analyzed, diagnostics, options) &&
-          tpp::compile(analyzed, output, diagnostics, options);
+          tpp::compile(parsed, output, diagnostics, options);
 ```
 
 #### Compile From a Generated Type
@@ -351,7 +349,7 @@ project.add_type<myns::Item>();
 ### Rendering — Dynamic API
 
 ```cpp
-#include <tpp/Rendering.h>
+#include <tpp/Runtime.h>
 
 const tpp::FunctionDef *fn = nullptr;
 std::string error;

@@ -10,4 +10,7 @@ struct Defs
     inputs : list<Input>;
     expectedOutput : string;
     iRepJson : string;
+    previewFunctionName : string;
+    previewSignature : list<string>;
+    hasPreviewSignature : bool;
 }

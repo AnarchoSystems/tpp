@@ -71,12 +71,10 @@ TEST(IRStability, SchemaCheck)
         std::vector<tpp::DiagnosticLSPMessage> diagnostics;
         tpp::LexedProject lexed;
         tpp::ParsedProject parsed;
-        tpp::AnalyzedProject analyzed;
         tpp::IR output;
         bool ok = tpp::lex(project, lexed, diagnostics) &&
               tpp::parse(lexed, parsed, diagnostics) &&
-              tpp::analyze(parsed, analyzed, diagnostics) &&
-              tpp::compile(analyzed, output, diagnostics);
+              tpp::compile(parsed, output, diagnostics);
         ASSERT_TRUE(ok) << "Failed to compile test case: " << tc.name;
 
         nlohmann::json actualIR = output;
