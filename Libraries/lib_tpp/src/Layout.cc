@@ -95,74 +95,32 @@ namespace tpp
         Layout layout;
         layout.typeName = sd.name;
         layout.isEnum = false;
-
-        int offset = 0;
+        layout.totalSlots = sd.slotCount;
 
         for (const auto &field : sd.fields)
         {
             FieldRange fr;
             fr.name = field.name;
-            fr.offset = offset;
+            fr.offset = field.slotOffset;
+            fr.size = field.slotSize;
 
-            if (!field.type)
+            if (field.type)
             {
-                fr.size = 1;
-                offset += 1;
-                layout.nameIndex[field.name] = static_cast<int>(layout.fieldRanges.size());
-                layout.fieldRanges.push_back(std::move(fr));
-                continue;
+                auto typeIdx = field.type->value.index();
+                fr.isBox = field.recursive;
+                fr.isList = (!field.recursive && typeIdx == 4);
+                fr.isOptional = (!field.recursive && typeIdx == 5);
             }
 
-            auto typeIdx = field.type->value.index();
-
-            // Recursive fields are always boxed
-            if (field.recursive)
-            {
-                fr.size = 1;
-                fr.isBox = true;
-                offset += 1;
-                layout.nameIndex[field.name] = static_cast<int>(layout.fieldRanges.size());
-                layout.fieldRanges.push_back(std::move(fr));
-                continue;
-            }
-
-            // List → single slot (pointer to external vector)
-            if (typeIdx == 4)
-            {
-                fr.size = 1;
-                fr.isList = true;
-                offset += 1;
-                layout.nameIndex[field.name] = static_cast<int>(layout.fieldRanges.size());
-                layout.fieldRanges.push_back(std::move(fr));
-                continue;
-            }
-
-            // Optional → flag + inner
-            if (typeIdx == 5)
-            {
-                const auto &inner = std::get<5>(field.type->value);
-                int innerSize = inner ? slot_size(*inner) : 1;
-                fr.size = 1 + innerSize;
-                fr.isOptional = true;
-                offset += fr.size;
-                layout.nameIndex[field.name] = static_cast<int>(layout.fieldRanges.size());
-                layout.fieldRanges.push_back(std::move(fr));
-                continue;
-            }
-
-            // Scalar or named type
-            fr.size = slot_size(*field.type);
-            offset += fr.size;
             layout.nameIndex[field.name] = static_cast<int>(layout.fieldRanges.size());
             layout.fieldRanges.push_back(std::move(fr));
         }
 
-        layout.totalSlots = offset;
         layouts_[sd.name] = std::move(layout);
     }
 
     // ════════════════════════════════════════════════════════════════════════════
-    // Enum layout computation
+    // Enum layout — read precomputed data from IR
     // ════════════════════════════════════════════════════════════════════════════
 
     void LayoutTable::compute_enum(const EnumDef &ed, const IR & /*ir*/)
@@ -170,55 +128,34 @@ namespace tpp
         Layout layout;
         layout.typeName = ed.name;
         layout.isEnum = true;
-
-        // Slot 0 is always the variant tag
-        int maxPayloadSize = 0;
+        layout.totalSlots = ed.slotCount;
 
         for (const auto &variant : ed.variants)
         {
             CaseRange cr;
             cr.tag = variant.tag;
-            cr.payloadOffset = 1; // right after the tag slot
+            cr.payloadOffset = 1;
+            cr.payloadSize = variant.payloadSlotSize;
+            cr.hasPayload = (variant.payload != nullptr);
 
-            if (variant.payload)
-            {
-                cr.hasPayload = true;
-                if (variant.recursive)
-                {
-                    cr.payloadSize = 1; // boxed
-                }
-                else
-                {
-                    cr.payloadSize = slot_size(*variant.payload);
-                }
-            }
-            else
-            {
-                cr.hasPayload = false;
-                cr.payloadSize = 0;
-            }
-
-            maxPayloadSize = std::max(maxPayloadSize, cr.payloadSize);
             layout.nameIndex[variant.tag] = static_cast<int>(layout.caseRanges.size());
             layout.caseRanges.push_back(std::move(cr));
         }
 
-        layout.totalSlots = 1 + maxPayloadSize; // tag + max payload
         layouts_[ed.name] = std::move(layout);
     }
 
     // ════════════════════════════════════════════════════════════════════════════
-    // LayoutTable::build — construct layouts for all types in the IR
+    // LayoutTable::build — construct layouts from precomputed IR data
     // ════════════════════════════════════════════════════════════════════════════
 
     LayoutTable LayoutTable::build(const IR &ir)
     {
         LayoutTable table;
 
-        // Two-pass approach: structs first (since enums may reference them),
-        // then enums.  In practice the IR is topologically ordered, but we do
-        // structs before enums as a simple heuristic.  Truly mutually-recursive
-        // types use boxed (recursive) fields, so their inner size is always 1.
+        // Read precomputed layout data from the IR fields.
+        // compute_ir_layouts() already filled slotOffset/slotSize/slotCount
+        // during compilation.
 
         for (const auto &sd : ir.structs)
         {
@@ -242,6 +179,106 @@ namespace tpp
         if (it == layouts_.end())
             return nullptr;
         return &it->second;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════════
+    // compute_ir_layouts — fill precomputed slot fields on IR type definitions
+    // ════════════════════════════════════════════════════════════════════════════
+
+    static int ir_slot_size(const TypeKind &tk,
+                            const std::unordered_map<std::string, int> &sizes)
+    {
+        auto idx = tk.value.index();
+        switch (idx)
+        {
+        case 0: // Str
+        case 1: // Int
+        case 2: // Bool
+            return 1;
+        case 3: // Named(string)
+        {
+            const auto &name = std::get<3>(tk.value);
+            auto it = sizes.find(name);
+            return it != sizes.end() ? it->second : 1;
+        }
+        case 4: // List — boxed, one slot
+            return 1;
+        case 5: // Optional — flag + inner
+        {
+            const auto &inner = std::get<5>(tk.value);
+            if (!inner)
+                return 1;
+            return 1 + ir_slot_size(*inner, sizes);
+        }
+        default:
+            return 1;
+        }
+    }
+
+    void compute_ir_layouts(IR &ir)
+    {
+        // Map type name → total slot count, built up as we go.
+        std::unordered_map<std::string, int> sizes;
+
+        // Structs first (enums may reference them via payload types).
+        for (auto &sd : ir.structs)
+        {
+            int offset = 0;
+            for (auto &field : sd.fields)
+            {
+                field.slotOffset = offset;
+
+                if (!field.type)
+                {
+                    field.slotSize = 1;
+                }
+                else if (field.recursive)
+                {
+                    field.slotSize = 1; // boxed
+                }
+                else if (field.type->value.index() == 4) // List
+                {
+                    field.slotSize = 1; // boxed
+                }
+                else if (field.type->value.index() == 5) // Optional
+                {
+                    const auto &inner = std::get<5>(field.type->value);
+                    int innerSize = inner ? ir_slot_size(*inner, sizes) : 1;
+                    field.slotSize = 1 + innerSize; // flag + inner
+                }
+                else
+                {
+                    field.slotSize = ir_slot_size(*field.type, sizes);
+                }
+
+                offset += field.slotSize;
+            }
+            sd.slotCount = offset;
+            sizes[sd.name] = offset;
+        }
+
+        // Enums second.
+        for (auto &ed : ir.enums)
+        {
+            int maxPayload = 0;
+            for (auto &variant : ed.variants)
+            {
+                if (variant.payload)
+                {
+                    if (variant.recursive)
+                        variant.payloadSlotSize = 1; // boxed
+                    else
+                        variant.payloadSlotSize = ir_slot_size(*variant.payload, sizes);
+                }
+                else
+                {
+                    variant.payloadSlotSize = 0;
+                }
+                maxPayload = std::max(maxPayload, variant.payloadSlotSize);
+            }
+            ed.slotCount = 1 + maxPayload; // tag + max payload
+            sizes[ed.name] = ed.slotCount;
+        }
     }
 
 } // namespace tpp

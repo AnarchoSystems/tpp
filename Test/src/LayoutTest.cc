@@ -85,6 +85,7 @@ TEST(LayoutTest, ScalarStruct)
     sd.fields.push_back(make_field("active", make_bool_type()));
     ir.structs.push_back(std::move(sd));
 
+    compute_ir_layouts(ir);
     auto table = LayoutTable::build(ir);
     const Layout *layout = table.find("User");
 
@@ -115,6 +116,7 @@ TEST(LayoutTest, OptionalField)
     sd.fields.push_back(make_field("count", make_int_type()));
     ir.structs.push_back(std::move(sd));
 
+    compute_ir_layouts(ir);
     auto table = LayoutTable::build(ir);
     const Layout *layout = table.find("Config");
 
@@ -141,6 +143,7 @@ TEST(LayoutTest, ListField)
     sd.fields.push_back(make_field("tags", make_list_type(make_str_type())));
     ir.structs.push_back(std::move(sd));
 
+    compute_ir_layouts(ir);
     auto table = LayoutTable::build(ir);
     const Layout *layout = table.find("Group");
 
@@ -161,6 +164,7 @@ TEST(LayoutTest, RecursiveFieldIsBoxed)
     sd.fields.push_back(make_field("child", make_named_type("TreeNode"), /*recursive=*/true));
     ir.structs.push_back(std::move(sd));
 
+    compute_ir_layouts(ir);
     auto table = LayoutTable::build(ir);
     const Layout *layout = table.find("TreeNode");
 
@@ -188,6 +192,7 @@ TEST(LayoutTest, InlineNamedType)
     person.fields.push_back(make_field("home", make_named_type("Address")));
     ir.structs.push_back(std::move(person));
 
+    compute_ir_layouts(ir);
     auto table = LayoutTable::build(ir);
     const Layout *personLayout = table.find("Person");
 
@@ -223,6 +228,7 @@ TEST(LayoutTest, SimpleEnum)
 
     ir.enums.push_back(std::move(ed));
 
+    compute_ir_layouts(ir);
     auto table = LayoutTable::build(ir);
     const Layout *layout = table.find("Color");
 
@@ -256,6 +262,7 @@ TEST(LayoutTest, EnumWithPayload)
 
     ir.enums.push_back(std::move(ed));
 
+    compute_ir_layouts(ir);
     auto table = LayoutTable::build(ir);
     const Layout *layout = table.find("Shape");
 
@@ -278,6 +285,7 @@ TEST(LayoutTest, SlotSizeForTypes)
     sd.fields.push_back(make_field("y", make_int_type()));
     ir.structs.push_back(std::move(sd));
 
+    compute_ir_layouts(ir);
     auto table = LayoutTable::build(ir);
 
     EXPECT_EQ(table.slot_size(make_str_type()), 1);
@@ -302,6 +310,7 @@ TEST(DataLoaderTest, LoadScalarStruct)
     sd.fields.push_back(make_field("active", make_bool_type()));
     ir.structs.push_back(std::move(sd));
 
+    compute_ir_layouts(ir);
     auto table = LayoutTable::build(ir);
     DataLoader loader(table);
 
@@ -327,6 +336,7 @@ TEST(DataLoaderTest, LoadOptionalPresent)
     sd.fields.push_back(make_field("nickname", make_optional_type(make_str_type())));
     ir.structs.push_back(std::move(sd));
 
+    compute_ir_layouts(ir);
     auto table = LayoutTable::build(ir);
     DataLoader loader(table);
 
@@ -353,6 +363,7 @@ TEST(DataLoaderTest, LoadOptionalAbsent)
     sd.fields.push_back(make_field("nickname", make_optional_type(make_str_type())));
     ir.structs.push_back(std::move(sd));
 
+    compute_ir_layouts(ir);
     auto table = LayoutTable::build(ir);
     DataLoader loader(table);
 
@@ -372,6 +383,7 @@ TEST(DataLoaderTest, LoadList)
     sd.fields.push_back(make_field("tags", make_list_type(make_str_type())));
     ir.structs.push_back(std::move(sd));
 
+    compute_ir_layouts(ir);
     auto table = LayoutTable::build(ir);
     DataLoader loader(table);
 
@@ -405,6 +417,7 @@ TEST(DataLoaderTest, LoadEnum)
 
     ir.enums.push_back(std::move(ed));
 
+    compute_ir_layouts(ir);
     auto table = LayoutTable::build(ir);
     DataLoader loader(table);
 
@@ -435,6 +448,7 @@ TEST(DataLoaderTest, LoadEnumWithPayload)
 
     ir.enums.push_back(std::move(ed));
 
+    compute_ir_layouts(ir);
     auto table = LayoutTable::build(ir);
     DataLoader loader(table);
 

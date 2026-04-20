@@ -108,4 +108,9 @@ namespace tpp
         int compute_type_size(const TypeKind &tk) const;
     };
 
+    /// Populate the precomputed layout fields (slotOffset, slotSize, slotCount,
+    /// payloadSlotSize) on every StructDef, FieldDef, EnumDef and VariantDef
+    /// in the IR.  Called by the compiler after lowering.
+    void compute_ir_layouts(IR &ir);
+
 } // namespace tpp

@@ -11,8 +11,6 @@ inline nlohmann::json _tpp_j(const _TppT& v) { return nlohmann::json(v); }
 template<typename _TppT>
 inline nlohmann::json _tpp_j(const std::unique_ptr<_TppT>& v) { return v ? nlohmann::json(*v) : nlohmann::json(); }
 
-struct TypeKind;
-struct Instruction;
 struct SourcePosition;
 struct SourceRange;
 struct ExprInfo;
@@ -37,6 +35,8 @@ struct PolicyLength;
 struct PolicyRejectIf;
 struct PolicyDef;
 struct IR;
+struct TypeKind;
+struct Instruction;
 
 struct SourcePosition
 {
@@ -56,7 +56,6 @@ struct SourceRange
         return "struct SourceRange\n{\n    start : SourcePosition;\n    end : SourcePosition;\n}";
     }
 };
-/// Expression with resolved type.
 struct ExprInfo
 {
     std::string path;
@@ -68,7 +67,6 @@ struct ExprInfo
         return "// ── Instruction types (backend-neutral) ─────────────────────────────────────\n\n/// Expression with resolved type.\nstruct ExprInfo\n{\n    path : string;\n    type : TypeKind;\n    isRecursive : bool;\n    isOptional : bool;\n}";
     }
 };
-/// Emit literal text.
 struct EmitInstr
 {
     std::string text;
@@ -77,7 +75,6 @@ struct EmitInstr
         return "/// Emit literal text.\nstruct EmitInstr\n{\n    text : string;\n}";
     }
 };
-/// Emit an interpolated expression value.
 struct EmitExprInstr
 {
     ExprInfo expr;
@@ -87,7 +84,6 @@ struct EmitExprInstr
         return "/// Emit an interpolated expression value.\nstruct EmitExprInstr\n{\n    expr : ExprInfo;\n    policy : string;\n}";
     }
 };
-/// For loop over a collection.
 struct ForInstr
 {
     std::string varName;
@@ -115,7 +111,6 @@ struct CaseBinding
         return "struct CaseBinding\n{\n    name : string;\n    isRecursive : bool;\n}";
     }
 };
-/// One case branch in a switch.
 struct CaseInstr
 {
     std::string tag;
@@ -128,7 +123,6 @@ struct CaseInstr
         return "/// One case branch in a switch.\nstruct CaseInstr\n{\n    tag : string;\n    bindingName : optional<CaseBinding>;\n    payloadType : optional<TypeKind>;\n    payloadIsRecursive : bool;\n    body : list<Instruction>;\n}";
     }
 };
-/// Conditional.
 struct IfInstr
 {
     ExprInfo condExpr;
@@ -142,7 +136,6 @@ struct IfInstr
         return "/// Conditional.\nstruct IfInstr\n{\n    condExpr : ExprInfo;\n    negated : bool;\n    thenBody : list<Instruction>;\n    elseBody : list<Instruction>;\n    isBlock : bool;\n    insertCol : int;\n}";
     }
 };
-/// Switch on a variant expression.
 struct SwitchInstr
 {
     ExprInfo expr;
@@ -155,7 +148,6 @@ struct SwitchInstr
         return "/// Switch on a variant expression.\nstruct SwitchInstr\n{\n    expr : ExprInfo;\n    cases : list<CaseInstr>;\n    isBlock : bool;\n    insertCol : int;\n    policy : string;\n}";
     }
 };
-/// Direct function call.
 struct CallInstr
 {
     std::string functionName;
@@ -195,9 +187,11 @@ struct FieldDef
     bool recursive;
     std::string doc;
     std::optional<SourceRange> sourceRange;
+    int slotOffset;
+    int slotSize;
     static std::string tpp_typedefs() noexcept
     {
-        return "// ── Schema types (for type generation) ──────────────────────────────────────\n\nstruct FieldDef\n{\n    name : string;\n    type : TypeKind;\n    recursive : bool;\n    doc : string;\n    sourceRange : optional<SourceRange>;\n}";
+        return "// ── Schema types (for type generation) ──────────────────────────────────────\n\nstruct FieldDef\n{\n    name : string;\n    type : TypeKind;\n    recursive : bool;\n    doc : string;\n    sourceRange : optional<SourceRange>;\n    slotOffset : int;\n    slotSize : int;\n}";
     }
 };
 struct StructDef
@@ -207,9 +201,10 @@ struct StructDef
     std::string doc;
     std::optional<SourceRange> sourceRange;
     std::string rawTypedefs;
+    int slotCount;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct StructDef\n{\n    name : string;\n    fields : list<FieldDef>;\n    doc : string;\n    sourceRange : optional<SourceRange>;\n    rawTypedefs : string;\n}";
+        return "struct StructDef\n{\n    name : string;\n    fields : list<FieldDef>;\n    doc : string;\n    sourceRange : optional<SourceRange>;\n    rawTypedefs : string;\n    slotCount : int;\n}";
     }
 };
 struct VariantDef
@@ -219,9 +214,10 @@ struct VariantDef
     bool recursive;
     std::string doc;
     std::optional<SourceRange> sourceRange;
+    int payloadSlotSize;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct VariantDef\n{\n    tag : string;\n    payload : optional<TypeKind>;\n    recursive : bool;\n    doc : string;\n    sourceRange : optional<SourceRange>;\n}";
+        return "struct VariantDef\n{\n    tag : string;\n    payload : optional<TypeKind>;\n    recursive : bool;\n    doc : string;\n    sourceRange : optional<SourceRange>;\n    payloadSlotSize : int;\n}";
     }
 };
 struct EnumDef
@@ -231,9 +227,10 @@ struct EnumDef
     std::string doc;
     std::optional<SourceRange> sourceRange;
     std::string rawTypedefs;
+    int slotCount;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct EnumDef\n{\n    name : string;\n    variants : list<VariantDef>;\n    doc : string;\n    sourceRange : optional<SourceRange>;\n    rawTypedefs : string;\n}";
+        return "struct EnumDef\n{\n    name : string;\n    variants : list<VariantDef>;\n    doc : string;\n    sourceRange : optional<SourceRange>;\n    rawTypedefs : string;\n    slotCount : int;\n}";
     }
 };
 struct PolicyReplacement
@@ -436,8 +433,8 @@ inline void to_json(nlohmann::json& j, const Instruction& v)
 }
 inline void from_json(const nlohmann::json& j, SourcePosition& v)
 {
-    j.at("line").get_to(v.line);
-    j.at("character").get_to(v.character);
+    v.line = j.at("line").get<int>();
+    v.character = j.at("character").get<int>();
 }
 inline void to_json(nlohmann::json& j, const SourcePosition& v)
 {
@@ -447,8 +444,8 @@ inline void to_json(nlohmann::json& j, const SourcePosition& v)
 }
 inline void from_json(const nlohmann::json& j, SourceRange& v)
 {
-    j.at("start").get_to(v.start);
-    j.at("end").get_to(v.end);
+    v.start = j.at("start").get<SourcePosition>();
+    v.end = j.at("end").get<SourcePosition>();
 }
 inline void to_json(nlohmann::json& j, const SourceRange& v)
 {
@@ -458,10 +455,10 @@ inline void to_json(nlohmann::json& j, const SourceRange& v)
 }
 inline void from_json(const nlohmann::json& j, ExprInfo& v)
 {
-    j.at("path").get_to(v.path);
+    v.path = j.at("path").get<std::string>();
     v.type = std::make_unique<TypeKind>(j.at("type").get<TypeKind>());
-    j.at("isRecursive").get_to(v.isRecursive);
-    j.at("isOptional").get_to(v.isOptional);
+    v.isRecursive = j.at("isRecursive").get<bool>();
+    v.isOptional = j.at("isOptional").get<bool>();
 }
 inline void to_json(nlohmann::json& j, const ExprInfo& v)
 {
@@ -473,7 +470,7 @@ inline void to_json(nlohmann::json& j, const ExprInfo& v)
 }
 inline void from_json(const nlohmann::json& j, EmitInstr& v)
 {
-    j.at("text").get_to(v.text);
+    v.text = j.at("text").get<std::string>();
 }
 inline void to_json(nlohmann::json& j, const EmitInstr& v)
 {
@@ -482,8 +479,8 @@ inline void to_json(nlohmann::json& j, const EmitInstr& v)
 }
 inline void from_json(const nlohmann::json& j, EmitExprInstr& v)
 {
-    j.at("expr").get_to(v.expr);
-    j.at("policy").get_to(v.policy);
+    v.expr = j.at("expr").get<ExprInfo>();
+    v.policy = j.at("policy").get<std::string>();
 }
 inline void to_json(nlohmann::json& j, const EmitExprInstr& v)
 {
@@ -493,16 +490,16 @@ inline void to_json(nlohmann::json& j, const EmitExprInstr& v)
 }
 inline void from_json(const nlohmann::json& j, ForInstr& v)
 {
-    j.at("varName").get_to(v.varName);
+    v.varName = j.at("varName").get<std::string>();
     if (j.contains("enumeratorName") && !j.at("enumeratorName").is_null()) v.enumeratorName = j.at("enumeratorName").get<std::string>();
-    j.at("collection").get_to(v.collection);
+    v.collection = j.at("collection").get<ExprInfo>();
     v.body = std::make_unique<std::vector<Instruction>>(j.at("body").get<std::vector<Instruction>>());
     if (j.contains("sep") && !j.at("sep").is_null()) v.sep = j.at("sep").get<std::string>();
     if (j.contains("followedBy") && !j.at("followedBy").is_null()) v.followedBy = j.at("followedBy").get<std::string>();
     if (j.contains("precededBy") && !j.at("precededBy").is_null()) v.precededBy = j.at("precededBy").get<std::string>();
-    j.at("isBlock").get_to(v.isBlock);
-    j.at("insertCol").get_to(v.insertCol);
-    j.at("policy").get_to(v.policy);
+    v.isBlock = j.at("isBlock").get<bool>();
+    v.insertCol = j.at("insertCol").get<int>();
+    v.policy = j.at("policy").get<std::string>();
     if (j.contains("alignSpec") && !j.at("alignSpec").is_null()) v.alignSpec = j.at("alignSpec").get<std::string>();
 }
 inline void to_json(nlohmann::json& j, const ForInstr& v)
@@ -522,8 +519,8 @@ inline void to_json(nlohmann::json& j, const ForInstr& v)
 }
 inline void from_json(const nlohmann::json& j, CaseBinding& v)
 {
-    j.at("name").get_to(v.name);
-    j.at("isRecursive").get_to(v.isRecursive);
+    v.name = j.at("name").get<std::string>();
+    v.isRecursive = j.at("isRecursive").get<bool>();
 }
 inline void to_json(nlohmann::json& j, const CaseBinding& v)
 {
@@ -533,10 +530,10 @@ inline void to_json(nlohmann::json& j, const CaseBinding& v)
 }
 inline void from_json(const nlohmann::json& j, CaseInstr& v)
 {
-    j.at("tag").get_to(v.tag);
+    v.tag = j.at("tag").get<std::string>();
     if (j.contains("bindingName") && !j.at("bindingName").is_null()) v.bindingName = j.at("bindingName").get<CaseBinding>();
     if (j.contains("payloadType") && !j.at("payloadType").is_null()) v.payloadType = std::make_unique<TypeKind>(j.at("payloadType").get<TypeKind>());
-    j.at("payloadIsRecursive").get_to(v.payloadIsRecursive);
+    v.payloadIsRecursive = j.at("payloadIsRecursive").get<bool>();
     v.body = std::make_unique<std::vector<Instruction>>(j.at("body").get<std::vector<Instruction>>());
 }
 inline void to_json(nlohmann::json& j, const CaseInstr& v)
@@ -550,12 +547,12 @@ inline void to_json(nlohmann::json& j, const CaseInstr& v)
 }
 inline void from_json(const nlohmann::json& j, IfInstr& v)
 {
-    j.at("condExpr").get_to(v.condExpr);
-    j.at("negated").get_to(v.negated);
+    v.condExpr = j.at("condExpr").get<ExprInfo>();
+    v.negated = j.at("negated").get<bool>();
     v.thenBody = std::make_unique<std::vector<Instruction>>(j.at("thenBody").get<std::vector<Instruction>>());
     v.elseBody = std::make_unique<std::vector<Instruction>>(j.at("elseBody").get<std::vector<Instruction>>());
-    j.at("isBlock").get_to(v.isBlock);
-    j.at("insertCol").get_to(v.insertCol);
+    v.isBlock = j.at("isBlock").get<bool>();
+    v.insertCol = j.at("insertCol").get<int>();
 }
 inline void to_json(nlohmann::json& j, const IfInstr& v)
 {
@@ -569,11 +566,11 @@ inline void to_json(nlohmann::json& j, const IfInstr& v)
 }
 inline void from_json(const nlohmann::json& j, SwitchInstr& v)
 {
-    j.at("expr").get_to(v.expr);
+    v.expr = j.at("expr").get<ExprInfo>();
     v.cases = std::make_unique<std::vector<CaseInstr>>(j.at("cases").get<std::vector<CaseInstr>>());
-    j.at("isBlock").get_to(v.isBlock);
-    j.at("insertCol").get_to(v.insertCol);
-    j.at("policy").get_to(v.policy);
+    v.isBlock = j.at("isBlock").get<bool>();
+    v.insertCol = j.at("insertCol").get<int>();
+    v.policy = j.at("policy").get<std::string>();
 }
 inline void to_json(nlohmann::json& j, const SwitchInstr& v)
 {
@@ -586,9 +583,9 @@ inline void to_json(nlohmann::json& j, const SwitchInstr& v)
 }
 inline void from_json(const nlohmann::json& j, CallInstr& v)
 {
-    j.at("functionName").get_to(v.functionName);
-    j.at("functionIndex").get_to(v.functionIndex);
-    j.at("arguments").get_to(v.arguments);
+    v.functionName = j.at("functionName").get<std::string>();
+    v.functionIndex = j.at("functionIndex").get<int>();
+    v.arguments = j.at("arguments").get<std::vector<ExprInfo>>();
 }
 inline void to_json(nlohmann::json& j, const CallInstr& v)
 {
@@ -599,7 +596,7 @@ inline void to_json(nlohmann::json& j, const CallInstr& v)
 }
 inline void from_json(const nlohmann::json& j, ParamDef& v)
 {
-    j.at("name").get_to(v.name);
+    v.name = j.at("name").get<std::string>();
     v.type = std::make_unique<TypeKind>(j.at("type").get<TypeKind>());
 }
 inline void to_json(nlohmann::json& j, const ParamDef& v)
@@ -610,11 +607,11 @@ inline void to_json(nlohmann::json& j, const ParamDef& v)
 }
 inline void from_json(const nlohmann::json& j, FunctionDef& v)
 {
-    j.at("name").get_to(v.name);
-    j.at("params").get_to(v.params);
+    v.name = j.at("name").get<std::string>();
+    v.params = j.at("params").get<std::vector<ParamDef>>();
     v.body = std::make_unique<std::vector<Instruction>>(j.at("body").get<std::vector<Instruction>>());
-    j.at("policy").get_to(v.policy);
-    j.at("doc").get_to(v.doc);
+    v.policy = j.at("policy").get<std::string>();
+    v.doc = j.at("doc").get<std::string>();
     if (j.contains("sourceRange") && !j.at("sourceRange").is_null()) v.sourceRange = j.at("sourceRange").get<SourceRange>();
 }
 inline void to_json(nlohmann::json& j, const FunctionDef& v)
@@ -629,11 +626,13 @@ inline void to_json(nlohmann::json& j, const FunctionDef& v)
 }
 inline void from_json(const nlohmann::json& j, FieldDef& v)
 {
-    j.at("name").get_to(v.name);
+    v.name = j.at("name").get<std::string>();
     v.type = std::make_unique<TypeKind>(j.at("type").get<TypeKind>());
-    j.at("recursive").get_to(v.recursive);
-    j.at("doc").get_to(v.doc);
+    v.recursive = j.at("recursive").get<bool>();
+    v.doc = j.at("doc").get<std::string>();
     if (j.contains("sourceRange") && !j.at("sourceRange").is_null()) v.sourceRange = j.at("sourceRange").get<SourceRange>();
+    v.slotOffset = j.at("slotOffset").get<int>();
+    v.slotSize = j.at("slotSize").get<int>();
 }
 inline void to_json(nlohmann::json& j, const FieldDef& v)
 {
@@ -643,14 +642,17 @@ inline void to_json(nlohmann::json& j, const FieldDef& v)
     j["recursive"] = v.recursive;
     j["doc"] = v.doc;
     if (v.sourceRange.has_value()) j["sourceRange"] = *v.sourceRange;
+    j["slotOffset"] = v.slotOffset;
+    j["slotSize"] = v.slotSize;
 }
 inline void from_json(const nlohmann::json& j, StructDef& v)
 {
-    j.at("name").get_to(v.name);
-    j.at("fields").get_to(v.fields);
-    j.at("doc").get_to(v.doc);
+    v.name = j.at("name").get<std::string>();
+    v.fields = j.at("fields").get<std::vector<FieldDef>>();
+    v.doc = j.at("doc").get<std::string>();
     if (j.contains("sourceRange") && !j.at("sourceRange").is_null()) v.sourceRange = j.at("sourceRange").get<SourceRange>();
-    j.at("rawTypedefs").get_to(v.rawTypedefs);
+    v.rawTypedefs = j.at("rawTypedefs").get<std::string>();
+    v.slotCount = j.at("slotCount").get<int>();
 }
 inline void to_json(nlohmann::json& j, const StructDef& v)
 {
@@ -660,14 +662,16 @@ inline void to_json(nlohmann::json& j, const StructDef& v)
     j["doc"] = v.doc;
     if (v.sourceRange.has_value()) j["sourceRange"] = *v.sourceRange;
     j["rawTypedefs"] = v.rawTypedefs;
+    j["slotCount"] = v.slotCount;
 }
 inline void from_json(const nlohmann::json& j, VariantDef& v)
 {
-    j.at("tag").get_to(v.tag);
+    v.tag = j.at("tag").get<std::string>();
     if (j.contains("payload") && !j.at("payload").is_null()) v.payload = std::make_unique<TypeKind>(j.at("payload").get<TypeKind>());
-    j.at("recursive").get_to(v.recursive);
-    j.at("doc").get_to(v.doc);
+    v.recursive = j.at("recursive").get<bool>();
+    v.doc = j.at("doc").get<std::string>();
     if (j.contains("sourceRange") && !j.at("sourceRange").is_null()) v.sourceRange = j.at("sourceRange").get<SourceRange>();
+    v.payloadSlotSize = j.at("payloadSlotSize").get<int>();
 }
 inline void to_json(nlohmann::json& j, const VariantDef& v)
 {
@@ -677,14 +681,16 @@ inline void to_json(nlohmann::json& j, const VariantDef& v)
     j["recursive"] = v.recursive;
     j["doc"] = v.doc;
     if (v.sourceRange.has_value()) j["sourceRange"] = *v.sourceRange;
+    j["payloadSlotSize"] = v.payloadSlotSize;
 }
 inline void from_json(const nlohmann::json& j, EnumDef& v)
 {
-    j.at("name").get_to(v.name);
-    j.at("variants").get_to(v.variants);
-    j.at("doc").get_to(v.doc);
+    v.name = j.at("name").get<std::string>();
+    v.variants = j.at("variants").get<std::vector<VariantDef>>();
+    v.doc = j.at("doc").get<std::string>();
     if (j.contains("sourceRange") && !j.at("sourceRange").is_null()) v.sourceRange = j.at("sourceRange").get<SourceRange>();
-    j.at("rawTypedefs").get_to(v.rawTypedefs);
+    v.rawTypedefs = j.at("rawTypedefs").get<std::string>();
+    v.slotCount = j.at("slotCount").get<int>();
 }
 inline void to_json(nlohmann::json& j, const EnumDef& v)
 {
@@ -694,11 +700,12 @@ inline void to_json(nlohmann::json& j, const EnumDef& v)
     j["doc"] = v.doc;
     if (v.sourceRange.has_value()) j["sourceRange"] = *v.sourceRange;
     j["rawTypedefs"] = v.rawTypedefs;
+    j["slotCount"] = v.slotCount;
 }
 inline void from_json(const nlohmann::json& j, PolicyReplacement& v)
 {
-    j.at("find").get_to(v.find);
-    j.at("replace").get_to(v.replace);
+    v.find = j.at("find").get<std::string>();
+    v.replace = j.at("replace").get<std::string>();
 }
 inline void to_json(nlohmann::json& j, const PolicyReplacement& v)
 {
@@ -708,8 +715,8 @@ inline void to_json(nlohmann::json& j, const PolicyReplacement& v)
 }
 inline void from_json(const nlohmann::json& j, PolicyRequire& v)
 {
-    j.at("regex").get_to(v.regex);
-    j.at("replace").get_to(v.replace);
+    v.regex = j.at("regex").get<std::string>();
+    v.replace = j.at("replace").get<std::string>();
 }
 inline void to_json(nlohmann::json& j, const PolicyRequire& v)
 {
@@ -719,7 +726,7 @@ inline void to_json(nlohmann::json& j, const PolicyRequire& v)
 }
 inline void from_json(const nlohmann::json& j, PolicyOutputFilter& v)
 {
-    j.at("regex").get_to(v.regex);
+    v.regex = j.at("regex").get<std::string>();
 }
 inline void to_json(nlohmann::json& j, const PolicyOutputFilter& v)
 {
@@ -739,8 +746,8 @@ inline void to_json(nlohmann::json& j, const PolicyLength& v)
 }
 inline void from_json(const nlohmann::json& j, PolicyRejectIf& v)
 {
-    j.at("regex").get_to(v.regex);
-    j.at("message").get_to(v.message);
+    v.regex = j.at("regex").get<std::string>();
+    v.message = j.at("message").get<std::string>();
 }
 inline void to_json(nlohmann::json& j, const PolicyRejectIf& v)
 {
@@ -750,12 +757,12 @@ inline void to_json(nlohmann::json& j, const PolicyRejectIf& v)
 }
 inline void from_json(const nlohmann::json& j, PolicyDef& v)
 {
-    j.at("tag").get_to(v.tag);
+    v.tag = j.at("tag").get<std::string>();
     if (j.contains("length") && !j.at("length").is_null()) v.length = j.at("length").get<PolicyLength>();
     if (j.contains("rejectIf") && !j.at("rejectIf").is_null()) v.rejectIf = j.at("rejectIf").get<PolicyRejectIf>();
-    j.at("require").get_to(v.require);
-    j.at("replacements").get_to(v.replacements);
-    j.at("outputFilter").get_to(v.outputFilter);
+    v.require = j.at("require").get<std::vector<PolicyRequire>>();
+    v.replacements = j.at("replacements").get<std::vector<PolicyReplacement>>();
+    v.outputFilter = j.at("outputFilter").get<std::vector<PolicyOutputFilter>>();
 }
 inline void to_json(nlohmann::json& j, const PolicyDef& v)
 {
@@ -769,13 +776,13 @@ inline void to_json(nlohmann::json& j, const PolicyDef& v)
 }
 inline void from_json(const nlohmann::json& j, IR& v)
 {
-    j.at("versionMajor").get_to(v.versionMajor);
-    j.at("versionMinor").get_to(v.versionMinor);
-    j.at("versionPatch").get_to(v.versionPatch);
-    j.at("structs").get_to(v.structs);
-    j.at("enums").get_to(v.enums);
-    j.at("functions").get_to(v.functions);
-    j.at("policies").get_to(v.policies);
+    v.versionMajor = j.at("versionMajor").get<int>();
+    v.versionMinor = j.at("versionMinor").get<int>();
+    v.versionPatch = j.at("versionPatch").get<int>();
+    v.structs = j.at("structs").get<std::vector<StructDef>>();
+    v.enums = j.at("enums").get<std::vector<EnumDef>>();
+    v.functions = j.at("functions").get<std::vector<FunctionDef>>();
+    v.policies = j.at("policies").get<std::vector<PolicyDef>>();
 }
 inline void to_json(nlohmann::json& j, const IR& v)
 {

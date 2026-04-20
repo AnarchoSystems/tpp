@@ -156,6 +156,8 @@ struct FieldDef
     recursive : bool;
     doc : string;
     sourceRange : optional<SourceRange>;
+    slotOffset : int;
+    slotSize : int;
 }
 
 struct StructDef
@@ -165,6 +167,7 @@ struct StructDef
     doc : string;
     sourceRange : optional<SourceRange>;
     rawTypedefs : string;
+    slotCount : int;
 }
 
 struct VariantDef
@@ -174,6 +177,7 @@ struct VariantDef
     recursive : bool;
     doc : string;
     sourceRange : optional<SourceRange>;
+    payloadSlotSize : int;
 }
 
 struct EnumDef
@@ -183,6 +187,7 @@ struct EnumDef
     doc : string;
     sourceRange : optional<SourceRange>;
     rawTypedefs : string;
+    slotCount : int;
 }
 
 // ── Policy definitions ──────────────────────────────────────────────────────
