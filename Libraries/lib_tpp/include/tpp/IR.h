@@ -62,9 +62,10 @@ struct ExprInfo
     std::unique_ptr<TypeKind> type;
     bool isRecursive;
     bool isOptional;
+    int slotOffset;
     static std::string tpp_typedefs() noexcept
     {
-        return "// ── Instruction types (backend-neutral) ─────────────────────────────────────\n\n/// Expression with resolved type.\nstruct ExprInfo\n{\n    path : string;\n    type : TypeKind;\n    isRecursive : bool;\n    isOptional : bool;\n}";
+        return "// ── Instruction types (backend-neutral) ─────────────────────────────────────\n\n/// Expression with resolved type.\nstruct ExprInfo\n{\n    path : string;\n    type : TypeKind;\n    isRecursive : bool;\n    isOptional : bool;\n    slotOffset : int;\n}";
     }
 };
 struct EmitInstr
@@ -97,9 +98,12 @@ struct ForInstr
     int insertCol;
     std::string policy;
     std::optional<std::string> alignSpec;
+    int elementSlotCount;
+    int varSlotOffset;
+    int enumeratorSlotOffset;
     static std::string tpp_typedefs() noexcept
     {
-        return "/// For loop over a collection.\nstruct ForInstr\n{\n    varName : string;\n    enumeratorName : optional<string>;\n    collection : ExprInfo;\n    body : list<Instruction>;\n    sep : optional<string>;\n    followedBy : optional<string>;\n    precededBy : optional<string>;\n    isBlock : bool;\n    insertCol : int;\n    policy : string;\n    alignSpec : optional<string>;\n}";
+        return "/// For loop over a collection.\nstruct ForInstr\n{\n    varName : string;\n    enumeratorName : optional<string>;\n    collection : ExprInfo;\n    body : list<Instruction>;\n    sep : optional<string>;\n    followedBy : optional<string>;\n    precededBy : optional<string>;\n    isBlock : bool;\n    insertCol : int;\n    policy : string;\n    alignSpec : optional<string>;\n    elementSlotCount : int;\n    varSlotOffset : int;\n    enumeratorSlotOffset : int;\n}";
     }
 };
 struct CaseBinding
@@ -118,9 +122,12 @@ struct CaseInstr
     std::unique_ptr<TypeKind> payloadType;
     bool payloadIsRecursive;
     std::unique_ptr<std::vector<Instruction>> body;
+    int variantIndex;
+    int payloadSlotCount;
+    int bindingSlotOffset;
     static std::string tpp_typedefs() noexcept
     {
-        return "/// One case branch in a switch.\nstruct CaseInstr\n{\n    tag : string;\n    bindingName : optional<CaseBinding>;\n    payloadType : optional<TypeKind>;\n    payloadIsRecursive : bool;\n    body : list<Instruction>;\n}";
+        return "/// One case branch in a switch.\nstruct CaseInstr\n{\n    tag : string;\n    bindingName : optional<CaseBinding>;\n    payloadType : optional<TypeKind>;\n    payloadIsRecursive : bool;\n    body : list<Instruction>;\n    variantIndex : int;\n    payloadSlotCount : int;\n    bindingSlotOffset : int;\n}";
     }
 };
 struct IfInstr
@@ -162,9 +169,11 @@ struct ParamDef
 {
     std::string name;
     std::unique_ptr<TypeKind> type;
+    int slotOffset;
+    int slotCount;
     static std::string tpp_typedefs() noexcept
     {
-        return "// ── Template function definition ────────────────────────────────────────────\n\nstruct ParamDef\n{\n    name : string;\n    type : TypeKind;\n}";
+        return "// ── Template function definition ────────────────────────────────────────────\n\nstruct ParamDef\n{\n    name : string;\n    type : TypeKind;\n    slotOffset : int;\n    slotCount : int;\n}";
     }
 };
 struct FunctionDef
@@ -175,9 +184,10 @@ struct FunctionDef
     std::string policy;
     std::string doc;
     std::optional<SourceRange> sourceRange;
+    int frameSlotCount;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct FunctionDef\n{\n    name : string;\n    params : list<ParamDef>;\n    body : list<Instruction>;\n    policy : string;\n    doc : string;\n    sourceRange : optional<SourceRange>;\n}";
+        return "struct FunctionDef\n{\n    name : string;\n    params : list<ParamDef>;\n    body : list<Instruction>;\n    policy : string;\n    doc : string;\n    sourceRange : optional<SourceRange>;\n    frameSlotCount : int;\n}";
     }
 };
 struct FieldDef
@@ -459,6 +469,7 @@ inline void from_json(const nlohmann::json& j, ExprInfo& v)
     v.type = std::make_unique<TypeKind>(j.at("type").get<TypeKind>());
     v.isRecursive = j.at("isRecursive").get<bool>();
     v.isOptional = j.at("isOptional").get<bool>();
+    v.slotOffset = j.at("slotOffset").get<int>();
 }
 inline void to_json(nlohmann::json& j, const ExprInfo& v)
 {
@@ -467,6 +478,7 @@ inline void to_json(nlohmann::json& j, const ExprInfo& v)
     j["type"] = *v.type;
     j["isRecursive"] = v.isRecursive;
     j["isOptional"] = v.isOptional;
+    j["slotOffset"] = v.slotOffset;
 }
 inline void from_json(const nlohmann::json& j, EmitInstr& v)
 {
@@ -501,6 +513,9 @@ inline void from_json(const nlohmann::json& j, ForInstr& v)
     v.insertCol = j.at("insertCol").get<int>();
     v.policy = j.at("policy").get<std::string>();
     if (j.contains("alignSpec") && !j.at("alignSpec").is_null()) v.alignSpec = j.at("alignSpec").get<std::string>();
+    v.elementSlotCount = j.at("elementSlotCount").get<int>();
+    v.varSlotOffset = j.at("varSlotOffset").get<int>();
+    v.enumeratorSlotOffset = j.at("enumeratorSlotOffset").get<int>();
 }
 inline void to_json(nlohmann::json& j, const ForInstr& v)
 {
@@ -516,6 +531,9 @@ inline void to_json(nlohmann::json& j, const ForInstr& v)
     j["insertCol"] = v.insertCol;
     j["policy"] = v.policy;
     if (v.alignSpec.has_value()) j["alignSpec"] = *v.alignSpec;
+    j["elementSlotCount"] = v.elementSlotCount;
+    j["varSlotOffset"] = v.varSlotOffset;
+    j["enumeratorSlotOffset"] = v.enumeratorSlotOffset;
 }
 inline void from_json(const nlohmann::json& j, CaseBinding& v)
 {
@@ -535,6 +553,9 @@ inline void from_json(const nlohmann::json& j, CaseInstr& v)
     if (j.contains("payloadType") && !j.at("payloadType").is_null()) v.payloadType = std::make_unique<TypeKind>(j.at("payloadType").get<TypeKind>());
     v.payloadIsRecursive = j.at("payloadIsRecursive").get<bool>();
     v.body = std::make_unique<std::vector<Instruction>>(j.at("body").get<std::vector<Instruction>>());
+    v.variantIndex = j.at("variantIndex").get<int>();
+    v.payloadSlotCount = j.at("payloadSlotCount").get<int>();
+    v.bindingSlotOffset = j.at("bindingSlotOffset").get<int>();
 }
 inline void to_json(nlohmann::json& j, const CaseInstr& v)
 {
@@ -544,6 +565,9 @@ inline void to_json(nlohmann::json& j, const CaseInstr& v)
     if (v.payloadType) j["payloadType"] = *v.payloadType;
     j["payloadIsRecursive"] = v.payloadIsRecursive;
     j["body"] = *v.body;
+    j["variantIndex"] = v.variantIndex;
+    j["payloadSlotCount"] = v.payloadSlotCount;
+    j["bindingSlotOffset"] = v.bindingSlotOffset;
 }
 inline void from_json(const nlohmann::json& j, IfInstr& v)
 {
@@ -598,12 +622,16 @@ inline void from_json(const nlohmann::json& j, ParamDef& v)
 {
     v.name = j.at("name").get<std::string>();
     v.type = std::make_unique<TypeKind>(j.at("type").get<TypeKind>());
+    v.slotOffset = j.at("slotOffset").get<int>();
+    v.slotCount = j.at("slotCount").get<int>();
 }
 inline void to_json(nlohmann::json& j, const ParamDef& v)
 {
     j = nlohmann::json{};
     j["name"] = v.name;
     j["type"] = *v.type;
+    j["slotOffset"] = v.slotOffset;
+    j["slotCount"] = v.slotCount;
 }
 inline void from_json(const nlohmann::json& j, FunctionDef& v)
 {
@@ -613,6 +641,7 @@ inline void from_json(const nlohmann::json& j, FunctionDef& v)
     v.policy = j.at("policy").get<std::string>();
     v.doc = j.at("doc").get<std::string>();
     if (j.contains("sourceRange") && !j.at("sourceRange").is_null()) v.sourceRange = j.at("sourceRange").get<SourceRange>();
+    v.frameSlotCount = j.at("frameSlotCount").get<int>();
 }
 inline void to_json(nlohmann::json& j, const FunctionDef& v)
 {
@@ -623,6 +652,7 @@ inline void to_json(nlohmann::json& j, const FunctionDef& v)
     j["policy"] = v.policy;
     j["doc"] = v.doc;
     if (v.sourceRange.has_value()) j["sourceRange"] = *v.sourceRange;
+    j["frameSlotCount"] = v.frameSlotCount;
 }
 inline void from_json(const nlohmann::json& j, FieldDef& v)
 {

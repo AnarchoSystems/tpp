@@ -92,6 +92,8 @@ static codegen::RenderFunctionsInput buildFunctionsContext(
     const std::vector<std::string> &includes,
     const std::string &namespaceName);
 
+static std::string toCppStringLiteral(const std::string &s);
+
 static const tpp::IR &mainIR()
 {
     static const tpp::IR result =
@@ -131,6 +133,9 @@ void tpp2cpp::run()
         auto ctx = buildFunctionsContext(input, "", includes, namespaceName);
         if (externalRuntime)
             ctx.externalRuntime = true;
+        ctx.irJsonLiteral = toCppStringLiteral(nlohmann::json(input).dump());
+        for (size_t i = 0; i < ctx.functions.size(); ++i)
+            ctx.functions[i].functionIndex = static_cast<int>(i);
         renderFunction("render_cpp_native_implementation", nlohmann::json(ctx));
         break;
     }

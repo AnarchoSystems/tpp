@@ -191,6 +191,7 @@ struct RenderFunctionDef
     params : list<ParamInfo>;
     body : list<RenderInstruction>;
     doc : optional<string>;
+    functionIndex : optional<int>;
 }
 
 struct RenderFunctionsInput
@@ -202,4 +203,5 @@ struct RenderFunctionsInput
     staticModifier : string;
     includes : optional<list<string>>;
     externalRuntime : optional<bool>;
+    irJsonLiteral : optional<string>;
 }

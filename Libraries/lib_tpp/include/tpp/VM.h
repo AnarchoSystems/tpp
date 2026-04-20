@@ -57,6 +57,11 @@ namespace tpp
     public:
         VM(const LayoutTable &layouts, std::map<std::string, VMCompiledPolicy> policies = {});
 
+        // ── Function table ──────────────────────────────────────────────
+
+        /// Set the function table for CallInstr dispatch.
+        void setFunctions(const std::vector<FunctionDef> *functions);
+
         // ── Literal output ──────────────────────────────────────────────
 
         /// Append literal text to the active output buffer.
@@ -128,6 +133,7 @@ namespace tpp
         // ── Immutable (set at construction) ─────────────────────────────
         const LayoutTable &layouts_;
         std::map<std::string, VMCompiledPolicy> compiledPolicies_;
+        const std::vector<FunctionDef> *functions_ = nullptr;
 
         // ── Frame stack ─────────────────────────────────────────────────
         std::vector<Slot> stack_;
@@ -182,8 +188,27 @@ namespace tpp
         /// Execute normal (non-aligned) for-loop.
         bool execForNormal(const ForInstr &instr);
 
+        /// Execute a CallInstr: push callee frame, execute callee body, pop.
+        bool execCall(const CallInstr &instr);
+
         /// Apply multi-line indentation to a string being emitted.
         void emitWithMultilineIndent(const std::string &text);
+
+        /// Dereference a slot: if it's a BoxRef, return a pointer to the
+        /// first slot in the referenced sub-frame. Otherwise return
+        /// a pointer to the slot itself. The returned pointer stays valid
+        /// as long as the frame/box is alive.
+        const Slot *derefSlot(int offset) const;
+
+        /// Resolve a slot, handling recursive (BoxRef) and optional fields
+        /// correctly. When isRecursive is true, the BoxRef is dereferenced
+        /// first and the optional skip happens inside the box. When false,
+        /// the optional skip happens in the current frame before deref.
+        const Slot *resolveSlot(int offset, bool isOptional, bool isRecursive) const;
+
+        /// Serialize slots back to JSON using type information.
+        /// Used when emitting complex types (struct, enum, list).
+        std::string slotToJsonString(const Slot *base, const TypeKind &type) const;
 
         /// Compile a single PolicyDef.
         static VMCompiledPolicy compilePolicy(const PolicyDef &def);

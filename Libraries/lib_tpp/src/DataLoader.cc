@@ -74,10 +74,28 @@ namespace tpp
             const auto &name = std::get<3>(tk.value);
             return load(name, json);
         }
-        case 4: // List — shouldn't be called directly (lists are loaded in load_field)
+        case 4: // List
         {
+            const auto &elemType = std::get<4>(tk.value);
+            auto *list = alloc_list();
+            if (json.is_array())
+            {
+                for (const auto &elem : json)
+                {
+                    if (elemType)
+                    {
+                        auto elemFrame = load_typed(*elemType, elem);
+                        for (auto &s : elemFrame)
+                            list->push_back(std::move(s));
+                    }
+                    else
+                    {
+                        load_json_value_into_list(*list, elem);
+                    }
+                }
+            }
             std::vector<Slot> frame(1);
-            frame[0] = Slot::make_list(alloc_list());
+            frame[0] = Slot::make_list(list);
             return frame;
         }
         case 5: // Optional
@@ -129,17 +147,27 @@ namespace tpp
             auto it = json.find(fr.name);
             bool present = (it != json.end() && !it->is_null());
 
+            // If we have full type info, use type-aware load_field
+            if (fr.type)
+            {
+                if (!present)
+                {
+                    // For Optional types, set flag to false
+                    if (fr.isOptional)
+                        frame[static_cast<size_t>(fr.offset)] = Slot::make_optional_flag(false);
+                    // Otherwise leave slots as Empty
+                    continue;
+                }
+                load_field(frame, fr.offset, *fr.type, fr.isBox, *it);
+                continue;
+            }
+
+            // Fallback: type-unaware loading (legacy path)
             if (fr.isOptional)
             {
                 frame[static_cast<size_t>(fr.offset)] = Slot::make_optional_flag(present);
                 if (present)
-                {
-                    // We need the inner type from the IR to load correctly.
-                    // For now, load the inner value starting at offset+1.
-                    // The caller should have a TypeKind available; here we
-                    // detect from the JSON value type as a fallback.
                     load_json_value(frame, fr.offset + 1, *it);
-                }
                 continue;
             }
 
@@ -182,8 +210,10 @@ namespace tpp
                                const Layout &layout,
                                const nlohmann::json &json)
     {
-        // Enum JSON format: { "tag": "CaseName", "value": <payload> }
-        // or just a string for tag-only enums
+        // Enum JSON formats:
+        //   1. Just a string: "CaseName"
+        //   2. Key-value: { "CaseName": <payload> }  (tpp canonical format)
+        //   3. Tagged: { "tag": "CaseName", "value": <payload> }
         std::string tag;
         const nlohmann::json *payloadJson = nullptr;
 
@@ -194,9 +224,23 @@ namespace tpp
         else if (json.is_object())
         {
             if (json.contains("tag"))
+            {
+                // Format 3: { "tag": ..., "value": ... }
                 tag = json["tag"].get<std::string>();
-            if (json.contains("value") && !json["value"].is_null())
-                payloadJson = &json["value"];
+                if (json.contains("value") && !json["value"].is_null())
+                    payloadJson = &json["value"];
+            }
+            else
+            {
+                // Format 2: { "CaseName": <payload> }
+                for (auto it = json.begin(); it != json.end(); ++it)
+                {
+                    tag = it.key();
+                    if (!it->is_null() && !(it->is_object() && it->empty()))
+                        payloadJson = &it.value();
+                    break; // use first key
+                }
+            }
         }
         else
         {
@@ -214,7 +258,10 @@ namespace tpp
         const auto &cr = layout.caseRanges[static_cast<size_t>(caseIdx)];
         if (cr.hasPayload && payloadJson)
         {
-            load_json_value(frame, cr.payloadOffset, *payloadJson);
+            if (cr.payloadType)
+                load_field(frame, cr.payloadOffset, *cr.payloadType, cr.isRecursive, *payloadJson);
+            else
+                load_json_value(frame, cr.payloadOffset, *payloadJson);
         }
     }
 

@@ -42,6 +42,7 @@ struct ExprInfo
     type : TypeKind;
     isRecursive : bool;
     isOptional : bool;
+    slotOffset : int;
 }
 
 /// Emit literal text.
@@ -71,6 +72,9 @@ struct ForInstr
     insertCol : int;
     policy : string;
     alignSpec : optional<string>;
+    elementSlotCount : int;
+    varSlotOffset : int;
+    enumeratorSlotOffset : int;
 }
 
 struct CaseBinding
@@ -87,6 +91,9 @@ struct CaseInstr
     payloadType : optional<TypeKind>;
     payloadIsRecursive : bool;
     body : list<Instruction>;
+    variantIndex : int;
+    payloadSlotCount : int;
+    bindingSlotOffset : int;
 }
 
 /// Conditional.
@@ -135,6 +142,8 @@ struct ParamDef
 {
     name : string;
     type : TypeKind;
+    slotOffset : int;
+    slotCount : int;
 }
 
 struct FunctionDef
@@ -145,6 +154,7 @@ struct FunctionDef
     policy : string;
     doc : string;
     sourceRange : optional<SourceRange>;
+    frameSlotCount : int;
 }
 
 // ── Schema types (for type generation) ──────────────────────────────────────

@@ -739,6 +739,7 @@ bool compile(const ParsedProject &project,
                              options.includeSourceRanges);
 
         compute_ir_layouts(output);
+        compute_instruction_slots(output);
     }
     catch (const std::exception &error)
     {

@@ -245,9 +245,10 @@ struct RenderFunctionDef
     std::vector<ParamInfo> params;
     std::unique_ptr<std::vector<RenderInstruction>> body;
     std::optional<std::string> doc;
+    std::optional<int> functionIndex;
     static std::string tpp_typedefs() noexcept
     {
-        return "// ═══════════════════════════════════════════════════════════════════════════════\n// Function rendering context (shared across all backends)\n// ═══════════════════════════════════════════════════════════════════════════════\n\nstruct RenderFunctionDef\n{\n    name : string;\n    params : list<ParamInfo>;\n    body : list<RenderInstruction>;\n    doc : optional<string>;\n}";
+        return "// ═══════════════════════════════════════════════════════════════════════════════\n// Function rendering context (shared across all backends)\n// ═══════════════════════════════════════════════════════════════════════════════\n\nstruct RenderFunctionDef\n{\n    name : string;\n    params : list<ParamInfo>;\n    body : list<RenderInstruction>;\n    doc : optional<string>;\n    functionIndex : optional<int>;\n}";
     }
 };
 struct RenderFunctionsInput
@@ -259,9 +260,10 @@ struct RenderFunctionsInput
     std::string staticModifier;
     std::optional<std::vector<std::string>> includes;
     std::optional<bool> externalRuntime;
+    std::optional<std::string> irJsonLiteral;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct RenderFunctionsInput\n{\n    functions : list<RenderFunctionDef>;\n    policies : optional<list<PolicyInfo>>;\n    functionPrefix : string;\n    namespaceName : optional<string>;\n    staticModifier : string;\n    includes : optional<list<string>>;\n    externalRuntime : optional<bool>;\n}";
+        return "struct RenderFunctionsInput\n{\n    functions : list<RenderFunctionDef>;\n    policies : optional<list<PolicyInfo>>;\n    functionPrefix : string;\n    namespaceName : optional<string>;\n    staticModifier : string;\n    includes : optional<list<string>>;\n    externalRuntime : optional<bool>;\n    irJsonLiteral : optional<string>;\n}";
     }
 };
 struct RenderTypeKind_Str
@@ -670,6 +672,7 @@ inline void from_json(const nlohmann::json& j, RenderFunctionDef& v)
     v.params = j.at("params").get<std::vector<ParamInfo>>();
     v.body = std::make_unique<std::vector<RenderInstruction>>(j.at("body").get<std::vector<RenderInstruction>>());
     if (j.contains("doc") && !j.at("doc").is_null()) v.doc = j.at("doc").get<std::string>();
+    if (j.contains("functionIndex") && !j.at("functionIndex").is_null()) v.functionIndex = j.at("functionIndex").get<int>();
 }
 inline void to_json(nlohmann::json& j, const RenderFunctionDef& v)
 {
@@ -678,6 +681,7 @@ inline void to_json(nlohmann::json& j, const RenderFunctionDef& v)
     j["params"] = v.params;
     j["body"] = *v.body;
     if (v.doc.has_value()) j["doc"] = *v.doc;
+    if (v.functionIndex.has_value()) j["functionIndex"] = *v.functionIndex;
 }
 inline void from_json(const nlohmann::json& j, RenderFunctionsInput& v)
 {
@@ -688,6 +692,7 @@ inline void from_json(const nlohmann::json& j, RenderFunctionsInput& v)
     v.staticModifier = j.at("staticModifier").get<std::string>();
     if (j.contains("includes") && !j.at("includes").is_null()) v.includes = j.at("includes").get<std::vector<std::string>>();
     if (j.contains("externalRuntime") && !j.at("externalRuntime").is_null()) v.externalRuntime = j.at("externalRuntime").get<bool>();
+    if (j.contains("irJsonLiteral") && !j.at("irJsonLiteral").is_null()) v.irJsonLiteral = j.at("irJsonLiteral").get<std::string>();
 }
 inline void to_json(nlohmann::json& j, const RenderFunctionsInput& v)
 {
@@ -699,5 +704,6 @@ inline void to_json(nlohmann::json& j, const RenderFunctionsInput& v)
     j["staticModifier"] = v.staticModifier;
     if (v.includes.has_value()) j["includes"] = *v.includes;
     if (v.externalRuntime.has_value()) j["externalRuntime"] = *v.externalRuntime;
+    if (v.irJsonLiteral.has_value()) j["irJsonLiteral"] = *v.irJsonLiteral;
 }
 } // namespace codegen

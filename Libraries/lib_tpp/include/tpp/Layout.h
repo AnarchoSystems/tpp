@@ -42,6 +42,7 @@ namespace tpp
         bool isOptional = false;   // if true, slot[offset] is OptionalFlag
         bool isList = false;       // if true, slot[offset] is List
         bool isBox = false;        // if true, slot[offset] is BoxRef (recursive)
+        const TypeKind *type = nullptr; // non-owning; points into IR (valid while IR lives)
     };
 
     // ── CaseRange — describes one variant case in an enum layout ────────────
@@ -52,6 +53,8 @@ namespace tpp
         int payloadOffset = 0;    // where payload slots begin (after tag slot)
         int payloadSize = 0;      // number of payload slots for this case
         bool hasPayload = false;
+        bool isRecursive = false;  // recursive payload → boxed
+        const TypeKind *payloadType = nullptr; // non-owning; points into IR
     };
 
     // ── Layout ──────────────────────────────────────────────────────────────
@@ -112,5 +115,11 @@ namespace tpp
     /// payloadSlotSize) on every StructDef, FieldDef, EnumDef and VariantDef
     /// in the IR.  Called by the compiler after lowering.
     void compute_ir_layouts(IR &ir);
+
+    /// Resolve path-based expressions in IR instructions to concrete slot
+    /// offsets.  Assigns ParamDef.slotOffset/slotCount, ForInstr slot fields,
+    /// CaseInstr slot fields, ExprInfo.slotOffset, and FunctionDef.frameSlotCount.
+    /// Must be called after compute_ir_layouts().
+    void compute_instruction_slots(IR &ir);
 
 } // namespace tpp

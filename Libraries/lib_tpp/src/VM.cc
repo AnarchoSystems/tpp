@@ -1,6 +1,8 @@
 #include <tpp/VM.h>
 #include <tpp/Policy.h>
 
+#include <nlohmann/json.hpp>
+
 #include <algorithm>
 #include <sstream>
 
@@ -15,8 +17,13 @@ namespace tpp
         : layouts_(layouts),
           compiledPolicies_(std::move(policies))
     {
-        (void)layouts_; // will be used once the VM executes layout-dependent instructions
+        (void)layouts_; // used by the Rendering.cc integration layer
         outputStack_.emplace_back(); // root output buffer
+    }
+
+    void VM::setFunctions(const std::vector<FunctionDef> *functions)
+    {
+        functions_ = functions;
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -57,16 +64,16 @@ namespace tpp
 
     bool VM::emitSlot(int offset)
     {
-        const Slot &s = slot(offset);
-        std::string str = s.to_string();
+        const Slot *s = derefSlot(offset);
+        std::string str = s->to_string();
         emitWithMultilineIndent(str);
         return true;
     }
 
     bool VM::emitSlotWithPolicy(int offset, const std::string &exprPolicy)
     {
-        const Slot &s = slot(offset);
-        std::string str = s.to_string();
+        const Slot *s = derefSlot(offset);
+        std::string str = s->to_string();
 
         const std::string &effPol = effectivePolicy(exprPolicy);
         if (!effPol.empty() && effPol != "none")
@@ -140,6 +147,31 @@ namespace tpp
         return stack_[static_cast<size_t>(fp_ + offset)];
     }
 
+    const Slot *VM::derefSlot(int offset) const
+    {
+        const Slot &s = slot(offset);
+        if (s.kind == SlotKind::BoxRef && s.payload.box && !s.payload.box->empty())
+            return s.payload.box->data();
+        return &s;
+    }
+
+    const Slot *VM::resolveSlot(int offset, bool isOptional, bool isRecursive) const
+    {
+        if (isRecursive)
+        {
+            const Slot &s = slot(offset);
+            if (s.kind == SlotKind::BoxRef && s.payload.box && !s.payload.box->empty())
+            {
+                const Slot *base = s.payload.box->data();
+                if (isOptional) return base + 1; // skip OptionalFlag inside box
+                return base;
+            }
+            return &s; // fallback for empty/missing box
+        }
+        if (isOptional) offset += 1;
+        return derefSlot(offset);
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // Policy scope
     // ═══════════════════════════════════════════════════════════════════
@@ -199,15 +231,40 @@ namespace tpp
                 }
                 else if constexpr (std::is_same_v<T, EmitExprInstr>)
                 {
-                    // The caller is responsible for mapping the expr to a slot offset.
-                    // In this low-level VM, EmitExprInstr is emitted as emitSlotWithPolicy
-                    // by a higher-level driver. For now, set an error.
-                    error_ = "VM::execBody: EmitExprInstr requires slot-based translation";
-                    return false;
+                    const Slot *s = resolveSlot(arg.expr.slotOffset, arg.expr.isOptional, arg.expr.isRecursive);
+
+                    // resolveSlot already unwraps Optional (skips flag) and
+                    // Recursive (dereferences box), so peel the type wrapper
+                    // to match the slot pointer.
+                    const TypeKind *emitType = arg.expr.type.get();
+                    if (emitType && emitType->value.index() == 5) { // Optional
+                        const auto &inner = std::get<5>(emitType->value);
+                        if (inner) emitType = inner.get();
+                    }
+
+                    // For complex types (struct/enum/list), reconstruct JSON;
+                    // for primitives, use to_string().
+                    std::string str;
+                    if (emitType && emitType->value.index() >= 3)
+                        str = slotToJsonString(s, *emitType);
+                    else
+                        str = s->to_string();
+
+                    const std::string &effPol = effectivePolicy(arg.policy);
+                    if (!effPol.empty() && effPol != "none")
+                    {
+                        const VMCompiledPolicy *pol = arg.policy.empty()
+                            ? activePolicyPtr_
+                            : findPolicy(effPol);
+                        if (pol && !applyPolicy(effPol, *pol, str))
+                            return false;
+                    }
+
+                    emitWithMultilineIndent(str);
+                    return true;
                 }
                 else if constexpr (std::is_same_v<T, Instruction_AlignCell>)
                 {
-                    // Handled by execInstructionsCells; no-op in normal body
                     return true;
                 }
                 else if constexpr (std::is_same_v<T, std::unique_ptr<ForInstr>>)
@@ -224,8 +281,7 @@ namespace tpp
                 }
                 else if constexpr (std::is_same_v<T, CallInstr>)
                 {
-                    error_ = "VM::execBody: CallInstr is not supported in the interpreted path";
-                    return false;
+                    return execCall(arg);
                 }
                 else
                 {
@@ -273,42 +329,186 @@ namespace tpp
 
     bool VM::execForNormal(const ForInstr &instr)
     {
-        // Save policy scope
-        std::string savedPolicy = activePolicy_;
-        const VMCompiledPolicy *savedPtr = activePolicyPtr_;
-        if (!instr.policy.empty())
+        // Push policy scope if specified
+        bool hasPolicy = !instr.policy.empty();
+        if (hasPolicy && !pushPolicy(instr.policy))
+            return false;
+
+        const Slot *listPtr = resolveSlot(instr.collection.slotOffset, instr.collection.isOptional, instr.collection.isRecursive);
+        if (listPtr->kind != SlotKind::List || !listPtr->payload.list)
         {
-            activePolicy_ = instr.policy;
-            activePolicyPtr_ = findPolicy(instr.policy);
+            if (hasPolicy) popPolicy();
+            return true; // empty or non-list — silently skip
         }
 
-        // The for body receives its iteration element via a frame push.
-        // The caller must have set up the list slot; this method provides
-        // the iteration scaffolding (sep, precededBy, followedBy, block indent).
+        const auto &listVec = *listPtr->payload.list;
+        int elemSize = instr.elementSlotCount;
+        if (elemSize <= 0) elemSize = 1;
+        int count = static_cast<int>(listVec.size()) / elemSize;
 
-        // For now, this is a placeholder that the driver will call with
-        // a list slot reference + element layout.  We provide the
-        // iteration + output logic.
+        for (int i = 0; i < count; ++i)
+        {
+            // Copy element slots to varSlotOffset
+            for (int s = 0; s < elemSize; ++s)
+                slotMut(instr.varSlotOffset + s) = listVec[static_cast<size_t>(i * elemSize + s)];
 
-        activePolicy_ = savedPolicy;
-        activePolicyPtr_ = savedPtr;
+            // Set enumerator if present
+            if (instr.enumeratorSlotOffset >= 0)
+                slotMut(instr.enumeratorSlotOffset) = Slot::make_int(static_cast<int64_t>(i));
+
+            // Render body
+            std::string iterResult;
+            if (instr.isBlock)
+            {
+                pushCapture();
+                if (!execBlockBody(*instr.body, instr.insertCol))
+                {
+                    popCapture();
+                    if (hasPolicy) popPolicy();
+                    return false;
+                }
+                iterResult = popCapture();
+            }
+            else
+            {
+                pushCapture();
+                if (!execBody(*instr.body))
+                {
+                    popCapture();
+                    if (hasPolicy) popPolicy();
+                    return false;
+                }
+                iterResult = popCapture();
+            }
+
+            // Handle trailing newline stripping for block sep
+            bool strippedNl = false;
+            if (instr.isBlock && instr.sep.has_value() && !instr.sep->empty() &&
+                !iterResult.empty() && iterResult.back() == '\n')
+            {
+                auto nlCount = std::count(iterResult.begin(), iterResult.end(), '\n');
+                if (nlCount == 1)
+                {
+                    iterResult.pop_back();
+                    strippedNl = true;
+                }
+            }
+
+            if (instr.precededBy.has_value())
+                output(*instr.precededBy);
+
+            output(iterResult);
+
+            if (i + 1 < count)
+            {
+                if (instr.sep.has_value())
+                    output(*instr.sep);
+            }
+            else
+            {
+                if (instr.followedBy.has_value() && count > 0)
+                    output(*instr.followedBy);
+                if (strippedNl)
+                    output("\n");
+            }
+        }
+
+        if (hasPolicy) popPolicy();
         return true;
     }
 
     bool VM::execForAligned(const ForInstr &instr)
     {
-        std::string savedPolicy = activePolicy_;
-        const VMCompiledPolicy *savedPtr = activePolicyPtr_;
-        if (!instr.policy.empty())
+        bool hasPolicy = !instr.policy.empty();
+        if (hasPolicy && !pushPolicy(instr.policy))
+            return false;
+
+        const Slot *listPtr2 = resolveSlot(instr.collection.slotOffset, instr.collection.isOptional, instr.collection.isRecursive);
+        if (listPtr2->kind != SlotKind::List || !listPtr2->payload.list)
         {
-            activePolicy_ = instr.policy;
-            activePolicyPtr_ = findPolicy(instr.policy);
+            if (hasPolicy) popPolicy();
+            return true;
         }
 
-        // Alignment rendering placeholder — driver will supply iteration.
+        const auto &listVec = *listPtr2->payload.list;
+        int elemSize = instr.elementSlotCount;
+        if (elemSize <= 0) elemSize = 1;
+        int count = static_cast<int>(listVec.size()) / elemSize;
 
-        activePolicy_ = savedPolicy;
-        activePolicyPtr_ = savedPtr;
+        // Collect cells for each iteration
+        std::vector<std::vector<std::string>> rows;
+        rows.reserve(static_cast<size_t>(count));
+        for (int i = 0; i < count; ++i)
+        {
+            for (int s = 0; s < elemSize; ++s)
+                slotMut(instr.varSlotOffset + s) = listVec[static_cast<size_t>(i * elemSize + s)];
+            if (instr.enumeratorSlotOffset >= 0)
+                slotMut(instr.enumeratorSlotOffset) = Slot::make_int(static_cast<int64_t>(i));
+
+            rows.push_back(execInstructionsCells(*instr.body));
+            if (hasError())
+            {
+                if (hasPolicy) popPolicy();
+                return false;
+            }
+        }
+
+        // Compute column count and widths
+        size_t numCols = 0;
+        for (const auto &row : rows)
+            numCols = std::max(numCols, row.size());
+
+        std::vector<char> colSpec(numCols, 'l');
+        if (instr.alignSpec.has_value() && !instr.alignSpec->empty())
+        {
+            const std::string &s = *instr.alignSpec;
+            if (s.size() == 1)
+                std::fill(colSpec.begin(), colSpec.end(), s[0]);
+            else
+                for (size_t ci = 0; ci < colSpec.size() && ci < s.size(); ++ci)
+                    colSpec[ci] = s[ci];
+        }
+
+        std::vector<int> colWidth(numCols, 0);
+        for (const auto &row : rows)
+            for (size_t ci = 0; ci < row.size(); ++ci)
+                colWidth[ci] = std::max(colWidth[ci], static_cast<int>(row[ci].size()));
+
+        // Emit padded rows
+        for (int i = 0; i < count; ++i)
+        {
+            const auto &row = rows[static_cast<size_t>(i)];
+            std::string iterResult;
+            for (size_t ci = 0; ci < row.size(); ++ci)
+            {
+                if (ci + 1 < numCols)
+                    iterResult += padCell(row[ci], colWidth[ci], colSpec[ci]);
+                else
+                {
+                    char spec = colSpec[ci];
+                    int pad = colWidth[ci] - static_cast<int>(row[ci].size());
+                    if (pad > 0 && spec != 'l')
+                    {
+                        int left = (spec == 'c') ? pad / 2 : pad;
+                        iterResult += std::string(static_cast<size_t>(left), ' ');
+                    }
+                    iterResult += row[ci];
+                }
+            }
+
+            if (instr.precededBy.has_value())
+                output(*instr.precededBy);
+            output(iterResult);
+            if (i + 1 < count)
+            {
+                if (instr.sep.has_value())
+                    output(*instr.sep);
+            }
+            else if (instr.followedBy.has_value())
+                output(*instr.followedBy);
+        }
+
+        if (hasPolicy) popPolicy();
         return true;
     }
 
@@ -318,11 +518,38 @@ namespace tpp
 
     bool VM::execIf(const IfInstr &instr)
     {
-        // The condition expression must already be resolved to a slot.
-        // This is a framework method — the higher-level driver resolves
-        // the condition before calling.  For now, set an error.
-        error_ = "VM::execIf: requires slot-based condition resolution";
-        return false;
+        int condOff = instr.condExpr.slotOffset;
+        // NOTE: do NOT skip +1 for isOptional here.  The if-condition on an
+        // Optional checks the OptionalFlag (present/absent) at slotOffset,
+        // not the inner value.
+        const Slot *condPtr = derefSlot(condOff);
+        bool cond = false;
+
+        if (instr.negated)
+        {
+            // Negated: true if bool-false or optional-absent or empty
+            if (condPtr->kind == SlotKind::Bool)
+                cond = !condPtr->as_bool();
+            else if (condPtr->kind == SlotKind::OptionalFlag)
+                cond = !condPtr->as_optional_flag();
+            else
+                cond = (condPtr->kind == SlotKind::Empty);
+        }
+        else
+        {
+            if (condPtr->kind == SlotKind::Bool)
+                cond = condPtr->as_bool();
+            else if (condPtr->kind == SlotKind::OptionalFlag)
+                cond = condPtr->as_optional_flag();
+            else
+                cond = (condPtr->kind != SlotKind::Empty);
+        }
+
+        const auto &branch = cond ? *instr.thenBody : *instr.elseBody;
+        if (instr.isBlock)
+            return execBlockBody(branch, instr.insertCol);
+        else
+            return execBody(branch);
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -331,9 +558,130 @@ namespace tpp
 
     bool VM::execSwitch(const SwitchInstr &instr)
     {
-        // The switch expression must already be resolved to a slot.
-        error_ = "VM::execSwitch: requires slot-based expression resolution";
-        return false;
+        bool hasPolicy = !instr.policy.empty();
+        if (hasPolicy && !pushPolicy(instr.policy))
+            return false;
+
+        // The expr slot is a VariantTag (or BoxRef to one)
+        const Slot *tagPtr = resolveSlot(instr.expr.slotOffset, instr.expr.isOptional, instr.expr.isRecursive);
+        if (tagPtr->kind != SlotKind::VariantTag)
+        {
+            if (hasPolicy) popPolicy();
+            return true; // not a variant — silently skip
+        }
+
+        int32_t tag = tagPtr->as_variant_tag();
+
+        for (const auto &c : *instr.cases)
+        {
+            if (c.variantIndex == tag)
+            {
+                // Copy payload slots to bindingSlotOffset
+                if (c.bindingSlotOffset >= 0 && c.payloadSlotCount > 0)
+                {
+                    // Payload slots start after the tag (in the box or inline)
+                    const Slot *payloadStart = tagPtr + 1;
+                    if (c.payloadIsRecursive && payloadStart->kind == SlotKind::BoxRef
+                        && payloadStart->payload.box && !payloadStart->payload.box->empty())
+                    {
+                        // Recursive payload: deref the BoxRef to get unboxed data
+                        const Slot *inner = payloadStart->payload.box->data();
+                        for (int s = 0; s < c.payloadSlotCount; ++s)
+                            slotMut(c.bindingSlotOffset + s) = inner[s];
+                    }
+                    else
+                    {
+                        for (int s = 0; s < c.payloadSlotCount; ++s)
+                            slotMut(c.bindingSlotOffset + s) = payloadStart[s];
+                    }
+                }
+
+                if (instr.isBlock)
+                {
+                    if (!execBlockBody(*c.body, instr.insertCol))
+                    {
+                        if (hasPolicy) popPolicy();
+                        return false;
+                    }
+                }
+                else
+                {
+                    if (!execBody(*c.body))
+                    {
+                        if (hasPolicy) popPolicy();
+                        return false;
+                    }
+                }
+                break;
+            }
+        }
+
+        if (hasPolicy) popPolicy();
+        return true;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Control flow — execCall
+    // ═══════════════════════════════════════════════════════════════════
+
+    bool VM::execCall(const CallInstr &instr)
+    {
+        if (!functions_)
+        {
+            error_ = "VM::execCall: no function table set";
+            return false;
+        }
+        if (instr.functionIndex < 0 ||
+            instr.functionIndex >= static_cast<int>(functions_->size()))
+        {
+            error_ = "VM::execCall: invalid function index for '" + instr.functionName + "'";
+            return false;
+        }
+
+        const FunctionDef &callee = (*functions_)[static_cast<size_t>(instr.functionIndex)];
+
+        // Build callee frame: allocate frameSlotCount slots
+        std::vector<Slot> calleeFrame(static_cast<size_t>(callee.frameSlotCount));
+
+        // Copy argument slots into the callee frame at each param's slotOffset
+        for (size_t i = 0; i < instr.arguments.size() && i < callee.params.size(); ++i)
+        {
+            const auto &argExpr = instr.arguments[i];
+            const auto &param = callee.params[i];
+
+            // Resolve slot, handling recursive (BoxRef) and optional correctly
+            const Slot *src = resolveSlot(argExpr.slotOffset, argExpr.isOptional, argExpr.isRecursive);
+            for (int s = 0; s < param.slotCount; ++s)
+                calleeFrame[static_cast<size_t>(param.slotOffset + s)] = src[s];
+        }
+
+        // Push callee frame
+        pushFrame(calleeFrame);
+
+        // Push callee policy scope if set
+        bool hasPolicy = !callee.policy.empty();
+        if (hasPolicy && !pushPolicy(callee.policy))
+        {
+            popFrame();
+            return false;
+        }
+
+        // Execute callee body into a capture buffer
+        pushCapture();
+        bool ok = execBody(*callee.body);
+        std::string callResult = popCapture();
+
+        if (hasPolicy) popPolicy();
+        popFrame();
+
+        if (!ok) return false;
+
+        // Strip trailing newline from call result (match Rendering.cc behavior)
+        if (!callResult.empty() && callResult.back() == '\n')
+            callResult.pop_back();
+
+        output(callResult);
+        return true;
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -359,8 +707,10 @@ namespace tpp
                     using T = std::decay_t<decltype(arg)>;
                     if constexpr (std::is_same_v<T, EmitInstr>)
                         current += arg.text;
-                    // EmitExprInstr and other types would need slot-based
-                    // resolution from a higher-level driver.
+                    else if constexpr (std::is_same_v<T, EmitExprInstr>)
+                    {
+                        current += resolveSlot(arg.expr.slotOffset, arg.expr.isOptional, arg.expr.isRecursive)->to_string();
+                    }
                 }, instr.value);
             }
         }
@@ -567,6 +917,126 @@ namespace tpp
         for (const auto &pd : ir.policies)
             result.emplace(pd.tag, compilePolicy(pd));
         return result;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Slot → JSON serialization (for emitting complex types)
+    // ═══════════════════════════════════════════════════════════════════
+
+    std::string VM::slotToJsonString(const Slot *base, const TypeKind &type) const
+    {
+        switch (type.value.index())
+        {
+        case 0: // Str
+            return nlohmann::json(base->as_str()).dump();
+        case 1: // Int
+            return std::to_string(base->as_int());
+        case 2: // Bool
+            return base->as_bool() ? "true" : "false";
+        case 3: // Named — struct or enum
+        {
+            const auto &name = std::get<3>(type.value);
+            const Layout *layout = layouts_.find(name);
+            if (!layout) return "null";
+
+            if (layout->isEnum)
+            {
+                int32_t tagIdx = base->as_variant_tag();
+                if (tagIdx < 0 || tagIdx >= static_cast<int32_t>(layout->caseRanges.size()))
+                    return "null";
+                const CaseRange &cr = layout->caseRanges[static_cast<size_t>(tagIdx)];
+                if (!cr.hasPayload)
+                    return nlohmann::json(cr.tag).dump(); // bare tag → "TagName"
+
+                // Payload slots start at base + cr.payloadOffset
+                const Slot *payloadBase = base + cr.payloadOffset;
+                if (cr.isRecursive)
+                {
+                    // Recursive payload is boxed
+                    if (payloadBase->kind == SlotKind::BoxRef && payloadBase->payload.box && !payloadBase->payload.box->empty())
+                        payloadBase = payloadBase->payload.box->data();
+                    else
+                        return "null";
+                }
+                std::string payloadJson = cr.payloadType
+                    ? slotToJsonString(payloadBase, *cr.payloadType)
+                    : "null";
+                return "{" + nlohmann::json(cr.tag).dump() + ":" + payloadJson + "}";
+            }
+            else
+            {
+                // Struct
+                std::string result = "{";
+                bool first = true;
+                for (const auto &fr : layout->fieldRanges)
+                {
+                    if (!first) result += ",";
+                    first = false;
+                    result += nlohmann::json(fr.name).dump() + ":";
+
+                    const Slot *fieldBase = base + fr.offset;
+                    if (fr.isOptional)
+                    {
+                        if (!fieldBase->as_optional_flag())
+                        {
+                            result += "null";
+                            continue;
+                        }
+                        fieldBase += 1; // skip OptionalFlag
+                    }
+                    if (fr.isBox)
+                    {
+                        if (fieldBase->kind == SlotKind::BoxRef && fieldBase->payload.box && !fieldBase->payload.box->empty())
+                            fieldBase = fieldBase->payload.box->data();
+                        else
+                        {
+                            result += "null";
+                            continue;
+                        }
+                    }
+                    if (fr.type)
+                        result += slotToJsonString(fieldBase, *fr.type);
+                    else
+                        result += fieldBase->to_string();
+                }
+                result += "}";
+                return result;
+            }
+        }
+        case 4: // List
+        {
+            const auto &inner = std::get<4>(type.value);
+            if (!inner || base->kind != SlotKind::List || !base->payload.list)
+                return "[]";
+
+            const auto &vec = *base->payload.list;
+            int elemSize = layouts_.slot_size(*inner);
+            if (elemSize <= 0) return "[]";
+            size_t count = vec.size() / static_cast<size_t>(elemSize);
+
+            std::string result = "[";
+            for (size_t i = 0; i < count; ++i)
+            {
+                if (i > 0) result += ",";
+                result += slotToJsonString(&vec[i * static_cast<size_t>(elemSize)], *inner);
+            }
+            result += "]";
+            return result;
+        }
+        case 5: // Optional
+        {
+            const auto &inner = std::get<5>(type.value);
+            if (!inner) return "null";
+            if (base->kind == SlotKind::OptionalFlag)
+            {
+                if (!base->as_optional_flag()) return "null";
+                return slotToJsonString(base + 1, *inner);
+            }
+            return slotToJsonString(base, *inner);
+        }
+        default:
+            return base->to_string();
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════

@@ -309,19 +309,37 @@ END
 // ── Leaf instruction templates ───────────────────────────────────────────────
 
 template emit_emit(e: EmitData)
-@e.sb@ += @e.textLit@;
+{
+    tpp::VM _emitVm(_tppEmptyLayouts());
+    if (!_emitVm.emit(@e.sb@))
+        throw std::runtime_error("tpp render error: " + _emitVm.error());
+    if (!_emitVm.emit(@e.textLit@))
+        throw std::runtime_error("tpp render error: " + _emitVm.error());
+    @e.sb@ = _emitVm.takeOutput();
+}
 END
 
 template emit_emit_expr(e: EmitExprData)
+{
+    tpp::VM _emitVm(_tppEmptyLayouts());
+    std::vector<tpp::Slot> _emitFrame(1);
+    std::string _emitValue = @cpp_expr_to_str(e.expr)@;
 @if e.staticPolicyId@
-{ std::string _pv = @cpp_expr_to_str(e.expr)@; _pv = TppPolicy::@e.staticPolicyId@.apply(_pv); _tppAppendValue(@e.sb@, _pv); }
-@else@
+    _emitValue = TppPolicy::@e.staticPolicyId@.apply(_emitValue);
+@end if@
 @if e.useRuntimePolicy@
-{ std::string _pv = @cpp_expr_to_str(e.expr)@; _pv = _policy.apply(_pv); _tppAppendValue(@e.sb@, _pv); }
-@else@
-_tppAppendValue(@e.sb@, @cpp_expr_to_str(e.expr)@);
+    _emitValue = _policy.apply(_emitValue);
 @end if@
-@end if@
+    if (!_emitVm.emit(@e.sb@))
+        throw std::runtime_error("tpp render error: " + _emitVm.error());
+    _emitFrame[0] = tpp::Slot::make_str(&_emitValue);
+    _emitVm.pushFrame(_emitFrame);
+    bool _ok = _emitVm.emitSlot(0);
+    _emitVm.popFrame();
+    if (!_ok)
+        throw std::runtime_error("tpp render error: " + _emitVm.error());
+    @e.sb@ = _emitVm.takeOutput();
+}
 END
 
 template emit_call(c: CallData)
@@ -390,7 +408,7 @@ template emit_for_inline(f: ForData)
 for (size_t _i@f.scopeId@ = 0; _i@f.scopeId@ < (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@).size(); _i@f.scopeId@++) {
     [[maybe_unused]] const auto& @f.varName@ = (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@)[_i@f.scopeId@];
     @if f.enumeratorName@
-    int @f.enumeratorName@ = (int)_i@f.scopeId@;
+    [[maybe_unused]] int @f.enumeratorName@ = (int)_i@f.scopeId@;
     @end if@
     @if f.precededByLit@
     @f.sb@ += @f.precededByLit@;
@@ -438,13 +456,45 @@ template emit_for_block(f: ForData)
 for (size_t _i@f.scopeId@ = 0; _i@f.scopeId@ < (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@).size(); _i@f.scopeId@++) {
     [[maybe_unused]] const auto& @f.varName@ = (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@)[_i@f.scopeId@];
     @if f.enumeratorName@
-    int @f.enumeratorName@ = (int)_i@f.scopeId@;
+    [[maybe_unused]] int @f.enumeratorName@ = (int)_i@f.scopeId@;
     @end if@
     std::string _blk@f.scopeId@;
     @for instr in f.body@
     @emit_instr(instr)@
     @end for@
-    std::string _iter@f.scopeId@ = _tppBlockIndent(_blk@f.scopeId@, @f.insertCol@);
+    std::string _iter@f.scopeId@;
+    {
+        const std::string& raw = _blk@f.scopeId@;
+        if (!raw.empty()) {
+            std::vector<std::string> parts;
+            size_t pos = 0;
+            while (pos < raw.size()) {
+                auto nl = raw.find('\n', pos);
+                if (nl == std::string::npos) { parts.push_back(raw.substr(pos)); break; }
+                parts.push_back(raw.substr(pos, nl - pos));
+                pos = nl + 1;
+                if (pos == raw.size()) parts.push_back("");
+            }
+            bool trailingNl = !raw.empty() && raw.back() == '\n';
+            int lineCount = trailingNl ? (int)parts.size() - 1 : (int)parts.size();
+            std::string zeroMarker;
+            for (int i = 0; i < lineCount; i++) {
+                size_t ws = parts[(size_t)i].find_first_not_of(" \t");
+                if (ws != std::string::npos) {
+                    zeroMarker = parts[(size_t)i].substr(0, ws);
+                    break;
+                }
+            }
+            std::string indent(@f.insertCol@, ' ');
+            for (int i = 0; i < lineCount; i++) {
+                std::string l = parts[(size_t)i];
+                if (!zeroMarker.empty() && l.substr(0, zeroMarker.size()) == zeroMarker)
+                    l = l.substr(zeroMarker.size());
+                if (!l.empty()) _iter@f.scopeId@ += indent + l;
+                if (i + 1 < lineCount || trailingNl) _iter@f.scopeId@ += '\n';
+            }
+        }
+    }
     @if f.sepLit@
     @emit_for_block_sep(f)@
     @else@
@@ -478,7 +528,7 @@ std::vector<std::vector<std::string>> _rows@f.scopeId@;
 for (size_t _i@f.scopeId@ = 0; _i@f.scopeId@ < (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@).size(); _i@f.scopeId@++) {
     [[maybe_unused]] const auto& @f.varName@ = (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@)[_i@f.scopeId@];
     @if f.enumeratorName@
-    int @f.enumeratorName@ = (int)_i@f.scopeId@;
+    [[maybe_unused]] int @f.enumeratorName@ = (int)_i@f.scopeId@;
     @end if@
     std::vector<std::string> _row@f.scopeId@(@f.numCols@);
     @for cell in f.cells@
@@ -503,7 +553,19 @@ for (size_t _i@f.scopeId@ = 0; _i@f.scopeId@ < _rows@f.scopeId@.size(); _i@f.sco
     std::string _line@f.scopeId@;
     for (int _c = 0; _c < (int)_r.size(); _c++) {
         if (_c + 1 < @f.numCols@) {
-            _line@f.scopeId@ += _tppPadCell(_r[_c], _cw@f.scopeId@[_c], _spec@f.scopeId@[_c]);
+            {
+                const std::string& _s = _r[_c];
+                int _w = _cw@f.scopeId@[_c];
+                char _sp = _spec@f.scopeId@[_c];
+                if ((int)_s.size() >= _w) {
+                    _line@f.scopeId@ += _s;
+                } else {
+                    int _pad = _w - (int)_s.size();
+                    if (_sp == 'r') _line@f.scopeId@ += std::string((size_t)_pad, ' ') + _s;
+                    else if (_sp == 'c') { int _left = _pad / 2; _line@f.scopeId@ += std::string((size_t)_left, ' ') + _s + std::string((size_t)(_pad - _left), ' '); }
+                    else _line@f.scopeId@ += _s + std::string((size_t)_pad, ' ');
+                }
+            }
         } else {
             char _sp = _spec@f.scopeId@[_c]; int _pd = _cw@f.scopeId@[_c] - (int)_r[_c].size();
             if (_pd > 0 && _sp != 'l') { int _left = (_sp == 'c') ? _pd / 2 : _pd; _line@f.scopeId@ += std::string(_left, ' '); }
@@ -566,14 +628,80 @@ if (@i.condPath@) {
     @for instr in i.thenBody@
     @emit_instr(instr)@
     @end for@
-    @i.sb@ += _tppBlockIndent(_blk@i.thenScopeId@, @i.insertCol@);
+    {
+        const std::string& raw = _blk@i.thenScopeId@;
+        std::string _indented;
+        if (!raw.empty()) {
+            std::vector<std::string> parts;
+            size_t pos = 0;
+            while (pos < raw.size()) {
+                auto nl = raw.find('\n', pos);
+                if (nl == std::string::npos) { parts.push_back(raw.substr(pos)); break; }
+                parts.push_back(raw.substr(pos, nl - pos));
+                pos = nl + 1;
+                if (pos == raw.size()) parts.push_back("");
+            }
+            bool trailingNl = !raw.empty() && raw.back() == '\n';
+            int lineCount = trailingNl ? (int)parts.size() - 1 : (int)parts.size();
+            std::string zeroMarker;
+            for (int i = 0; i < lineCount; i++) {
+                size_t ws = parts[(size_t)i].find_first_not_of(" \t");
+                if (ws != std::string::npos) {
+                    zeroMarker = parts[(size_t)i].substr(0, ws);
+                    break;
+                }
+            }
+            std::string indent(@i.insertCol@, ' ');
+            for (int i = 0; i < lineCount; i++) {
+                std::string l = parts[(size_t)i];
+                if (!zeroMarker.empty() && l.substr(0, zeroMarker.size()) == zeroMarker)
+                    l = l.substr(zeroMarker.size());
+                if (!l.empty()) _indented += indent + l;
+                if (i + 1 < lineCount || trailingNl) _indented += '\n';
+            }
+        }
+        @i.sb@ += _indented;
+    }
 @if i.elseBody@
 } else {
     std::string _blk@i.elseScopeId@;
     @for instr in i.elseBody@
     @emit_instr(instr)@
     @end for@
-    @i.sb@ += _tppBlockIndent(_blk@i.elseScopeId@, @i.insertCol@);
+    {
+        const std::string& raw = _blk@i.elseScopeId@;
+        std::string _indented;
+        if (!raw.empty()) {
+            std::vector<std::string> parts;
+            size_t pos = 0;
+            while (pos < raw.size()) {
+                auto nl = raw.find('\n', pos);
+                if (nl == std::string::npos) { parts.push_back(raw.substr(pos)); break; }
+                parts.push_back(raw.substr(pos, nl - pos));
+                pos = nl + 1;
+                if (pos == raw.size()) parts.push_back("");
+            }
+            bool trailingNl = !raw.empty() && raw.back() == '\n';
+            int lineCount = trailingNl ? (int)parts.size() - 1 : (int)parts.size();
+            std::string zeroMarker;
+            for (int i = 0; i < lineCount; i++) {
+                size_t ws = parts[(size_t)i].find_first_not_of(" \t");
+                if (ws != std::string::npos) {
+                    zeroMarker = parts[(size_t)i].substr(0, ws);
+                    break;
+                }
+            }
+            std::string indent(@i.insertCol@, ' ');
+            for (int i = 0; i < lineCount; i++) {
+                std::string l = parts[(size_t)i];
+                if (!zeroMarker.empty() && l.substr(0, zeroMarker.size()) == zeroMarker)
+                    l = l.substr(zeroMarker.size());
+                if (!l.empty()) _indented += indent + l;
+                if (i + 1 < lineCount || trailingNl) _indented += '\n';
+            }
+        }
+        @i.sb@ += _indented;
+    }
 @end if@
 }
 END
@@ -587,7 +715,40 @@ std::string _blk@c.scopeId@;
 @emit_instr(instr)@
 @end for@
 @end if@
-@s.sb@ += _tppBlockIndent(_blk@c.scopeId@, @s.insertCol@);
+{
+    const std::string& raw = _blk@c.scopeId@;
+    std::string _indented;
+    if (!raw.empty()) {
+        std::vector<std::string> parts;
+        size_t pos = 0;
+        while (pos < raw.size()) {
+            auto nl = raw.find('\n', pos);
+            if (nl == std::string::npos) { parts.push_back(raw.substr(pos)); break; }
+            parts.push_back(raw.substr(pos, nl - pos));
+            pos = nl + 1;
+            if (pos == raw.size()) parts.push_back("");
+        }
+        bool trailingNl = !raw.empty() && raw.back() == '\n';
+        int lineCount = trailingNl ? (int)parts.size() - 1 : (int)parts.size();
+        std::string zeroMarker;
+        for (int i = 0; i < lineCount; i++) {
+            size_t ws = parts[(size_t)i].find_first_not_of(" \t");
+            if (ws != std::string::npos) {
+                zeroMarker = parts[(size_t)i].substr(0, ws);
+                break;
+            }
+        }
+        std::string indent(@s.insertCol@, ' ');
+        for (int i = 0; i < lineCount; i++) {
+            std::string l = parts[(size_t)i];
+            if (!zeroMarker.empty() && l.substr(0, zeroMarker.size()) == zeroMarker)
+                l = l.substr(zeroMarker.size());
+            if (!l.empty()) _indented += indent + l;
+            if (i + 1 < lineCount || trailingNl) _indented += '\n';
+        }
+    }
+    @s.sb@ += _indented;
+}
 END
 
 template emit_switch(s: SwitchData)
@@ -773,6 +934,7 @@ template render_cpp_runtime(ctx: RenderFunctionsInput)
 #include <vector>
 #include <optional>
 #include <regex>
+#include <tpp/VM.h>
 #include <stdexcept>
 @if ctx.namespaceName@
 namespace @ctx.namespaceName@ {
@@ -796,41 +958,39 @@ template render_cpp_native_implementation(ctx: RenderFunctionsInput)
 #include "@inc@"
 @end for@
 @end if@
+#include <tpp/ArgType.h>
+#include <tpp/VM.h>
 #include <string>
 #include <vector>
 #include <optional>
-#include <variant>
 #include <algorithm>
-@if ctx.policies@
 #include <regex>
 #include <stdexcept>
-@end if@
 @if ctx.namespaceName@
 namespace @ctx.namespaceName@ {
 @end if@
-@if not ctx.externalRuntime@
 
-@emit_runtime_helpers(ctx)@
+namespace {
+const tpp::LayoutTable& _tppEmptyLayouts() {
+    static const tpp::LayoutTable layouts{};
+    return layouts;
+}
+} // anonymous namespace
+
 @if ctx.policies@
 
 @emit_policies(ctx)@
 @end if@
-@end if@
-@for fn in ctx.functions@
 @if ctx.policies@
-@ctx.staticModifier@std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", " followedBy=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@const TppPolicy& _policy);
-@ctx.staticModifier@std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@);
-@else@
-@ctx.staticModifier@std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@);
-@end if@
+@for fn in ctx.functions@
+static std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@, const TppPolicy& _policy);
 @end for@
+
+@end if@
 @for fn in ctx.functions@
 
 @if ctx.policies@
-@ctx.staticModifier@std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", " followedBy=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@const TppPolicy& _policy) {
-@else@
-@ctx.staticModifier@std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@) {
-@end if@
+static std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@, const TppPolicy& _policy) {
     std::string _sb;
     @for instr in fn.body@
     @emit_instr(instr)@
@@ -839,10 +999,19 @@ namespace @ctx.namespaceName@ {
         _sb.pop_back();
     return _sb;
 }
-@if ctx.policies@
 
 @ctx.staticModifier@std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@) {
-    return @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", " followedBy=", "@@param.name@@end for@TppPolicy::pure);
+    return @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@@param.name@@end for@, TppPolicy::pure);
+}
+@else@
+@ctx.staticModifier@std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@) {
+    std::string _sb;
+    @for instr in fn.body@
+    @emit_instr(instr)@
+    @end for@
+    if (!_sb.empty() && _sb.back() == '\n')
+        _sb.pop_back();
+    return _sb;
 }
 @end if@
 @end for@

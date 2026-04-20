@@ -39,6 +39,13 @@ namespace tpp
         std::vector<Slot> load_typed(const TypeKind &tk,
                                      const nlohmann::json &json);
 
+        /// Load a JSON value into a frame at the given offset using type info.
+        void load_field(std::vector<Slot> &frame,
+                        int offset,
+                        const TypeKind &tk,
+                        bool isRecursive,
+                        const nlohmann::json &json);
+
       private:
         const LayoutTable &layouts_;
 
@@ -53,12 +60,6 @@ namespace tpp
         void load_enum(std::vector<Slot> &frame,
                        const Layout &layout,
                        const nlohmann::json &json);
-
-        void load_field(std::vector<Slot> &frame,
-                        int offset,
-                        const TypeKind &tk,
-                        bool isRecursive,
-                        const nlohmann::json &json);
 
         void load_scalar(std::vector<Slot> &frame,
                          int offset,

@@ -162,6 +162,7 @@ namespace tpp::compiler
         expr.type = std::make_unique<tpp::TypeKind>(tpp::to_public_type(type));
         expr.isRecursive = isRecursive;
         expr.isOptional = isOptional;
+        expr.slotOffset = 0;
         return expr;
     }
 
@@ -297,6 +298,9 @@ namespace tpp::compiler
         {
             tpp::CaseInstr caseInstr;
             caseInstr.tag = variant.tag;
+            caseInstr.variantIndex = 0;
+            caseInstr.payloadSlotCount = 0;
+            caseInstr.bindingSlotOffset = -1;
 
             std::vector<ResolvedCallArgument> callArguments;
             if (wholeEnumArgument.has_value())
@@ -374,6 +378,9 @@ namespace tpp::compiler
             forInstr->isBlock = false;
             forInstr->insertCol = 0;
             forInstr->policy = node.policy;
+            forInstr->elementSlotCount = 0;
+            forInstr->varSlotOffset = 0;
+            forInstr->enumeratorSlotOffset = -1;
             out.push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<3>, std::move(forInstr)}});
             return out;
         }
@@ -478,6 +485,9 @@ namespace tpp::compiler
                     forInstr->insertCol = arg->insertCol;
                     forInstr->policy = arg->policy;
                     forInstr->alignSpec = arg->alignSpec;
+                    forInstr->elementSlotCount = 0;
+                    forInstr->varSlotOffset = 0;
+                    forInstr->enumeratorSlotOffset = -1;
                     out.push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<3>, std::move(forInstr)}});
                 }
                 else if constexpr (std::is_same_v<T, std::shared_ptr<IfNode>>)
@@ -511,6 +521,9 @@ namespace tpp::compiler
                             tpp::CaseInstr caseInstr;
                             caseInstr.tag = variant.tag;
                             caseInstr.payloadIsRecursive = variant.recursive && variant.payload.has_value();
+                            caseInstr.variantIndex = 0;
+                            caseInstr.payloadSlotCount = 0;
+                            caseInstr.bindingSlotOffset = -1;
                             if (variant.payload.has_value())
                                 caseInstr.payloadType = std::make_unique<tpp::TypeKind>(tpp::to_public_type(*variant.payload));
 
@@ -632,12 +645,15 @@ namespace tpp::compiler
                 tpp::ParamDef paramDef;
                 paramDef.name = param.name;
                 paramDef.type = std::make_unique<tpp::TypeKind>(tpp::to_public_type(param.type));
+                paramDef.slotOffset = 0;
+                paramDef.slotCount = 0;
                 functionDef.params.push_back(std::move(paramDef));
             }
             functionDef.body = std::make_unique<std::vector<tpp::Instruction>>(lowerPublicNodes(fn.body, env, functions, syntheticCounter));
             functionDef.policy = fn.policy;
             functionDef.doc = fn.doc;
             functionDef.sourceRange = tpp::to_public_range(fn.sourceRange, includeSourceRanges);
+            functionDef.frameSlotCount = 0;
 
             out.push_back(std::move(functionDef));
         }
