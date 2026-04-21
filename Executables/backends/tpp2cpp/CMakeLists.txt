@@ -22,7 +22,9 @@ add_custom_command(OUTPUT "${_tpp2cpp_ir}"
         -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
     DEPENDS tpp
             ${SHARED_TYPES}
-            ${CMAKE_CURRENT_SOURCE_DIR}/defs.tpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/types.tpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/functions-header.tpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/functions-impl.tpp
             ${CMAKE_CURRENT_SOURCE_DIR}/tpp-config.json
     COMMENT "tpp defs (tpp2cpp)"
     VERBATIM)

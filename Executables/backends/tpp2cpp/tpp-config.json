@@ -1,6 +1,8 @@
 {
     "templates": [
-        "defs.tpp"
+        "types.tpp",
+        "functions-header.tpp",
+        "functions-impl.tpp"
     ],
     "types": [
         "../../../Libraries/lib_tpp/ir.tpp.types",

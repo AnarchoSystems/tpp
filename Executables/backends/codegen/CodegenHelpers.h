@@ -460,10 +460,9 @@ inline RenderInstruction convertInstruction(
                 auto cellsVec = std::make_unique<std::vector<AlignCellInfo>>();
                 for (int ci = 0; ci < (int)cellGroups.size(); ++ci)
                 {
-                    std::string cellSb = "_cell" + std::to_string(s) + "_" + std::to_string(ci);
                     auto cellBody = std::make_unique<std::vector<RenderInstruction>>();
                     for (const auto *bi : cellGroups[ci])
-                        cellBody->push_back(convertInstruction(*bi, cellSb, pol, scope, ir, cfg));
+                        cellBody->push_back(convertInstruction(*bi, sb, pol, scope, ir, cfg));
                     cellsVec->push_back({ci, std::move(cellBody)});
                 }
                 forData->cells = std::move(cellsVec);
@@ -475,10 +474,9 @@ inline RenderInstruction convertInstruction(
             }
             else
             {
-                std::string bodySb = arg->isBlock ? ("_blk" + std::to_string(s)) : sb;
                 auto bodyVec = std::make_unique<std::vector<RenderInstruction>>();
                 for (const auto &bi : *arg->body)
-                    bodyVec->push_back(convertInstruction(bi, bodySb, pol, scope, ir, cfg));
+                    bodyVec->push_back(convertInstruction(bi, sb, pol, scope, ir, cfg));
                 forData->body = std::move(bodyVec);
                 forData->numCols = 0;
             }
@@ -490,16 +488,13 @@ inline RenderInstruction convertInstruction(
         else if constexpr (std::is_same_v<T, std::unique_ptr<tpp::IfInstr>>)
         {
             int thenScopeId = 0, elseScopeId = 0;
-            std::string thenSb = sb, elseSb = sb;
             bool elseBodyPresent = !arg->elseBody->empty();
             if (arg->isBlock)
             {
                 thenScopeId = scope++;
-                thenSb = "_blk" + std::to_string(thenScopeId);
                 if (elseBodyPresent)
                 {
                     elseScopeId = scope++;
-                    elseSb = "_blk" + std::to_string(elseScopeId);
                 }
             }
 
@@ -515,14 +510,14 @@ inline RenderInstruction convertInstruction(
 
             auto thenVec = std::make_unique<std::vector<RenderInstruction>>();
             for (const auto &ti : *arg->thenBody)
-                thenVec->push_back(convertInstruction(ti, thenSb, activePolicy, scope, ir, cfg));
+                thenVec->push_back(convertInstruction(ti, sb, activePolicy, scope, ir, cfg));
             ifData->thenBody = std::move(thenVec);
 
             if (elseBodyPresent)
             {
                 auto elseVec = std::make_unique<std::vector<RenderInstruction>>();
                 for (const auto &ei : *arg->elseBody)
-                    elseVec->push_back(convertInstruction(ei, elseSb, activePolicy, scope, ir, cfg));
+                    elseVec->push_back(convertInstruction(ei, sb, activePolicy, scope, ir, cfg));
                 ifData->elseBody = std::move(elseVec);
             }
 
@@ -554,16 +549,14 @@ inline RenderInstruction convertInstruction(
             for (const auto &c : *arg->cases)
             {
                 int caseScopeId = 0;
-                std::string caseSb = sb;
                 if (arg->isBlock)
                 {
                     caseScopeId = scope++;
-                    caseSb = "_blk" + std::to_string(caseScopeId);
                 }
 
                 auto caseBody = std::make_unique<std::vector<RenderInstruction>>();
                 for (const auto &bi : *c.body)
-                    caseBody->push_back(convertInstruction(bi, caseSb, pol, scope, ir, cfg));
+                    caseBody->push_back(convertInstruction(bi, sb, pol, scope, ir, cfg));
 
                 int variantIndex = -1;
                 if (enumDef)

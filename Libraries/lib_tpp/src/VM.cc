@@ -30,7 +30,7 @@ namespace tpp
     // Output helpers
     // ═══════════════════════════════════════════════════════════════════
 
-    void VM::output(const std::string &text)
+    void VM::output(std::string_view text)
     {
         outputStack_.back() += text;
     }
@@ -52,11 +52,26 @@ namespace tpp
         return captured;
     }
 
+    void VM::beginCapture()
+    {
+        pushCapture();
+    }
+
+    std::string VM::endCapture()
+    {
+        return popCapture();
+    }
+
+    std::string VM::endBlockCapture(int insertCol)
+    {
+        return blockIndent(popCapture(), insertCol);
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // Literal output
     // ═══════════════════════════════════════════════════════════════════
 
-    bool VM::emit(const std::string &text)
+    bool VM::emit(std::string_view text)
     {
         output(text);
         return true;
@@ -87,6 +102,38 @@ namespace tpp
 
         emitWithMultilineIndent(str);
         return true;
+    }
+
+    bool VM::emitValue(const std::string &value)
+    {
+        emitWithMultilineIndent(value);
+        return true;
+    }
+
+    bool VM::emitValue(std::string value, const TppPolicy &policy)
+    {
+        try
+        {
+            value = policy.apply(value);
+        }
+        catch (const std::exception &e)
+        {
+            error_ = e.what();
+            return false;
+        }
+        catch (...)
+        {
+            error_ = "emitValue: policy application failed";
+            return false;
+        }
+
+        emitWithMultilineIndent(value);
+        return true;
+    }
+
+    bool VM::emitOptionalText(const std::optional<std::string_view> &text)
+    {
+        return !text.has_value() || emit(*text);
     }
 
     void VM::emitWithMultilineIndent(const std::string &text)
@@ -478,23 +525,7 @@ namespace tpp
         for (int i = 0; i < count; ++i)
         {
             const auto &row = rows[static_cast<size_t>(i)];
-            std::string iterResult;
-            for (size_t ci = 0; ci < row.size(); ++ci)
-            {
-                if (ci + 1 < numCols)
-                    iterResult += padCell(row[ci], colWidth[ci], colSpec[ci]);
-                else
-                {
-                    char spec = colSpec[ci];
-                    int pad = colWidth[ci] - static_cast<int>(row[ci].size());
-                    if (pad > 0 && spec != 'l')
-                    {
-                        int left = (spec == 'c') ? pad / 2 : pad;
-                        iterResult += std::string(static_cast<size_t>(left), ' ');
-                    }
-                    iterResult += row[ci];
-                }
-            }
+            std::string iterResult = renderAlignedRow(row, colWidth, colSpec, numCols);
 
             if (instr.precededBy.has_value())
                 output(*instr.precededBy);
@@ -736,6 +767,205 @@ namespace tpp
         return s + std::string(static_cast<size_t>(pad), ' ');
     }
 
+    void VM::beginForEach(size_t size)
+    {
+        ForEachState state;
+        state.size = size;
+        forEachStack_.push_back(std::move(state));
+    }
+
+    bool VM::nextForEach()
+    {
+        if (forEachStack_.empty())
+        {
+            error_ = "nextForEach: no active for-each session";
+            return false;
+        }
+
+        auto &state = forEachStack_.back();
+        if (!state.started)
+        {
+            state.started = true;
+            state.index = 0;
+            return state.size > 0;
+        }
+
+        if (state.index + 1 >= state.size)
+            return false;
+
+        ++state.index;
+        return true;
+    }
+
+    size_t VM::forEachIndex() const
+    {
+        return forEachStack_.back().index;
+    }
+
+    bool VM::forEachHasNext() const
+    {
+        const auto &state = forEachStack_.back();
+        return state.started && (state.index + 1 < state.size);
+    }
+
+    int VM::forEachEnumerator() const
+    {
+        return static_cast<int>(forEachStack_.back().index);
+    }
+
+    void VM::endForEach()
+    {
+        if (forEachStack_.empty())
+        {
+            error_ = "endForEach: no active for-each session";
+            return;
+        }
+        forEachStack_.pop_back();
+    }
+
+    void VM::beginFor(size_t numCols,
+                      const std::vector<char> &alignSpecChars,
+                      bool singleAlignChar,
+                      size_t rowReserve)
+    {
+        ForState state;
+        state.numCols = numCols;
+        state.colWidth.assign(numCols, 0);
+        state.colSpec.assign(numCols, 'l');
+        state.currentRow.assign(numCols, std::string{});
+        if (rowReserve > 0)
+            state.rows.reserve(rowReserve);
+
+        if (!alignSpecChars.empty())
+        {
+            if (singleAlignChar)
+            {
+                std::fill(state.colSpec.begin(), state.colSpec.end(), alignSpecChars.front());
+            }
+            else
+            {
+                for (size_t i = 0; i < numCols && i < alignSpecChars.size(); ++i)
+                    state.colSpec[i] = alignSpecChars[i];
+            }
+        }
+
+        forStack_.push_back(std::move(state));
+    }
+
+    VM::ForState &VM::activeForState()
+    {
+        return forStack_.back();
+    }
+
+    const VM::ForState &VM::activeForState() const
+    {
+        return forStack_.back();
+    }
+
+    bool VM::startAlignedRow()
+    {
+        if (forStack_.empty())
+        {
+            error_ = "startAlignedRow: no active aligned-for session";
+            return false;
+        }
+
+        auto &state = activeForState();
+        state.currentRow.assign(state.numCols, std::string{});
+        state.rowOpen = true;
+        return true;
+    }
+
+    bool VM::finishAlignedRow()
+    {
+        if (forStack_.empty())
+        {
+            error_ = "finishAlignedRow: no active aligned-for session";
+            return false;
+        }
+
+        auto &state = activeForState();
+        if (!state.rowOpen)
+        {
+            error_ = "finishAlignedRow: no active row";
+            return false;
+        }
+
+        exec(state.currentRow);
+        state.currentRow.assign(state.numCols, std::string{});
+        state.rowOpen = false;
+        return true;
+    }
+
+    void VM::abortAlignedRow()
+    {
+        if (forStack_.empty())
+            return;
+
+        auto &state = activeForState();
+        state.currentRow.assign(state.numCols, std::string{});
+        state.rowOpen = false;
+    }
+
+    void VM::exec(const std::vector<std::string> &row)
+    {
+        auto &state = forStack_.back();
+        for (size_t ci = 0; ci < row.size() && ci < state.colWidth.size(); ++ci)
+            state.colWidth[ci] = std::max(state.colWidth[ci], static_cast<int>(row[ci].size()));
+        state.rows.push_back(row);
+    }
+
+    std::string VM::endFor(size_t rowIndex) const
+    {
+        const auto &state = forStack_.back();
+        if (rowIndex >= state.rows.size())
+            return "";
+        return renderAlignedRow(state.rows[rowIndex], state.colWidth, state.colSpec, state.numCols);
+    }
+
+    size_t VM::forSize() const
+    {
+        return forStack_.back().rows.size();
+    }
+
+    void VM::finishFor()
+    {
+        if (forStack_.empty())
+        {
+            error_ = "finishFor: no active aligned-for session";
+            return;
+        }
+        abortAlignedRow();
+        forStack_.pop_back();
+    }
+
+    std::string VM::renderAlignedRow(const std::vector<std::string> &row,
+                                     const std::vector<int> &colWidth,
+                                     const std::vector<char> &colSpec,
+                                     size_t numCols)
+    {
+        std::string line;
+        for (size_t ci = 0; ci < row.size(); ++ci)
+        {
+            if (ci + 1 < numCols)
+            {
+                line += padCell(row[ci], colWidth[ci], colSpec[ci]);
+            }
+            else
+            {
+                char spec = colSpec[ci];
+                int pad = colWidth[ci] - static_cast<int>(row[ci].size());
+                if (pad > 0 && spec != 'l')
+                {
+                    int left = (spec == 'c') ? pad / 2 : pad;
+                    line += std::string(static_cast<size_t>(left), ' ');
+                }
+                line += row[ci];
+            }
+        }
+        return line;
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // Block indentation
     // ═══════════════════════════════════════════════════════════════════
@@ -794,6 +1024,18 @@ namespace tpp
         }
 
         return result;
+    }
+
+    bool VM::stripSingleTrailingNewline(std::string &text)
+    {
+        if (text.empty() || text.back() != '\n')
+            return false;
+
+        if (std::count(text.begin(), text.end(), '\n') != 1)
+            return false;
+
+        text.pop_back();
+        return true;
     }
 
     // ═══════════════════════════════════════════════════════════════════

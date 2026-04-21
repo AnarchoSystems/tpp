@@ -1,0 +1,425 @@
+// ═══════════════════════════════════════════════════════════════════════════════
+// Instruction IR → C++ rendering functions (native code generation)
+// ═══════════════════════════════════════════════════════════════════════════════
+// ── Expression → C++ String expression ───────────────────────────────────────
+
+template cpp_value_path(path: string, isRecursive: bool, isOptional: bool)
+@if isRecursive@*@path@@else@@if isOptional@*@path@@else@@path@@end if@@end if@
+END
+
+template cpp_optional_to_str(expr: RenderExprInfo, inner: RenderTypeKind)
+@switch inner@
+@case Str@
+@if expr.isRecursive@(@expr.path@ ? *@expr.path@ : std::string{})@else@(@expr.path@.has_value() ? *@expr.path@ : std::string{})@end if@@end case@
+@case Int@
+@if expr.isRecursive@(@expr.path@ ? std::to_string(*@expr.path@) : std::string{})@else@(@expr.path@.has_value() ? std::to_string(*@expr.path@) : std::string{})@end if@@end case@
+@case Bool@
+@if expr.isRecursive@(@expr.path@ ? (*@expr.path@ ? "true" : "false") : std::string{})@else@(@expr.path@.has_value() ? (*@expr.path@ ? "true" : "false") : std::string{})@end if@@end case@
+@case Named(n)@
+@if expr.isRecursive@(@expr.path@ ? std::to_string(*@expr.path@) : std::string{})@else@(@expr.path@.has_value() ? std::to_string(*@expr.path@) : std::string{})@end if@@end case@
+@case List(e)@
+@if expr.isRecursive@(@expr.path@ ? std::to_string(*@expr.path@) : std::string{})@else@(@expr.path@.has_value() ? std::to_string(*@expr.path@) : std::string{})@end if@@end case@
+@case Optional(i)@
+@if expr.isRecursive@(@expr.path@ ? std::to_string(*@expr.path@) : std::string{})@else@(@expr.path@.has_value() ? std::to_string(*@expr.path@) : std::string{})@end if@@end case@
+@end switch@
+END
+
+template cpp_expr_to_str(expr: RenderExprInfo)
+@switch expr.type@
+@case Str@
+@cpp_value_path(expr.path, expr.isRecursive, expr.isOptional)@@end case@
+@case Int@
+std::to_string(@cpp_value_path(expr.path, expr.isRecursive, expr.isOptional)@)@end case@
+@case Bool@
+(@cpp_value_path(expr.path, expr.isRecursive, expr.isOptional)@ ? "true" : "false")@end case@
+@case Named(n)@
+std::to_string(@cpp_value_path(expr.path, expr.isRecursive, expr.isOptional)@)@end case@
+@case List(e)@
+std::to_string(@cpp_value_path(expr.path, expr.isRecursive, expr.isOptional)@)@end case@
+@case Optional(inner)@
+@cpp_optional_to_str(expr, inner)@@end case@
+@end switch@
+END
+
+// ── Leaf instruction templates ───────────────────────────────────────────────
+
+template emit_emit(e: EmitData)
+{
+    if (!@e.sb@.emit(@e.textLit@))
+        throw std::runtime_error("tpp render error: " + @e.sb@.error());
+}
+END
+
+template emit_emit_expr(e: EmitExprData)
+{
+@if e.staticPolicyId@
+    if (!@e.sb@.emitValue(@cpp_expr_to_str(e.expr)@, _tppPolicy_@e.staticPolicyId@))
+        throw std::runtime_error("tpp render error: " + @e.sb@.error());
+@else@
+@if e.useRuntimePolicy@
+    if (!@e.sb@.emitValue(@cpp_expr_to_str(e.expr)@, _policy))
+        throw std::runtime_error("tpp render error: " + @e.sb@.error());
+@else@
+    if (!@e.sb@.emitValue(@cpp_expr_to_str(e.expr)@))
+        throw std::runtime_error("tpp render error: " + @e.sb@.error());
+@end if@
+@end if@
+}
+END
+
+template emit_call(c: CallData)
+@if c.policyArg@
+if (!@c.sb@.emit(@c.functionName@(@for arg in c.args | sep=", " followedBy=", "@@cpp_call_arg(arg)@@end for@@cpp_policy_ref(c.policyArg)@)))
+    throw std::runtime_error("tpp render error: " + @c.sb@.error());
+@else@
+if (!@c.sb@.emit(@c.functionName@(@for arg in c.args | sep=", "@@cpp_call_arg(arg)@@end for@)))
+    throw std::runtime_error("tpp render error: " + @c.sb@.error());
+@end if@
+END
+
+template cpp_call_arg(arg: CallArgInfo)
+@cpp_value_path(arg.path, arg.isRecursive, arg.isOptional)@
+END
+
+template cpp_policy_ref(ref: PolicyRef)
+@switch ref@@case Named(tag)@_tppPolicy_@tag@@end case@@case Pure@_tppPolicyPure@end case@@case Runtime@_policy@end case@@end switch@
+END
+
+template cpp_inline_loop_options(f: ForData)
+tpp::VM::NativeLoopOptions{
+    @if f.precededByLit@std::optional<std::string_view>{@f.precededByLit@}@else@std::nullopt@end if@,
+    @if f.sepLit@std::optional<std::string_view>{@f.sepLit@}@else@std::nullopt@end if@,
+    @if f.followedByLit@std::optional<std::string_view>{@f.followedByLit@}@else@std::nullopt@end if@,
+    false
+}
+END
+
+template cpp_block_loop_options(f: ForData)
+tpp::VM::NativeLoopOptions{
+    @if f.precededByLit@std::optional<std::string_view>{@f.precededByLit@}@else@std::nullopt@end if@,
+    @if f.sepLit@std::optional<std::string_view>{@f.sepLit@}@else@std::nullopt@end if@,
+    @if f.followedByLit@std::optional<std::string_view>{@f.followedByLit@}@else@std::nullopt@end if@,
+    @if f.sepLit@true@else@false@end if@
+}
+END
+
+// ── Recursive instruction dispatcher (block-style switch — avoids bug) ───────
+
+template emit_instr(instr: RenderInstruction)
+@switch instr@
+@case Emit(e)@
+@emit_emit(e)@
+@end case@
+@case EmitExpr(e)@
+@emit_emit_expr(e)@
+@end case@
+@case AlignCell@
+@end case@
+@case For(f)@
+@emit_for(f)@
+@end case@
+@case If(i)@
+@emit_if(i)@
+@end case@
+@case Switch(s)@
+@emit_switch(s)@
+@end case@
+@case Call(c)@
+@emit_call(c)@
+@end case@
+@end switch@
+END
+
+// ── For loop ─────────────────────────────────────────────────────────────────
+
+template cpp_type(t: RenderTypeKind)
+@switch t@@case Str@std::string@end case@@case Int@int@end case@@case Bool@bool@end case@@case Named(n)@@n@@end case@@case List(e)@std::vector<@cpp_type(e)@>@end case@@case Optional(inner)@std::optional<@cpp_type(inner)@>@end case@@end switch@
+END
+
+template emit_for(f: ForData)
+@if f.cells@
+@emit_aligned_for(f)@
+@else@
+@if f.isBlock@
+@emit_for_block(f)@
+@else@
+@emit_for_inline(f)@
+@end if@
+@end if@
+END
+
+template emit_for_inline(f: ForData)
+@if f.body@
+const auto& _coll@f.scopeId@ = (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@);
+if (!@f.sb@.emitForEach(
+        _coll@f.scopeId@,
+    @cpp_inline_loop_options(f)@,
+        [&](const auto& @f.varName@, int _tppEnumerator@f.scopeId@) {
+            @if f.enumeratorName@
+            [[maybe_unused]] int @f.enumeratorName@ = _tppEnumerator@f.scopeId@;
+            @end if@
+            @for instr in f.body@
+            @emit_instr(instr)@
+            @end for@
+        }))
+    throw std::runtime_error("tpp render error: " + @f.sb@.error());
+@end if@
+END
+
+template emit_for_block(f: ForData)
+@if f.body@
+const auto& _coll@f.scopeId@ = (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@);
+if (!@f.sb@.emitBlockForEach(
+        _coll@f.scopeId@,
+        @f.insertCol@,
+    @cpp_block_loop_options(f)@,
+        [&](const auto& @f.varName@, int _tppEnumerator@f.scopeId@) {
+            @if f.enumeratorName@
+            [[maybe_unused]] int @f.enumeratorName@ = _tppEnumerator@f.scopeId@;
+            @end if@
+            @for instr in f.body@
+            @emit_instr(instr)@
+            @end for@
+        }))
+    throw std::runtime_error("tpp render error: " + @f.sb@.error());
+@end if@
+END
+
+// ── Aligned for ──────────────────────────────────────────────────────────────
+
+template emit_align_cell(scopeId: int, cell: AlignCellInfo, sb: string)
+{
+    if (!@sb@.captureAlignedCell(@cell.cellIndex@, [&]() {
+            @for instr in cell.body@
+            @emit_instr(instr)@
+            @end for@
+        }))
+        throw std::runtime_error("tpp render error: " + @sb@.error());
+}
+END
+
+template emit_aligned_for(f: ForData)
+@if f.cells@
+const auto& _coll@f.scopeId@ = (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@);
+if (!@f.sb@.emitAlignedForEach(
+        _coll@f.scopeId@,
+        @f.numCols@,
+        std::vector<char>{ @for ch in f.alignSpecChars | sep=", "@'@ch@'@end for@ },
+        @if f.singleAlignChar@true@else@false@end if@,
+    @cpp_inline_loop_options(f)@,
+        [&](const auto& @f.varName@, int _tppEnumerator@f.scopeId@) {
+            @if f.enumeratorName@
+            [[maybe_unused]] int @f.enumeratorName@ = _tppEnumerator@f.scopeId@;
+            @end if@
+            @for cell in f.cells@
+            @emit_align_cell(f.scopeId, cell, f.sb)@
+            @end for@
+        }))
+    throw std::runtime_error("tpp render error: " + @f.sb@.error());
+@end if@
+END
+
+// ── If / Else ────────────────────────────────────────────────────────────────
+
+template emit_if(i: IfData)
+@if i.isBlock@
+@emit_if_block(i)@
+@else@
+@emit_if_inline(i)@
+@end if@
+END
+
+template emit_if_inline(i: IfData)
+@if i.isNegated@
+if (!@i.condPath@) {
+@else@
+if (@i.condPath@) {
+@end if@
+    @for instr in i.thenBody@
+    @emit_instr(instr)@
+    @end for@
+@if i.elseBody@
+} else {
+    @for instr in i.elseBody@
+    @emit_instr(instr)@
+    @end for@
+@end if@
+}
+END
+
+template emit_if_block(i: IfData)
+@if i.isNegated@
+if (!@i.condPath@) {
+@else@
+if (@i.condPath@) {
+@end if@
+    if (!@i.sb@.emitBlock(@i.insertCol@, [&]() {
+            @for instr in i.thenBody@
+            @emit_instr(instr)@
+            @end for@
+        }))
+        throw std::runtime_error("tpp render error: " + @i.sb@.error());
+@if i.elseBody@
+} else {
+    if (!@i.sb@.emitBlock(@i.insertCol@, [&]() {
+            @for instr in i.elseBody@
+            @emit_instr(instr)@
+            @end for@
+        }))
+        throw std::runtime_error("tpp render error: " + @i.sb@.error());
+@end if@
+}
+END
+
+// ── Switch / Case ────────────────────────────────────────────────────────────
+
+template emit_switch_case_block(s: SwitchData, c: CaseData)
+if (!@s.sb@.emitBlock(@s.insertCol@, [&]() {
+        @if c.body@
+        @for instr in c.body@
+        @emit_instr(instr)@
+        @end for@
+        @end if@
+    }))
+    throw std::runtime_error("tpp render error: " + @s.sb@.error());
+END
+
+template emit_switch(s: SwitchData)
+switch ((@cpp_value_path(s.exprPath, s.exprIsRecursive, s.exprIsOptional)@).value.index()) {
+@for c in s.cases@
+    case @c.variantIndex@: { // @c.tag@
+        @if c.bindingName@
+        @if c.isRecursivePayload@
+        [[maybe_unused]] const auto& @c.bindingName@ = *std::get<@c.variantIndex@>((@cpp_value_path(s.exprPath, s.exprIsRecursive, s.exprIsOptional)@).value);
+        @else@
+        [[maybe_unused]] const auto& @c.bindingName@ = std::get<@c.variantIndex@>((@cpp_value_path(s.exprPath, s.exprIsRecursive, s.exprIsOptional)@).value);
+        @end if@
+        @end if@
+        @if s.isBlock@
+        @emit_switch_case_block(s, c)@
+        @else@
+        @if c.body@
+        @for instr in c.body@
+        @emit_instr(instr)@
+        @end for@
+        @end if@
+        @end if@
+        break;
+    }
+@end for@
+}
+END
+
+// ── Policy helpers ───────────────────────────────────────────────────────────
+
+template emit_policy_instance_def(pol: PolicyInfo)
+inline const tpp::TppPolicy _tppPolicy_@pol.identifier@ = [] {
+    tpp::TppPolicy p;
+    p.tag = @pol.tagLit@;
+    @if pol.minVal@
+    p.minLength = @pol.minVal@;
+    @end if@
+    @if pol.maxVal@
+    p.maxLength = @pol.maxVal@;
+    @end if@
+    @if pol.rejectIfRegexLit@
+    @if pol.rejectMsgLit@
+    p.rejectIf = tpp::TppPolicy::RejectRule{std::regex(@pol.rejectIfRegexLit@), @pol.rejectMsgLit@};
+    @end if@
+    @end if@
+    @if pol.require@
+    p.require = { @for r in pol.require | sep=", "@{std::regex(@r.regexLit@), @if r.replaceLit@std::optional<std::string>{@r.replaceLit@}@else@std::nullopt@end if@}@end for@ };
+    @end if@
+    @if pol.replacements@
+    p.replacements = { @for r in pol.replacements | sep=", "@{@r.findLit@, @r.replaceLit@}@end for@ };
+    @end if@
+    @if pol.outputFilter@
+    p.outputFilter = { @for f in pol.outputFilter | sep=", "@std::regex(@f.regexLit@)@end for@ };
+    @end if@
+    return p;
+}();
+END
+
+template emit_policies(ctx: RenderFunctionsInput)
+@if ctx.policies@
+@for pol in ctx.policies@
+@emit_policy_instance_def(pol)@
+@end for@
+@end if@
+
+inline const tpp::TppPolicy _tppPolicyPure{};
+END
+
+// ── Main entry point: native C++ rendering functions ─────────────────────────
+
+template render_cpp_native_implementation(ctx: RenderFunctionsInput)
+@if ctx.includes@
+@for inc in ctx.includes@
+#include "@inc@"
+@end for@
+@end if@
+#include <tpp/ArgType.h>
+#include <tpp/Policy.h>
+#include <tpp/VM.h>
+#include <string>
+#include <string_view>
+#include <vector>
+#include <optional>
+#include <algorithm>
+#include <regex>
+#include <stdexcept>
+@if ctx.namespaceName@
+namespace @ctx.namespaceName@ {
+@end if@
+
+namespace {
+const tpp::LayoutTable& _tppEmptyLayouts() {
+    static const tpp::LayoutTable layouts{};
+    return layouts;
+}
+} // anonymous namespace
+
+@if ctx.policies@
+
+@emit_policies(ctx)@
+@end if@
+@if ctx.policies@
+@for fn in ctx.functions@
+static std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@, const tpp::TppPolicy& _policy);
+@end for@
+
+@end if@
+@for fn in ctx.functions@
+
+@if ctx.policies@
+static std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@, const tpp::TppPolicy& _policy) {
+    tpp::VM _sb(_tppEmptyLayouts());
+    @for instr in fn.body@
+    @emit_instr(instr)@
+    @end for@
+    std::string _out = _sb.takeOutput();
+    if (!_out.empty() && _out.back() == '\n')
+        _out.pop_back();
+    return _out;
+}
+
+@ctx.staticModifier@std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@) {
+    return @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@@param.name@@end for@, _tppPolicyPure);
+}
+@else@
+@ctx.staticModifier@std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@) {
+    tpp::VM _sb(_tppEmptyLayouts());
+    @for instr in fn.body@
+    @emit_instr(instr)@
+    @end for@
+    std::string _out = _sb.takeOutput();
+    if (!_out.empty() && _out.back() == '\n')
+        _out.pop_back();
+    return _out;
+}
+@end if@
+@end for@
+@if ctx.namespaceName@
+} // namespace @ctx.namespaceName@
+@end if@
+END

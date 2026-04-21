@@ -6,6 +6,7 @@
 #include <map>
 #include <optional>
 #include <regex>
+#include <stdexcept>
 #include <nlohmann/json.hpp>
 
 namespace tpp
@@ -39,6 +40,65 @@ namespace tpp
         }
         return out;
     }
+
+    // Runtime policy used by generated native backend code.
+    struct TppPolicy
+    {
+        std::string tag;
+        std::optional<int> minLength, maxLength;
+
+        struct RejectRule
+        {
+            std::regex pattern;
+            std::string message;
+        };
+        std::optional<RejectRule> rejectIf;
+
+        struct RequireStep
+        {
+            std::regex pattern;
+            std::optional<std::string> replace;
+        };
+        std::vector<RequireStep> require;
+        std::vector<std::pair<std::string, std::string>> replacements;
+        std::vector<std::regex> outputFilter;
+
+        std::string apply(const std::string &value) const
+        {
+            std::string v = value;
+            if (minLength && (int)v.size() < *minLength)
+                throw std::runtime_error("[policy " + tag + "] value is below minimum length of " + std::to_string(*minLength));
+            if (maxLength && (int)v.size() > *maxLength)
+                throw std::runtime_error("[policy " + tag + "] value exceeds maximum length of " + std::to_string(*maxLength));
+            if (rejectIf && std::regex_search(v, rejectIf->pattern))
+                throw std::runtime_error("[policy " + tag + "] " + rejectIf->message);
+
+            for (const auto &step : require)
+            {
+                if (!std::regex_search(v, step.pattern))
+                    throw std::runtime_error("[policy " + tag + "] value does not match required pattern");
+                if (step.replace)
+                    v = std::regex_replace(v, step.pattern, *step.replace);
+            }
+
+            for (const auto &[find, repl] : replacements)
+            {
+                std::string::size_type pos = 0;
+                while ((pos = v.find(find, pos)) != std::string::npos)
+                {
+                    v.replace(pos, find.size(), repl);
+                    pos += repl.size();
+                }
+            }
+
+            for (const auto &p : outputFilter)
+            {
+                if (!std::regex_match(v, p))
+                    throw std::runtime_error("[policy " + tag + "] output does not match required filter");
+            }
+            return v;
+        }
+    };
 
 }
 

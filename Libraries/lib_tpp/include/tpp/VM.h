@@ -8,10 +8,13 @@
 #include <optional>
 #include <regex>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace tpp
 {
+
+    struct TppPolicy;
 
     // ════════════════════════════════════════════════════════════════════════════
     // Compiled policy — pre-built from PolicyDef at VM construction time
@@ -65,13 +68,57 @@ namespace tpp
         // ── Literal output ──────────────────────────────────────────────
 
         /// Append literal text to the active output buffer.
-        bool emit(const std::string &text);
+        bool emit(std::string_view text);
 
         /// Read the slot at fp+offset, convert to string, and emit.
         bool emitSlot(int offset);
 
         /// emitSlot + apply the effective policy (expr-level or scope).
         bool emitSlotWithPolicy(int offset, const std::string &exprPolicy);
+
+        struct NativeLoopOptions
+        {
+            std::optional<std::string_view> precededBy;
+            std::optional<std::string_view> sep;
+            std::optional<std::string_view> followedBy;
+            bool stripSingleTrailingNewline = false;
+        };
+
+        /// Emit an already-materialized native value with multiline indentation.
+        bool emitValue(const std::string &value);
+
+        /// Apply a generated native policy, then emit with multiline indentation.
+        bool emitValue(std::string value, const TppPolicy &policy);
+
+        /// Capture a block body, indent it, and append it to the active output.
+        template <typename Body>
+        bool emitBlock(int insertCol, Body &&body);
+
+        /// Iterate a native collection and let the VM handle separators and trailers.
+        template <typename Collection, typename Body>
+        bool emitForEach(const Collection &collection,
+                         const NativeLoopOptions &options,
+                         Body &&body);
+
+        /// Iterate a native collection rendering block bodies with block indentation.
+        template <typename Collection, typename Body>
+        bool emitBlockForEach(const Collection &collection,
+                              int insertCol,
+                              const NativeLoopOptions &options,
+                              Body &&body);
+
+        /// Capture one aligned cell into the active aligned-row session.
+        template <typename Body>
+        bool captureAlignedCell(size_t cellIndex, Body &&body);
+
+        /// Iterate a native collection rendering aligned rows with VM-owned buffers.
+        template <typename Collection, typename Body>
+        bool emitAlignedForEach(const Collection &collection,
+                                size_t numCols,
+                                const std::vector<char> &alignSpecChars,
+                                bool singleAlignChar,
+                                const NativeLoopOptions &options,
+                                Body &&body);
 
         // ── Control flow ────────────────────────────────────────────────
 
@@ -118,6 +165,51 @@ namespace tpp
         /// Compile all policies from the IR into a policy map for the constructor.
         static std::map<std::string, VMCompiledPolicy> compilePolicies(const IR &ir);
 
+        /// Begin capturing into a nested output buffer.
+        void beginCapture();
+
+        /// End the current capture and return its raw contents.
+        std::string endCapture();
+
+        /// End the current capture, then block-indent its contents.
+        std::string endBlockCapture(int insertCol);
+
+        /// Begin a for-each session over a collection of the given size.
+        void beginForEach(size_t size);
+
+        /// Advance the active for-each session. Returns true while an item is active.
+        bool nextForEach();
+
+        /// Index of the active for-each item.
+        size_t forEachIndex() const;
+
+        /// Whether the active for-each item has a successor.
+        bool forEachHasNext() const;
+
+        /// Enumerator value for the active for-each item.
+        int forEachEnumerator() const;
+
+        /// End the active for-each session.
+        void endForEach();
+
+        /// Begin an aligned-for rendering session.
+        void beginFor(size_t numCols,
+                      const std::vector<char> &alignSpecChars,
+                      bool singleAlignChar,
+                      size_t rowReserve = 0);
+
+        /// Feed one logical row into the active aligned-for session.
+        void exec(const std::vector<std::string> &row);
+
+        /// Render one row from the active aligned-for session.
+        std::string endFor(size_t rowIndex) const;
+
+        /// Number of rows collected in the active aligned-for session.
+        size_t forSize() const;
+
+        /// End the active aligned-for session.
+        void finishFor();
+
         // ── Result / diagnostics ────────────────────────────────────────
 
         /// Move the root output buffer out.
@@ -149,10 +241,30 @@ namespace tpp
         const VMCompiledPolicy *activePolicyPtr_ = nullptr;
         std::vector<std::string> policyScopeStack_;
 
+        struct ForState
+        {
+            std::vector<std::vector<std::string>> rows;
+            std::vector<int> colWidth;
+            std::vector<char> colSpec;
+            std::vector<std::string> currentRow;
+            size_t numCols = 0;
+            bool rowOpen = false;
+        };
+
+        struct ForEachState
+        {
+            size_t size = 0;
+            size_t index = 0;
+            bool started = false;
+        };
+
+        std::vector<ForState> forStack_;
+        std::vector<ForEachState> forEachStack_;
+
         // ── Internal helpers ────────────────────────────────────────────
 
         /// Write to the active output buffer.
-        void output(const std::string &text);
+        void output(std::string_view text);
 
         /// Active output buffer reference.
         std::string &activeOutput();
@@ -178,6 +290,33 @@ namespace tpp
 
         /// Pad a cell for alignment.
         static std::string padCell(const std::string &s, int width, char spec);
+
+        /// Render one aligned row using precomputed widths/spec.
+        static std::string renderAlignedRow(const std::vector<std::string> &row,
+                            const std::vector<int> &colWidth,
+                            const std::vector<char> &colSpec,
+                            size_t numCols);
+
+        /// Emit an optional loop delimiter if present.
+        bool emitOptionalText(const std::optional<std::string_view> &text);
+
+        /// Remove a single trailing newline from a block iteration when required.
+        static bool stripSingleTrailingNewline(std::string &text);
+
+        /// Active aligned-for session.
+        ForState &activeForState();
+
+        /// Active aligned-for session.
+        const ForState &activeForState() const;
+
+        /// Begin collecting one aligned row into the active for session.
+        bool startAlignedRow();
+
+        /// Commit the active aligned row to the current for session.
+        bool finishAlignedRow();
+
+        /// Abort the active aligned row after an exception/error.
+        void abortAlignedRow();
 
         /// Render instructions collecting cells at AlignCell markers.
         std::vector<std::string> execInstructionsCells(const std::vector<Instruction> &instrs);
@@ -213,5 +352,248 @@ namespace tpp
         /// Compile a single PolicyDef.
         static VMCompiledPolicy compilePolicy(const PolicyDef &def);
     };
+
+    template <typename Body>
+    bool VM::emitBlock(int insertCol, Body &&body)
+    {
+        pushCapture();
+        try
+        {
+            body();
+        }
+        catch (...)
+        {
+            popCapture();
+            throw;
+        }
+
+        if (hasError())
+        {
+            popCapture();
+            return false;
+        }
+
+        std::string raw = popCapture();
+        if (!raw.empty())
+            output(blockIndent(raw, insertCol));
+        return true;
+    }
+
+    template <typename Collection, typename Body>
+    bool VM::emitForEach(const Collection &collection,
+                         const NativeLoopOptions &options,
+                         Body &&body)
+    {
+        beginForEach(collection.size());
+        struct Guard
+        {
+            VM &vm;
+            bool active = true;
+            ~Guard()
+            {
+                if (active)
+                    vm.endForEach();
+            }
+        } guard{*this};
+
+        while (nextForEach())
+        {
+            const auto index = forEachIndex();
+            if (!emitOptionalText(options.precededBy))
+                return false;
+
+            body(collection[index], forEachEnumerator());
+            if (hasError())
+                return false;
+
+            if (forEachHasNext())
+            {
+                if (!emitOptionalText(options.sep))
+                    return false;
+            }
+            else if (!options.followedBy.has_value() || collection.empty())
+            {
+                continue;
+            }
+            else if (!emitOptionalText(options.followedBy))
+            {
+                return false;
+            }
+        }
+
+        return !hasError();
+    }
+
+    template <typename Collection, typename Body>
+    bool VM::emitBlockForEach(const Collection &collection,
+                              int insertCol,
+                              const NativeLoopOptions &options,
+                              Body &&body)
+    {
+        beginForEach(collection.size());
+        struct Guard
+        {
+            VM &vm;
+            bool active = true;
+            ~Guard()
+            {
+                if (active)
+                    vm.endForEach();
+            }
+        } guard{*this};
+
+        while (nextForEach())
+        {
+            const auto index = forEachIndex();
+            pushCapture();
+            try
+            {
+                body(collection[index], forEachEnumerator());
+            }
+            catch (...)
+            {
+                popCapture();
+                throw;
+            }
+
+            if (hasError())
+            {
+                popCapture();
+                return false;
+            }
+
+            std::string iterResult = blockIndent(popCapture(), insertCol);
+            bool strippedNewline = false;
+            if (options.stripSingleTrailingNewline)
+                strippedNewline = stripSingleTrailingNewline(iterResult);
+
+            if (!emitOptionalText(options.precededBy))
+                return false;
+            if (!emit(iterResult))
+                return false;
+
+            if (forEachHasNext())
+            {
+                if (!emitOptionalText(options.sep))
+                    return false;
+            }
+            else
+            {
+                if (options.followedBy.has_value() && !collection.empty() &&
+                    !emitOptionalText(options.followedBy))
+                {
+                    return false;
+                }
+                if (strippedNewline && !emit("\n"))
+                    return false;
+            }
+        }
+
+        return !hasError();
+    }
+
+    template <typename Body>
+    bool VM::captureAlignedCell(size_t cellIndex, Body &&body)
+    {
+        auto &state = activeForState();
+        if (!state.rowOpen)
+        {
+            error_ = "captureAlignedCell: no active row";
+            return false;
+        }
+        if (cellIndex >= state.currentRow.size())
+        {
+            error_ = "captureAlignedCell: cell index out of range";
+            return false;
+        }
+
+        pushCapture();
+        try
+        {
+            body();
+        }
+        catch (...)
+        {
+            popCapture();
+            throw;
+        }
+
+        if (hasError())
+        {
+            popCapture();
+            return false;
+        }
+
+        state.currentRow[cellIndex] = popCapture();
+        return true;
+    }
+
+    template <typename Collection, typename Body>
+    bool VM::emitAlignedForEach(const Collection &collection,
+                                size_t numCols,
+                                const std::vector<char> &alignSpecChars,
+                                bool singleAlignChar,
+                                const NativeLoopOptions &options,
+                                Body &&body)
+    {
+        beginFor(numCols, alignSpecChars, singleAlignChar, collection.size());
+        struct Guard
+        {
+            VM &vm;
+            bool active = true;
+            ~Guard()
+            {
+                if (active)
+                    vm.finishFor();
+            }
+        } guard{*this};
+
+        for (size_t index = 0; index < collection.size(); ++index)
+        {
+            if (!startAlignedRow())
+                return false;
+
+            try
+            {
+                body(collection[index], static_cast<int>(index));
+            }
+            catch (...)
+            {
+                abortAlignedRow();
+                throw;
+            }
+
+            if (hasError())
+            {
+                abortAlignedRow();
+                return false;
+            }
+
+            if (!finishAlignedRow())
+                return false;
+        }
+
+        const size_t rowCount = forSize();
+        for (size_t rowIndex = 0; rowIndex < rowCount; ++rowIndex)
+        {
+            if (!emitOptionalText(options.precededBy))
+                return false;
+            if (!emit(endFor(rowIndex)))
+                return false;
+
+            if (rowIndex + 1 < rowCount)
+            {
+                if (!emitOptionalText(options.sep))
+                    return false;
+            }
+            else if (options.followedBy.has_value() && rowCount > 0 &&
+                     !emitOptionalText(options.followedBy))
+            {
+                return false;
+            }
+        }
+
+        return !hasError();
+    }
 
 } // namespace tpp

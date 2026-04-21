@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <tpp/Policy.h>
 #include <tpp/VM.h>
 #include <tpp/IR.h>
 #include <tpp/Layout.h>
@@ -64,6 +65,111 @@ TEST(VMTest, EmitMultiple)
     EXPECT_TRUE(vm.emit("line1\n"));
     EXPECT_TRUE(vm.emit("line2\n"));
     EXPECT_EQ(vm.takeOutput(), "line1\nline2\n");
+}
+
+TEST(VMTest, EmitNativeValueWithPolicy)
+{
+    IR ir = make_empty_ir();
+    compute_ir_layouts(ir);
+    auto layouts = LayoutTable::build(ir);
+    VM vm(layouts, VM::compilePolicies(ir));
+
+    TppPolicy policy;
+    policy.tag = "underscores";
+    policy.replacements.push_back({" ", "_"});
+
+    EXPECT_TRUE(vm.emitValue("hello world", policy));
+    EXPECT_EQ(vm.takeOutput(), "hello_world");
+}
+
+TEST(VMTest, EmitBlockNativeHelper)
+{
+    IR ir = make_empty_ir();
+    compute_ir_layouts(ir);
+    auto layouts = LayoutTable::build(ir);
+    VM vm(layouts, VM::compilePolicies(ir));
+
+    EXPECT_TRUE(vm.emitBlock(4, [&]() {
+        EXPECT_TRUE(vm.emit("  alpha\n  beta\n"));
+    }));
+
+    EXPECT_EQ(vm.takeOutput(), "    alpha\n    beta\n");
+}
+
+TEST(VMTest, EmitForEachNativeHelper)
+{
+    IR ir = make_empty_ir();
+    compute_ir_layouts(ir);
+    auto layouts = LayoutTable::build(ir);
+    VM vm(layouts, VM::compilePolicies(ir));
+
+    std::vector<std::string> items = {"alpha", "beta", "gamma"};
+    VM::NativeLoopOptions options;
+    options.sep = std::string_view{", "};
+    options.followedBy = std::string_view{"."};
+
+    int expectedIndex = 0;
+    EXPECT_TRUE(vm.emitForEach(items, options, [&](const auto &item, int index) {
+        EXPECT_EQ(index, expectedIndex++);
+        EXPECT_TRUE(vm.emitValue(item));
+    }));
+
+    EXPECT_EQ(vm.takeOutput(), "alpha, beta, gamma.");
+}
+
+TEST(VMTest, EmitBlockForEachNativeHelper)
+{
+    IR ir = make_empty_ir();
+    compute_ir_layouts(ir);
+    auto layouts = LayoutTable::build(ir);
+    VM vm(layouts, VM::compilePolicies(ir));
+
+    std::vector<std::string> items = {"alpha", "beta"};
+    VM::NativeLoopOptions options;
+    options.sep = std::string_view{"\n"};
+    options.stripSingleTrailingNewline = true;
+
+    EXPECT_TRUE(vm.emitBlockForEach(items, 4, options, [&](const auto &item, int) {
+        EXPECT_TRUE(vm.emit("  "));
+        EXPECT_TRUE(vm.emitValue(item));
+        EXPECT_TRUE(vm.emit("\n"));
+    }));
+
+    EXPECT_EQ(vm.takeOutput(), "    alpha\n    beta\n");
+}
+
+TEST(VMTest, EmitAlignedForEachNativeHelper)
+{
+    struct Row
+    {
+        std::string lhs;
+        std::string rhs;
+    };
+
+    IR ir = make_empty_ir();
+    compute_ir_layouts(ir);
+    auto layouts = LayoutTable::build(ir);
+    VM vm(layouts, VM::compilePolicies(ir));
+
+    std::vector<Row> rows = {{"x", "1"}, {"yy", "22"}};
+    VM::NativeLoopOptions options;
+    options.sep = std::string_view{"\n"};
+
+    EXPECT_TRUE(vm.emitAlignedForEach(rows,
+                                      2,
+                                      std::vector<char>{'l', 'r'},
+                                      false,
+                                      options,
+                                      [&](const auto &row, int) {
+                                          EXPECT_TRUE(vm.captureAlignedCell(0, [&]() {
+                                              EXPECT_TRUE(vm.emitValue(row.lhs));
+                                          }));
+                                          EXPECT_TRUE(vm.captureAlignedCell(1, [&]() {
+                                              EXPECT_TRUE(vm.emitValue(row.rhs));
+                                          }));
+                                      }));
+
+    EXPECT_EQ(vm.takeOutput(), "x  1\nyy22");
 }
 
 // ════════════════════════════════════════════════════════════════════════════

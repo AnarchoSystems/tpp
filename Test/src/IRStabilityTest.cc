@@ -5,6 +5,7 @@
 #include <set>
 #include <string>
 #include <fstream>
+#include <vector>
 
 // ── Path collection ──────────────────────────────────────────────────────────
 
@@ -31,6 +32,133 @@ static void collectPaths(const nlohmann::json &j, const std::string &prefix,
 
 static const std::set<std::string> kExcludedPaths = {
     "versionMajor", "versionMinor", "versionPatch"};
+
+// ── Generated code shape checks ──────────────────────────────────────────────
+
+static std::vector<std::filesystem::path> collectGeneratedImplFiles()
+{
+    const std::filesystem::path tppExePath(TPP_EXE);
+    const auto buildDir = tppExePath.parent_path().parent_path();
+    const auto generatedDir = buildDir / "Test";
+
+    if (!std::filesystem::exists(generatedDir))
+        return {};
+
+    constexpr std::string_view kSuffix = "_implementation.cc";
+    std::vector<std::filesystem::path> result;
+    for (const auto &entry : std::filesystem::directory_iterator(generatedDir))
+    {
+        if (!entry.is_regular_file())
+            continue;
+        const auto fileName = entry.path().filename().string();
+        if (fileName.rfind("error_", 0) == 0)
+            continue;
+        if (fileName.size() >= kSuffix.size() &&
+            fileName.rfind(kSuffix) == fileName.size() - kSuffix.size())
+        {
+            result.push_back(entry.path());
+        }
+    }
+    return result;
+}
+
+static void checkPatternInImplFiles(const std::string &pattern)
+{
+    const auto generatedImplFiles = collectGeneratedImplFiles();
+
+    ASSERT_FALSE(generatedImplFiles.empty())
+        << "No generated *_implementation.cc files found";
+
+    std::vector<std::filesystem::path> missing;
+    for (const auto &implPath : generatedImplFiles)
+    {
+        std::ifstream in(implPath);
+        ASSERT_TRUE(in.good()) << "Cannot read generated implementation: " << implPath;
+        std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        if (content.find(pattern) == std::string::npos)
+            missing.push_back(implPath);
+    }
+
+    if (!missing.empty())
+    {
+        std::string msg = "Missing \"" + pattern + "\" in generated implementation files:\n";
+        for (const auto &path : missing)
+            msg += "  - " + path.string() + "\n";
+        FAIL() << msg;
+    }
+}
+
+static void checkPatternInSomeImplFile(const std::string &pattern)
+{
+    const auto generatedImplFiles = collectGeneratedImplFiles();
+
+    ASSERT_FALSE(generatedImplFiles.empty())
+        << "No generated *_implementation.cc files found";
+
+    for (const auto &implPath : generatedImplFiles)
+    {
+        std::ifstream in(implPath);
+        ASSERT_TRUE(in.good()) << "Cannot read generated implementation: " << implPath;
+        std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        if (content.find(pattern) != std::string::npos)
+            return;
+    }
+
+    FAIL() << "Missing \"" << pattern << "\" in all generated implementation files";
+}
+
+static void checkPatternAbsentInImplFiles(const std::string &pattern)
+{
+    const auto generatedImplFiles = collectGeneratedImplFiles();
+
+    ASSERT_FALSE(generatedImplFiles.empty())
+        << "No generated *_implementation.cc files found";
+
+    std::vector<std::filesystem::path> present;
+    for (const auto &implPath : generatedImplFiles)
+    {
+        std::ifstream in(implPath);
+        ASSERT_TRUE(in.good()) << "Cannot read generated implementation: " << implPath;
+        std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        if (content.find(pattern) != std::string::npos)
+            present.push_back(implPath);
+    }
+
+    if (!present.empty())
+    {
+        std::string msg = "Unexpected \"" + pattern + "\" in generated implementation files:\n";
+        for (const auto &path : present)
+            msg += "  - " + path.string() + "\n";
+        FAIL() << msg;
+    }
+}
+
+TEST(IRStability, GeneratedImplementationContainsTakeOutput)
+{
+    checkPatternInImplFiles(".takeOutput()");
+}
+
+TEST(IRStability, GeneratedImplementationContainsTppVM)
+{
+    checkPatternInImplFiles("tpp::VM");
+}
+
+TEST(IRStability, GeneratedImplementationUsesNativeVmHelpers)
+{
+    checkPatternInSomeImplFile(".emitForEach(");
+    checkPatternInSomeImplFile(".emitBlockForEach(");
+    checkPatternInSomeImplFile(".emitAlignedForEach(");
+    checkPatternInSomeImplFile(".emitValue(");
+}
+
+TEST(IRStability, GeneratedImplementationDoesNotUseManualVmScaffolding)
+{
+    checkPatternAbsentInImplFiles("std::vector<tpp::Slot> _emitFrame");
+    checkPatternAbsentInImplFiles(".beginForEach(");
+    checkPatternAbsentInImplFiles("std::vector<std::string> _row");
+    checkPatternAbsentInImplFiles(".beginCapture(");
+    checkPatternAbsentInImplFiles(".endBlockCapture(");
+}
 
 // ── Single aggregate test ────────────────────────────────────────────────────
 

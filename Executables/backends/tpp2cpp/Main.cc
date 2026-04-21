@@ -11,20 +11,17 @@
 //   types     — produces a header file with type definitions
 //   functions — produces a header file rendering the template functions as C++ functions
 //   impl      — produces a .cc file with the implementations of the functions declared by 'functions'
-//   runtime   — produces a standalone runtime header with helper functions and policy definitions
 // options:
 //   -ns <name>       wrap generated code in a namespace
 //   -i <file>        files to include at the top of the generated code (repeatable)
 //   --input <file>   read IR JSON from file instead of stdin
-//   --extern-runtime suppress inlining runtime helpers in impl output
 
 enum Mode
 {
     None,
     Types,
     Functions,
-    Implementation,
-    Runtime
+    Implementation
 };
 
 struct tpp2cpp
@@ -53,13 +50,11 @@ void printUsage()
                  "  types      Produce a header with C++ type definitions\n"
                  "  functions  Produce a header with C++ function declarations\n"
                  "  impl       Produce a .cc with function implementations\n"
-                 "  runtime    Produce a standalone runtime helpers header\n"
                  "\n"
                  "Options:\n"
                  "  -ns <name>        Wrap generated code in a namespace\n"
                  "  -i <file>         Include file at top of generated code (repeatable)\n"
                  "  --input <file>    Read IR JSON from file instead of stdin\n"
-                 "  --extern-runtime  Suppress inlining runtime helpers\n"
                  "  -h, --help        Print this message\n";
 }
 
@@ -68,8 +63,7 @@ tpp2cpp::tpp2cpp(int argc, char *argv[])
     static const std::map<std::string, Mode> commands = {
         {"types", Mode::Types},
         {"functions", Mode::Functions},
-        {"impl", Mode::Implementation},
-        {"runtime", Mode::Runtime}
+        {"impl", Mode::Implementation}
     };
     auto cli = codegen::parseBackendCommandLine(argc, argv, commands, printUsage, true);
     namespaceName = std::move(cli.namespaceName);
@@ -131,19 +125,7 @@ void tpp2cpp::run()
     case Mode::Implementation:
     {
         auto ctx = buildFunctionsContext(input, "", includes, namespaceName);
-        if (externalRuntime)
-            ctx.externalRuntime = true;
-        ctx.irJsonLiteral = toCppStringLiteral(nlohmann::json(input).dump());
-        for (size_t i = 0; i < ctx.functions.size(); ++i)
-            ctx.functions[i].functionIndex = static_cast<int>(i);
         renderFunction("render_cpp_native_implementation", nlohmann::json(ctx));
-        break;
-    }
-    case Mode::Runtime:
-    {
-        auto ctx = buildFunctionsContext(input, "", includes, namespaceName);
-        ctx.externalRuntime = false;
-        renderFunction("render_cpp_runtime", nlohmann::json(ctx));
         break;
     }
     }
