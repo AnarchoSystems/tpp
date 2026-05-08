@@ -127,17 +127,17 @@ END
 // ── Leaf instruction templates ───────────────────────────────────────────────
 
 template emit_emit(e: EmitData)
-@e.sb@ += @e.textLit@
+@e.sb@.emit(@e.textLit@)
 END
 
 template emit_emit_expr(e: EmitExprData)
 @if e.staticPolicyId@
-do { var _pv = @swift_expr_to_str(e.expr)@; _pv = try @e.staticPolicyId@.apply(_pv); _tppAppendValue(&@e.sb@, _pv) }
+try @e.sb@.emitValue(@swift_expr_to_str(e.expr)@, @e.staticPolicyId@)
 @else@
 @if e.useRuntimePolicy@
-do { var _pv = @swift_expr_to_str(e.expr)@; _pv = try _policy.apply(_pv); _tppAppendValue(&@e.sb@, _pv) }
+try @e.sb@.emitValue(@swift_expr_to_str(e.expr)@, _policy)
 @else@
-_tppAppendValue(&@e.sb@, @swift_expr_to_str(e.expr)@)
+@e.sb@.emitValue(@swift_expr_to_str(e.expr)@)
 @end if@
 @end if@
 END
@@ -145,15 +145,15 @@ END
 template emit_call(c: CallData)
 @if c.needsTry@
 @if c.policyArg@
-@c.sb@ += try @c.functionName@(@for arg in c.args | sep=", " followedBy=", "@@swift_call_arg(arg)@@end for@@swift_policy_ref(c.policyArg)@)
+@c.sb@.emit(try @c.functionName@(@for arg in c.args | sep=", " followedBy=", "@@swift_call_arg(arg)@@end for@@swift_policy_ref(c.policyArg)@))
 @else@
-@c.sb@ += try @c.functionName@(@for arg in c.args | sep=", "@@swift_call_arg(arg)@@end for@)
+@c.sb@.emit(try @c.functionName@(@for arg in c.args | sep=", "@@swift_call_arg(arg)@@end for@))
 @end if@
 @else@
 @if c.policyArg@
-@c.sb@ += @c.functionName@(@for arg in c.args | sep=", " followedBy=", "@@swift_call_arg(arg)@@end for@@swift_policy_ref(c.policyArg)@)
+@c.sb@.emit(@c.functionName@(@for arg in c.args | sep=", " followedBy=", "@@swift_call_arg(arg)@@end for@@swift_policy_ref(c.policyArg)@))
 @else@
-@c.sb@ += @c.functionName@(@for arg in c.args | sep=", "@@swift_call_arg(arg)@@end for@)
+@c.sb@.emit(@c.functionName@(@for arg in c.args | sep=", "@@swift_call_arg(arg)@@end for@))
 @end if@
 @end if@
 END
@@ -178,6 +178,12 @@ template emit_instr(instr: RenderInstruction)
 @end case@
 @case AlignCell@
 @end case@
+@case PushIndent(amount)@
+_sb.pushIndent(@amount@)
+@end case@
+@case PopIndent@
+_sb.popIndent()
+@end case@
 @case For(f)@
 @emit_for(f)@
 @end case@
@@ -199,7 +205,7 @@ template emit_for(f: ForData)
 @if f.cells@
 @emit_aligned_for(f)@
 @else@
-@if f.blockIndent@
+@if f.capturesBody@
 @emit_for_block(f)@
 @else@
 @emit_for_inline(f)@
@@ -215,43 +221,21 @@ for _i@f.scopeId@ in 0..<@swift_value_path(f.collPath, f.collIsRecursive, f.coll
     let @f.enumeratorName@ = _i@f.scopeId@
     @end if@
     @if f.precededByLit@
-    @f.sb@ += @f.precededByLit@
+    @f.sb@.emit(@f.precededByLit@)
     @end if@
     @for instr in f.body@
     @emit_instr(instr)@
     @end for@
     @if f.sepLit@
-    if _i@f.scopeId@ + 1 < @swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.count { @f.sb@ += @f.sepLit@ }
+    if _i@f.scopeId@ + 1 < @swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.count { @f.sb@.emit(@f.sepLit@) }
     @if f.followedByLit@
-    else if !@swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.isEmpty { @f.sb@ += @f.followedByLit@ }
+    else if !@swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.isEmpty { @f.sb@.emit(@f.followedByLit@) }
     @end if@
     @else@
     @if f.followedByLit@
-    if _i@f.scopeId@ + 1 >= @swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.count && !@swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.isEmpty { @f.sb@ += @f.followedByLit@ }
+    if _i@f.scopeId@ + 1 >= @swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.count && !@swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.isEmpty { @f.sb@.emit(@f.followedByLit@) }
     @end if@
     @end if@
-}
-@end if@
-END
-
-template emit_for_block_sep(f: ForData)
-@if f.sepLit@
-var _stripped@f.scopeId@ = false
-if !_iter@f.scopeId@.isEmpty && _iter@f.scopeId@.hasSuffix("\n") {
-    let _nlCount = _iter@f.scopeId@.filter { $0 == "\n" }.count
-    if _nlCount == 1 { _iter@f.scopeId@ = String(_iter@f.scopeId@.dropLast()); _stripped@f.scopeId@ = true }
-}
-@if f.precededByLit@
-@f.sb@ += @f.precededByLit@
-@end if@
-@f.sb@ += _iter@f.scopeId@
-if _i@f.scopeId@ + 1 < @swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.count {
-    @f.sb@ += @f.sepLit@
-} else {
-    @if f.followedByLit@
-    if !@swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.isEmpty { @f.sb@ += @f.followedByLit@ }
-    @end if@
-    if _stripped@f.scopeId@ { @f.sb@ += "\n" }
 }
 @end if@
 END
@@ -263,21 +247,37 @@ for _i@f.scopeId@ in 0..<@swift_value_path(f.collPath, f.collIsRecursive, f.coll
     @if f.enumeratorName@
     let @f.enumeratorName@ = _i@f.scopeId@
     @end if@
-    var _blk@f.scopeId@ = ""
+    @f.sb@.beginCapture()
     @for instr in f.body@
     @emit_instr(instr)@
     @end for@
+    if @f.sb@.hasError { fatalError("tpp render error: \(@f.sb@.error)") }
+    let _iter@f.scopeId@ = @f.sb@.endCaptureResult()
+    var _iterText@f.scopeId@ = _iter@f.scopeId@.text
     @if f.sepLit@
-    var _iter@f.scopeId@ = _tppBlockIndent(_blk@f.scopeId@, @if f.blockIndent@@f.blockIndent@@end if@)
-    @emit_for_block_sep(f)@
+    var _stripped@f.scopeId@ = false
+    if _iter@f.scopeId@.topLevelIndented, let _trimmed@f.scopeId@ = TppWriter.stripSingleTrailingNewline(_iterText@f.scopeId@) {
+        _iterText@f.scopeId@ = _trimmed@f.scopeId@
+        _stripped@f.scopeId@ = true
+    }
     @else@
-    let _iter@f.scopeId@ = _tppBlockIndent(_blk@f.scopeId@, @if f.blockIndent@@f.blockIndent@@end if@)
-    @if f.precededByLit@
-    @f.sb@ += @f.precededByLit@
     @end if@
-    @f.sb@ += _iter@f.scopeId@
+    @if f.precededByLit@
+    @f.sb@.emit(@f.precededByLit@)
+    @end if@
+    @f.sb@.emit(_iterText@f.scopeId@)
+    @if f.sepLit@
+    if _i@f.scopeId@ + 1 < @swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.count {
+        @f.sb@.emit(@f.sepLit@)
+    } else {
+        @if f.followedByLit@
+        if !@swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.isEmpty { @f.sb@.emit(@f.followedByLit@) }
+        @end if@
+        if _stripped@f.scopeId@ { @f.sb@.emit("\n") }
+    }
+    @else@
     @if f.followedByLit@
-    if _i@f.scopeId@ + 1 >= @swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.count && !@swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.isEmpty { @f.sb@ += @f.followedByLit@ }
+    if _i@f.scopeId@ + 1 >= @swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.count && !@swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.isEmpty { @f.sb@.emit(@f.followedByLit@) }
     @end if@
     @end if@
 }
@@ -301,11 +301,16 @@ END
 
 template emit_align_cell(scopeId: int, cell: AlignCellInfo)
 do {
-    var _cell@scopeId@_@cell.cellIndex@ = ""
+    _sb.beginCapture()
     @for instr in cell.body@
     @emit_instr(instr)@
     @end for@
-    _row@scopeId@[@cell.cellIndex@] = try _tppSingleLineAlignedCell(_cell@scopeId@_@cell.cellIndex@)
+    if _sb.hasError { fatalError("tpp render error: \(_sb.error)") }
+    let _cell@scopeId@_@cell.cellIndex@ = _sb.endCaptureResult()
+    if TppWriter.containsLineBreak(_cell@scopeId@_@cell.cellIndex@.text) {
+        fatalError("tpp render error: aligned cells must be single-line")
+    }
+    _row@scopeId@[@cell.cellIndex@] = _cell@scopeId@_@cell.cellIndex@.text
 }
 END
 
@@ -331,7 +336,7 @@ for _i@f.scopeId@ in 0..<_rows@f.scopeId@.count {
     var _line@f.scopeId@ = ""
     for _c in 0..<_r.count {
         if _c + 1 < @f.numCols@ {
-            _line@f.scopeId@ += _tppPadCell(_r[_c], _cw@f.scopeId@[_c], _spec@f.scopeId@[_c])
+            _line@f.scopeId@ += TppWriter.padCell(_r[_c], _cw@f.scopeId@[_c], _spec@f.scopeId@[_c])
         } else {
             let _sp = _spec@f.scopeId@[_c]; let _pd = _cw@f.scopeId@[_c] - _r[_c].count
             if _pd > 0 && _sp != "l" { let _left = (_sp == "c") ? _pd / 2 : _pd; _line@f.scopeId@ += String(repeating: " ", count: _left) }
@@ -339,17 +344,17 @@ for _i@f.scopeId@ in 0..<_rows@f.scopeId@.count {
         }
     }
     @if f.precededByLit@
-    @f.sb@ += @f.precededByLit@
+    @f.sb@.emit(@f.precededByLit@)
     @end if@
-    @f.sb@ += _line@f.scopeId@
+    @f.sb@.emit(_line@f.scopeId@)
     @if f.sepLit@
-    if _i@f.scopeId@ + 1 < _rows@f.scopeId@.count { @f.sb@ += @f.sepLit@ }
+    if _i@f.scopeId@ + 1 < _rows@f.scopeId@.count { @f.sb@.emit(@f.sepLit@) }
     @if f.followedByLit@
-    else if !_rows@f.scopeId@.isEmpty { @f.sb@ += @f.followedByLit@ }
+    else if !_rows@f.scopeId@.isEmpty { @f.sb@.emit(@f.followedByLit@) }
     @end if@
     @else@
     @if f.followedByLit@
-    if _i@f.scopeId@ + 1 >= _rows@f.scopeId@.count && !_rows@f.scopeId@.isEmpty { @f.sb@ += @f.followedByLit@ }
+    if _i@f.scopeId@ + 1 >= _rows@f.scopeId@.count && !_rows@f.scopeId@.isEmpty { @f.sb@.emit(@f.followedByLit@) }
     @end if@
     @end if@
 }
@@ -359,14 +364,6 @@ END
 // ── If / Else ────────────────────────────────────────────────────────────────
 
 template emit_if(i: IfData)
-@if i.blockIndent@
-@emit_if_block(i)@
-@else@
-@emit_if_inline(i)@
-@end if@
-END
-
-template emit_if_inline(i: IfData)
 @if i.condIsBool@
 @if i.isNegated@
 if !@i.condPath@ {
@@ -388,53 +385,11 @@ if @i.condPath@ != nil {
     @for instr in i.elseBody@
     @emit_instr(instr)@
     @end for@
-@end if@
-}
-END
-
-template emit_if_block(i: IfData)
-@if i.condIsBool@
-@if i.isNegated@
-if !@i.condPath@ {
-@else@
-if @i.condPath@ {
-@end if@
-@else@
-@if i.isNegated@
-if @i.condPath@ == nil {
-@else@
-if @i.condPath@ != nil {
-@end if@
-@end if@
-    var _blk@i.thenScopeId@ = ""
-    @for instr in i.thenBody@
-    @emit_instr(instr)@
-    @end for@
-    @i.sb@ += _tppBlockIndent(_blk@i.thenScopeId@, @if i.blockIndent@@i.blockIndent@@end if@)
-@if i.elseBody@
-} else {
-    var _blk@i.elseScopeId@ = ""
-    @for instr in i.elseBody@
-    @emit_instr(instr)@
-    @end for@
-    @i.sb@ += _tppBlockIndent(_blk@i.elseScopeId@, @if i.blockIndent@@i.blockIndent@@end if@)
 @end if@
 }
 END
 
 // ── Switch / Case ────────────────────────────────────────────────────────────
-
-template emit_switch_case_block(s: SwitchData, c: CaseData)
-@if c.body@
-var _blk@c.scopeId@ = ""
-@for instr in c.body@
-@emit_instr(instr)@
-@end for@
-@s.sb@ += _tppBlockIndent(_blk@c.scopeId@, @if s.blockIndent@@s.blockIndent@@end if@)
-@else@
-break
-@end if@
-END
 
 template emit_switch(s: SwitchData)
 switch @swift_value_path(s.exprPath, s.exprIsRecursive, s.exprIsOptional)@ {
@@ -448,16 +403,12 @@ case .@c.tag@(_):
 case .@c.tag@:
 @end if@
 @end if@
-    @if s.blockIndent@
-    @emit_switch_case_block(s, c)@
-    @else@
     @if c.body@
     @for instr in c.body@
     @emit_instr(instr)@
     @end for@
     @else@
     break
-    @end if@
     @end if@
 @end for@
 }
@@ -588,6 +539,237 @@ END
 
 // ── Runtime helpers (shared across generated files) ──────────────────────────
 
+template emit_swift_writer_runtime()
+final class TppWriter {
+    struct CaptureResult {
+        let text: String
+        let topLevelIndented: Bool
+    }
+
+    final class OutputFrame {
+        var lines: [String] = []
+        var currentLine = ""
+        var trailingNewline = false
+        var sawAnyOutput = false
+        var topLevelIndentedOnly = false
+
+        func append(_ text: String) {
+            for ch in text {
+                if ch == "\n" {
+                    lines.append(currentLine)
+                    currentLine = ""
+                    trailingNewline = true
+                } else {
+                    currentLine.append(ch)
+                    trailingNewline = false
+                }
+            }
+        }
+
+        var isEmpty: Bool {
+            lines.isEmpty && currentLine.isEmpty && !trailingNewline
+        }
+
+        var currentColumn: Int {
+            trailingNewline ? 0 : currentLine.count
+        }
+
+        func notePlainOutput(_ text: String) {
+            guard !text.isEmpty else { return }
+            sawAnyOutput = true
+            topLevelIndentedOnly = false
+        }
+
+        func noteIndentedOutput(_ text: String) {
+            guard !text.isEmpty else { return }
+            if !sawAnyOutput {
+                sawAnyOutput = true
+                topLevelIndentedOnly = true
+                return
+            }
+            sawAnyOutput = true
+            topLevelIndentedOnly = false
+        }
+    }
+
+    private var outputStack: [OutputFrame] = [OutputFrame()]
+    private var indentStack: [Int] = []
+    private(set) var error = ""
+
+    var hasError: Bool { !error.isEmpty }
+
+    func emit(_ text: String) {
+        output(text)
+    }
+
+    func emitValue(_ value: String) {
+        emitWithMultilineIndent(value)
+    }
+
+    func emitValue(_ value: String, _ policy: TppPolicy) throws {
+        emitWithMultilineIndent(try policy.apply(value))
+    }
+
+    func pushIndent(_ indentColumns: Int) {
+        indentStack.append(indentColumns)
+        beginCapture()
+    }
+
+    func popIndent() {
+        guard !indentStack.isEmpty else { fatalError("popIndent: scope stack underflow") }
+        let indentColumns = indentStack.removeLast()
+        _ = emitIndentedFrame(endCaptureFrame(), indentColumns)
+    }
+
+    func beginCapture() {
+        outputStack.append(OutputFrame())
+    }
+
+    func endCapture() -> String {
+        Self.serializeFrame(endCaptureFrame())
+    }
+
+    func endCaptureResult() -> CaptureResult {
+        let captured = endCaptureFrame()
+        return CaptureResult(text: Self.serializeFrame(captured), topLevelIndented: captured.topLevelIndentedOnly)
+    }
+
+    func takeOutput() -> String {
+        outputStack.first.map(Self.serializeFrame) ?? ""
+    }
+
+    static func stripSingleTrailingNewline(_ text: String) -> String? {
+        guard text.last == "\n" else { return nil }
+        guard text.filter({ $0 == "\n" }).count == 1 else { return nil }
+        return String(text.dropLast())
+    }
+
+    static func containsLineBreak(_ text: String) -> Bool {
+        text.contains("\n") || text.contains("\r")
+    }
+
+    static func padCell(_ s: String, _ width: Int, _ spec: Character) -> String {
+        if s.count >= width { return s }
+        let pad = width - s.count
+        if spec == "r" { return String(repeating: " ", count: pad) + s }
+        if spec == "c" {
+            let left = pad / 2
+            return String(repeating: " ", count: left) + s + String(repeating: " ", count: pad - left)
+        }
+        return s + String(repeating: " ", count: pad)
+    }
+
+    private static func serializeFrame(_ frame: OutputFrame) -> String {
+        guard !frame.isEmpty else { return "" }
+        var result = ""
+        for line in frame.lines {
+            result += line
+            result += "\n"
+        }
+        result += frame.currentLine
+        return result
+    }
+
+    private static func isTrimmedEmpty(_ text: String) -> Bool {
+        !text.contains { ch in ch != " " && ch != "\t" && ch != "\r" && ch != "\n" }
+    }
+
+    private static func findZeroMarker(_ frame: OutputFrame) -> String {
+        for line in frame.lines {
+            guard !isTrimmedEmpty(line) else { continue }
+            let prefix = line.prefix { $0 == " " || $0 == "\t" }
+            return String(prefix)
+        }
+        if !frame.trailingNewline && (!frame.lines.isEmpty || !frame.currentLine.isEmpty) {
+            let line = frame.currentLine
+            if !isTrimmedEmpty(line) {
+                let prefix = line.prefix { $0 == " " || $0 == "\t" }
+                return String(prefix)
+            }
+        }
+        return ""
+    }
+
+    private static func stripZeroMarker(_ line: String, _ zeroMarker: String) -> String {
+        guard !zeroMarker.isEmpty, line.hasPrefix(zeroMarker) else { return line }
+        return String(line.dropFirst(zeroMarker.count))
+    }
+
+    private static func renderIndentedFrame(_ frame: OutputFrame, _ indentColumns: Int) -> String {
+        guard !frame.isEmpty else { return "" }
+        let zeroMarker = findZeroMarker(frame)
+        let indent = indentColumns > 0 ? String(repeating: " ", count: indentColumns) : ""
+        var result = ""
+        for line in frame.lines {
+            let currentLine = stripZeroMarker(line, zeroMarker)
+            if !currentLine.isEmpty {
+                result += indent
+                result += currentLine
+            }
+            result += "\n"
+        }
+        if !frame.trailingNewline && (!frame.lines.isEmpty || !frame.currentLine.isEmpty) {
+            let currentLine = stripZeroMarker(frame.currentLine, zeroMarker)
+            if !currentLine.isEmpty {
+                result += indent
+                result += currentLine
+            }
+        }
+        return result
+    }
+
+    private func endCaptureFrame() -> OutputFrame {
+        outputStack.removeLast()
+    }
+
+    private func emitIndentedFrame(_ frame: OutputFrame, _ indentColumns: Int) -> Bool {
+        guard !frame.isEmpty else { return true }
+        let rendered = Self.renderIndentedFrame(frame, indentColumns)
+        let out = activeFrame()
+        out.noteIndentedOutput(rendered)
+        out.append(rendered)
+        return true
+    }
+
+    private func activeFrame() -> OutputFrame {
+        outputStack[outputStack.count - 1]
+    }
+
+    private func output(_ text: String) {
+        let out = activeFrame()
+        out.notePlainOutput(text)
+        out.append(text)
+    }
+
+    private func emitWithMultilineIndent(_ text: String) {
+        let column = activeFrame().currentColumn
+        guard column > 0, text.contains("\n") else {
+            output(text)
+            return
+        }
+
+        let pad = String(repeating: " ", count: column)
+        var indented = ""
+        var start = text.startIndex
+        var first = true
+        while start < text.endIndex {
+            if let nlIdx = text[start...].firstIndex(of: "\n") {
+                if !first { indented += pad }
+                indented += String(text[start..<nlIdx])
+                indented += "\n"
+                start = text.index(after: nlIdx)
+                first = false
+            } else {
+                if !first { indented += pad }
+                indented += String(text[start...])
+                break
+            }
+        }
+        output(indented)
+    }
+}
+END
+
 template emit_runtime_helpers(ctx: RenderFunctionsInput)
 enum TppRuntimeError: Error, CustomStringConvertible {
     case violation(String)
@@ -605,76 +787,7 @@ enum TppPolicyError: Error, CustomStringConvertible {
     }
 }
 @end if@
-
-@ctx.staticModifier@func _tppAppendValue(_ sb: inout String, _ value: String) {
-    guard value.contains("\n") else { sb += value; return }
-    var col = 0
-    for c in sb.reversed() {
-        if c == "\n" { break }
-        col += 1
-    }
-    guard col > 0 else { sb += value; return }
-    let pad = String(repeating: " ", count: col)
-    var start = value.startIndex
-    var first = true
-    while start < value.endIndex {
-        if let nlIdx = value[start...].firstIndex(of: "\n") {
-            if !first { sb += pad }
-            sb += String(value[start..<nlIdx])
-            sb += "\n"
-            start = value.index(after: nlIdx)
-            first = false
-        } else {
-            if !first { sb += pad }
-            sb += String(value[start...])
-            break
-        }
-    }
-}
-
-@ctx.staticModifier@func _tppSingleLineAlignedCell(_ value: String) throws -> String {
-    if value.contains("\n") || value.contains("\r") {
-        throw TppRuntimeError.violation("aligned cells must be single-line")
-    }
-    return value
-}
-
-@ctx.staticModifier@func _tppBlockIndent(_ raw: String, _ indentColumns: Int) -> String {
-    if raw.isEmpty { return "" }
-    let parts = raw.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-    let trailingNl = raw.hasSuffix("\n")
-    let lineCount = trailingNl ? parts.count - 1 : parts.count
-    var zeroMarker = ""
-    for i in 0..<lineCount {
-        if parts[i].contains(where: { !$0.isWhitespace }) {
-            var ws = 0
-            for c in parts[i] {
-                if c == " " || c == "\t" { ws += 1 } else { break }
-            }
-            zeroMarker = String(parts[i].prefix(ws))
-            break
-        }
-    }
-    let indent = indentColumns > 0 ? String(repeating: " ", count: indentColumns) : ""
-    var result = ""
-    for i in 0..<lineCount {
-        var l = parts[i]
-        if !zeroMarker.isEmpty && l.hasPrefix(zeroMarker) {
-            l = String(l.dropFirst(zeroMarker.count))
-        }
-        if !l.isEmpty { result += indent + l }
-        if i + 1 < lineCount || trailingNl { result += "\n" }
-    }
-    return result
-}
-
-@ctx.staticModifier@func _tppPadCell(_ s: String, _ width: Int, _ spec: Character) -> String {
-    if s.count >= width { return s }
-    let pad = width - s.count
-    if spec == "r" { return String(repeating: " ", count: pad) + s }
-    if spec == "c" { let left = pad / 2; return String(repeating: " ", count: left) + s + String(repeating: " ", count: pad - left) }
-    return s + String(repeating: " ", count: pad)
-}
+@emit_swift_writer_runtime()@
 END
 
 // ── Standalone runtime file ──────────────────────────────────────────────────
@@ -775,68 +888,7 @@ struct TppPolicy {
     }
 }
 
-func _tppAppendValue(_ sb: inout String, _ value: String) {
-    guard value.contains("\n") else { sb += value; return }
-    var col = 0
-    for c in sb.reversed() {
-        if c == "\n" { break }
-        col += 1
-    }
-    guard col > 0 else { sb += value; return }
-    let pad = String(repeating: " ", count: col)
-    var start = value.startIndex
-    var first = true
-    while start < value.endIndex {
-        if let nlIdx = value[start...].firstIndex(of: "\n") {
-            if !first { sb += pad }
-            sb += String(value[start..<nlIdx])
-            sb += "\n"
-            start = value.index(after: nlIdx)
-            first = false
-        } else {
-            if !first { sb += pad }
-            sb += String(value[start...])
-            break
-        }
-    }
-}
-
-func _tppBlockIndent(_ raw: String, _ indentColumns: Int) -> String {
-    if raw.isEmpty { return "" }
-    let parts = raw.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-    let trailingNl = raw.hasSuffix("\n")
-    let lineCount = trailingNl ? parts.count - 1 : parts.count
-    var zeroMarker = ""
-    for i in 0..<lineCount {
-        if parts[i].contains(where: { !$0.isWhitespace }) {
-            var ws = 0
-            for c in parts[i] {
-                if c == " " || c == "\t" { ws += 1 } else { break }
-            }
-            zeroMarker = String(parts[i].prefix(ws))
-            break
-        }
-    }
-    let indent = indentColumns > 0 ? String(repeating: " ", count: indentColumns) : ""
-    var result = ""
-    for i in 0..<lineCount {
-        var l = parts[i]
-        if !zeroMarker.isEmpty && l.hasPrefix(zeroMarker) {
-            l = String(l.dropFirst(zeroMarker.count))
-        }
-        if !l.isEmpty { result += indent + l }
-        if i + 1 < lineCount || trailingNl { result += "\n" }
-    }
-    return result
-}
-
-func _tppPadCell(_ s: String, _ width: Int, _ spec: Character) -> String {
-    if s.count >= width { return s }
-    let pad = width - s.count
-    if spec == "r" { return String(repeating: " ", count: pad) + s }
-    if spec == "c" { let left = pad / 2; return String(repeating: " ", count: left) + s + String(repeating: " ", count: pad - left) }
-    return s + String(repeating: " ", count: pad)
-}
+@emit_swift_writer_runtime()@
 END
 
 // ── Main entry point: rendering functions ────────────────────────────────────
@@ -873,12 +925,13 @@ fileprivate @ctx.staticModifier@func @ctx.functionPrefix@@fn.name@(@for param in
 @else@
 @ctx.staticModifier@func @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@_ @param.name@: @swift_type(param.type)@@end for@) -> String {
 @end if@
-    var _sb = ""
+    let _sb = TppWriter()
     @for instr in fn.body@
     @emit_instr(instr)@
     @end for@
-    if _sb.hasSuffix("\n") { _sb.removeLast() }
-    return _sb
+    var _out = _sb.takeOutput()
+    if _out.hasSuffix("\n") { _out.removeLast() }
+    return _out
 }
 @end for@
 @if ctx.namespaceName@

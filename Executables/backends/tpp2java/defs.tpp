@@ -283,26 +283,32 @@ END
 // ── Leaf instruction templates ───────────────────────────────────────────────
 
 template emit_emit(e: EmitData)
-@e.sb@.append(@e.textLit@);
+if (!@e.sb@.emit(@e.textLit@))
+    throw new RuntimeException("tpp render error: " + @e.sb@.error());
 END
 
 template emit_emit_expr(e: EmitExprData)
 @if e.staticPolicyId@
-{ String _pv = @java_expr_to_str(e.expr)@; _pv = @e.staticPolicyId@.apply(_pv); _tppAppendValue(@e.sb@, _pv); }
+if (!@e.sb@.emitValue(@java_expr_to_str(e.expr)@, @e.staticPolicyId@))
+    throw new RuntimeException("tpp render error: " + @e.sb@.error());
 @else@
 @if e.useRuntimePolicy@
-{ String _pv = @java_expr_to_str(e.expr)@; _pv = _policy.apply(_pv); _tppAppendValue(@e.sb@, _pv); }
+if (!@e.sb@.emitValue(@java_expr_to_str(e.expr)@, _policy))
+    throw new RuntimeException("tpp render error: " + @e.sb@.error());
 @else@
-_tppAppendValue(@e.sb@, @java_expr_to_str(e.expr)@);
+if (!@e.sb@.emitValue(@java_expr_to_str(e.expr)@))
+    throw new RuntimeException("tpp render error: " + @e.sb@.error());
 @end if@
 @end if@
 END
 
 template emit_call(c: CallData)
 @if c.policyArg@
-@c.sb@.append(@c.functionName@(@for arg in c.args | sep=", " followedBy=", "@@arg.path@@end for@@java_policy_ref(c.policyArg)@));
+if (!@c.sb@.emit(@c.functionName@(@for arg in c.args | sep=", " followedBy=", "@@arg.path@@end for@@java_policy_ref(c.policyArg)@)))
+    throw new RuntimeException("tpp render error: " + @c.sb@.error());
 @else@
-@c.sb@.append(@c.functionName@(@for arg in c.args | sep=", "@@arg.path@@end for@));
+if (!@c.sb@.emit(@c.functionName@(@for arg in c.args | sep=", "@@arg.path@@end for@)))
+    throw new RuntimeException("tpp render error: " + @c.sb@.error());
 @end if@
 END
 
@@ -321,6 +327,14 @@ template emit_instr(instr: RenderInstruction)
 @emit_emit_expr(e)@
 @end case@
 @case AlignCell@
+@end case@
+@case PushIndent(amount)@
+if (!_sb.pushIndent(@amount@))
+    throw new RuntimeException("tpp render error: " + _sb.error());
+@end case@
+@case PopIndent@
+if (!_sb.popIndent())
+    throw new RuntimeException("tpp render error: " + _sb.error());
 @end case@
 @case For(f)@
 @emit_for(f)@
@@ -343,7 +357,7 @@ template emit_for(f: ForData)
 @if f.cells@
 @emit_aligned_for(f)@
 @else@
-@if f.blockIndent@
+@if f.capturesBody@
 @emit_for_block(f)@
 @else@
 @emit_for_inline(f)@
@@ -359,43 +373,28 @@ for (int _i@f.scopeId@ = 0; _i@f.scopeId@ < @f.collPath@.size(); _i@f.scopeId@++
     int @f.enumeratorName@ = _i@f.scopeId@;
     @end if@
     @if f.precededByLit@
-    @f.sb@.append(@f.precededByLit@);
+    if (!@f.sb@.emit(@f.precededByLit@))
+        throw new RuntimeException("tpp render error: " + @f.sb@.error());
     @end if@
     @for instr in f.body@
     @emit_instr(instr)@
     @end for@
     @if f.sepLit@
-    if (_i@f.scopeId@ + 1 < @f.collPath@.size()) @f.sb@.append(@f.sepLit@);
+    if (_i@f.scopeId@ + 1 < @f.collPath@.size()) {
+        if (!@f.sb@.emit(@f.sepLit@))
+            throw new RuntimeException("tpp render error: " + @f.sb@.error());
+    }
     @if f.followedByLit@
-    else if (!@f.collPath@.isEmpty()) @f.sb@.append(@f.followedByLit@);
+    else if (!@f.collPath@.isEmpty() && !@f.sb@.emit(@f.followedByLit@)) {
+        throw new RuntimeException("tpp render error: " + @f.sb@.error());
+    }
     @end if@
     @else@
     @if f.followedByLit@
-    if (_i@f.scopeId@ + 1 >= @f.collPath@.size() && !@f.collPath@.isEmpty()) @f.sb@.append(@f.followedByLit@);
+    if (_i@f.scopeId@ + 1 >= @f.collPath@.size() && !@f.collPath@.isEmpty() && !@f.sb@.emit(@f.followedByLit@))
+        throw new RuntimeException("tpp render error: " + @f.sb@.error());
     @end if@
     @end if@
-}
-@end if@
-END
-
-template emit_for_block_sep(f: ForData)
-@if f.sepLit@
-boolean _stripped@f.scopeId@ = false;
-if (!_iter@f.scopeId@.isEmpty() && _iter@f.scopeId@.charAt(_iter@f.scopeId@.length()-1) == '\n') {
-    long _nlCount = _iter@f.scopeId@.chars().filter(c -> c == '\n').count();
-    if (_nlCount == 1) { _iter@f.scopeId@ = _iter@f.scopeId@.substring(0, _iter@f.scopeId@.length()-1); _stripped@f.scopeId@ = true; }
-}
-@if f.precededByLit@
-@f.sb@.append(@f.precededByLit@);
-@end if@
-@f.sb@.append(_iter@f.scopeId@);
-if (_i@f.scopeId@ + 1 < @f.collPath@.size()) {
-    @f.sb@.append(@f.sepLit@);
-} else {
-    @if f.followedByLit@
-    if (!@f.collPath@.isEmpty()) @f.sb@.append(@f.followedByLit@);
-    @end if@
-    if (_stripped@f.scopeId@) @f.sb@.append("\n");
 }
 @end if@
 END
@@ -407,20 +406,49 @@ for (int _i@f.scopeId@ = 0; _i@f.scopeId@ < @f.collPath@.size(); _i@f.scopeId@++
     @if f.enumeratorName@
     int @f.enumeratorName@ = _i@f.scopeId@;
     @end if@
-    StringBuilder _blk@f.scopeId@ = new StringBuilder();
+    @f.sb@.beginCapture();
     @for instr in f.body@
     @emit_instr(instr)@
     @end for@
-    String _iter@f.scopeId@ = _tppBlockIndent(_blk@f.scopeId@.toString(), @if f.blockIndent@@f.blockIndent@@end if@);
+    if (@f.sb@.hasError()) {
+        @f.sb@.endCapture();
+        throw new RuntimeException("tpp render error: " + @f.sb@.error());
+    }
+    TppWriter.CaptureResult _iter@f.scopeId@ = @f.sb@.endCaptureResult();
+    String _iterText@f.scopeId@ = _iter@f.scopeId@.text;
     @if f.sepLit@
-    @emit_for_block_sep(f)@
+    boolean _stripped@f.scopeId@ = false;
+    if (_iter@f.scopeId@.topLevelIndented) {
+        String _trimmed@f.scopeId@ = TppWriter.stripSingleTrailingNewline(_iterText@f.scopeId@);
+        if (_trimmed@f.scopeId@ != null) {
+            _iterText@f.scopeId@ = _trimmed@f.scopeId@;
+            _stripped@f.scopeId@ = true;
+        }
+    }
     @else@
-    @if f.precededByLit@
-    @f.sb@.append(@f.precededByLit@);
     @end if@
-    @f.sb@.append(_iter@f.scopeId@);
+    @if f.precededByLit@
+    if (!@f.sb@.emit(@f.precededByLit@))
+        throw new RuntimeException("tpp render error: " + @f.sb@.error());
+    @end if@
+    if (!@f.sb@.emit(_iterText@f.scopeId@))
+        throw new RuntimeException("tpp render error: " + @f.sb@.error());
+    @if f.sepLit@
+    if (_i@f.scopeId@ + 1 < @f.collPath@.size()) {
+        if (!@f.sb@.emit(@f.sepLit@))
+            throw new RuntimeException("tpp render error: " + @f.sb@.error());
+    } else {
+        @if f.followedByLit@
+        if (!@f.collPath@.isEmpty() && !@f.sb@.emit(@f.followedByLit@))
+            throw new RuntimeException("tpp render error: " + @f.sb@.error());
+        @end if@
+        if (_stripped@f.scopeId@ && !@f.sb@.emit("\n"))
+            throw new RuntimeException("tpp render error: " + @f.sb@.error());
+    }
+    @else@
     @if f.followedByLit@
-    if (_i@f.scopeId@ + 1 >= @f.collPath@.size() && !@f.collPath@.isEmpty()) @f.sb@.append(@f.followedByLit@);
+    if (_i@f.scopeId@ + 1 >= @f.collPath@.size() && !@f.collPath@.isEmpty() && !@f.sb@.emit(@f.followedByLit@))
+        throw new RuntimeException("tpp render error: " + @f.sb@.error());
     @end if@
     @end if@
 }
@@ -429,14 +457,19 @@ END
 
 // ── Aligned for ──────────────────────────────────────────────────────────────
 
-template emit_align_cell(scopeId: int, cell: AlignCellInfo)
-{
-    StringBuilder _cell@scopeId@_@cell.cellIndex@ = new StringBuilder();
-    @for instr in cell.body@
-    @emit_instr(instr)@
-    @end for@
-    _row@scopeId@[@cell.cellIndex@] = _tppSingleLineAlignedCell(_cell@scopeId@_@cell.cellIndex@.toString());
+template emit_align_cell(scopeId: int, cell: AlignCellInfo, sb: string)
+@sb@.beginCapture();
+@for instr in cell.body@
+@emit_instr(instr)@
+@end for@
+if (@sb@.hasError()) {
+    @sb@.endCapture();
+    throw new RuntimeException("tpp render error: " + @sb@.error());
 }
+TppWriter.CaptureResult _cell@scopeId@_@cell.cellIndex@ = @sb@.endCaptureResult();
+if (TppWriter.containsLineBreak(_cell@scopeId@_@cell.cellIndex@.text))
+    throw new RuntimeException("tpp render error: aligned cells must be single-line");
+_row@scopeId@[@cell.cellIndex@] = _cell@scopeId@_@cell.cellIndex@.text;
 END
 
 template emit_aligned_for(f: ForData)
@@ -449,7 +482,7 @@ for (int _i@f.scopeId@ = 0; _i@f.scopeId@ < @f.collPath@.size(); _i@f.scopeId@++
     @end if@
     String[] _row@f.scopeId@ = new String[@f.numCols@];
     @for cell in f.cells@
-    @emit_align_cell(f.scopeId, cell)@
+    @emit_align_cell(f.scopeId, cell, f.sb)@
     @end for@
     _rows@f.scopeId@.add(_row@f.scopeId@);
 }
@@ -471,7 +504,7 @@ for (int _i@f.scopeId@ = 0; _i@f.scopeId@ < _rows@f.scopeId@.size(); _i@f.scopeI
     StringBuilder _line@f.scopeId@ = new StringBuilder();
     for (int _c = 0; _c < _r.length; _c++) {
         if (_c + 1 < @f.numCols@) {
-            _line@f.scopeId@.append(_tppPadCell(_r[_c], _cw@f.scopeId@[_c], _spec@f.scopeId@[_c]));
+            _line@f.scopeId@.append(TppWriter.padCell(_r[_c], _cw@f.scopeId@[_c], _spec@f.scopeId@[_c]));
         } else {
             char _sp = _spec@f.scopeId@[_c]; int _pd = _cw@f.scopeId@[_c] - _r[_c].length();
             if (_pd > 0 && _sp != 'l') { int _left = (_sp == 'c') ? _pd / 2 : _pd; _line@f.scopeId@.append(" ".repeat(_left)); }
@@ -479,17 +512,25 @@ for (int _i@f.scopeId@ = 0; _i@f.scopeId@ < _rows@f.scopeId@.size(); _i@f.scopeI
         }
     }
     @if f.precededByLit@
-    @f.sb@.append(@f.precededByLit@);
+    if (!@f.sb@.emit(@f.precededByLit@))
+        throw new RuntimeException("tpp render error: " + @f.sb@.error());
     @end if@
-    @f.sb@.append(_line@f.scopeId@);
+    if (!@f.sb@.emit(_line@f.scopeId@.toString()))
+        throw new RuntimeException("tpp render error: " + @f.sb@.error());
     @if f.sepLit@
-    if (_i@f.scopeId@ + 1 < _rows@f.scopeId@.size()) @f.sb@.append(@f.sepLit@);
+    if (_i@f.scopeId@ + 1 < _rows@f.scopeId@.size()) {
+        if (!@f.sb@.emit(@f.sepLit@))
+            throw new RuntimeException("tpp render error: " + @f.sb@.error());
+    }
     @if f.followedByLit@
-    else if (!_rows@f.scopeId@.isEmpty()) @f.sb@.append(@f.followedByLit@);
+    else if (!_rows@f.scopeId@.isEmpty() && !@f.sb@.emit(@f.followedByLit@)) {
+        throw new RuntimeException("tpp render error: " + @f.sb@.error());
+    }
     @end if@
     @else@
     @if f.followedByLit@
-    if (_i@f.scopeId@ + 1 >= _rows@f.scopeId@.size() && !_rows@f.scopeId@.isEmpty()) @f.sb@.append(@f.followedByLit@);
+    if (_i@f.scopeId@ + 1 >= _rows@f.scopeId@.size() && !_rows@f.scopeId@.isEmpty() && !@f.sb@.emit(@f.followedByLit@))
+        throw new RuntimeException("tpp render error: " + @f.sb@.error());
     @end if@
     @end if@
 }
@@ -499,14 +540,6 @@ END
 // ── If / Else ────────────────────────────────────────────────────────────────
 
 template emit_if(i: IfData)
-@if i.blockIndent@
-@emit_if_block(i)@
-@else@
-@emit_if_inline(i)@
-@end if@
-END
-
-template emit_if_inline(i: IfData)
 @if i.condIsBool@
 @if i.isNegated@
 if (!@i.condPath@) {
@@ -528,51 +561,11 @@ if (@i.condPath@ != null) {
     @for instr in i.elseBody@
     @emit_instr(instr)@
     @end for@
-@end if@
-}
-END
-
-template emit_if_block(i: IfData)
-@if i.condIsBool@
-@if i.isNegated@
-if (!@i.condPath@) {
-@else@
-if (@i.condPath@) {
-@end if@
-@else@
-@if i.isNegated@
-if (@i.condPath@ == null) {
-@else@
-if (@i.condPath@ != null) {
-@end if@
-@end if@
-    StringBuilder _blk@i.thenScopeId@ = new StringBuilder();
-    @for instr in i.thenBody@
-    @emit_instr(instr)@
-    @end for@
-    @i.sb@.append(_tppBlockIndent(_blk@i.thenScopeId@.toString(), @if i.blockIndent@@i.blockIndent@@end if@));
-@if i.elseBody@
-} else {
-    StringBuilder _blk@i.elseScopeId@ = new StringBuilder();
-    @for instr in i.elseBody@
-    @emit_instr(instr)@
-    @end for@
-    @i.sb@.append(_tppBlockIndent(_blk@i.elseScopeId@.toString(), @if i.blockIndent@@i.blockIndent@@end if@));
 @end if@
 }
 END
 
 // ── Switch / Case ────────────────────────────────────────────────────────────
-
-template emit_switch_case_block(s: SwitchData, c: CaseData)
-StringBuilder _blk@c.scopeId@ = new StringBuilder();
-@if c.body@
-@for instr in c.body@
-@emit_instr(instr)@
-@end for@
-@end if@
-@s.sb@.append(_tppBlockIndent(_blk@c.scopeId@.toString(), @if s.blockIndent@@s.blockIndent@@end if@));
-END
 
 template emit_switch(s: SwitchData)
 @for c in s.cases@
@@ -586,14 +579,10 @@ if (@s.exprPath@._tag.equals(@c.tagLit@)) {
     @java_type(c.payloadType)@ @c.bindingName@ = @s.exprPath@.get@c.tag@();
     @end if@
     @end if@
-    @if s.blockIndent@
-    @emit_switch_case_block(s, c)@
-    @else@
     @if c.body@
     @for instr in c.body@
     @emit_instr(instr)@
     @end for@
-    @end if@
     @end if@
 @end for@
 }
@@ -708,72 +697,292 @@ template emit_java_function(fn: RenderFunctionDef, ctx: RenderFunctionsInput)
 @else@
     static String @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@@java_type(param.type)@ @param.name@@end for@) {
 @end if@
-        StringBuilder _sb = new StringBuilder();
+        @if ctx.externalRuntime@TppRuntime.TppWriter _sb = new TppRuntime.TppWriter();@else@TppWriter _sb = new TppWriter();@end if@
         @for instr in fn.body@
         @emit_instr(instr)@
         @end for@
-        if (_sb.length() > 0 && _sb.charAt(_sb.length() - 1) == '\n')
-            _sb.deleteCharAt(_sb.length() - 1);
-        return _sb.toString();
+        String _out = _sb.takeOutput();
+        if (!_out.isEmpty() && _out.charAt(_out.length() - 1) == '\n')
+            _out = _out.substring(0, _out.length() - 1);
+        return _out;
     }
 END
 
 // ── Runtime helpers (shared across generated files) ──────────────────────────
 
-template emit_runtime_helpers(ctx: RenderFunctionsInput)
-static void _tppAppendValue(StringBuilder sb, String value) {
-    if (value.indexOf('\n') < 0) { sb.append(value); return; }
-    int lastNl = -1;
-    for (int i = sb.length() - 1; i >= 0; i--) { if (sb.charAt(i) == '\n') { lastNl = i; break; } }
-    int col = (lastNl < 0) ? sb.length() : sb.length() - lastNl - 1;
-    if (col <= 0) { sb.append(value); return; }
-    String pad = " ".repeat(col);
-    int start = 0;
-    while (true) {
-        int end = value.indexOf('\n', start);
-        if (start > 0) sb.append(pad);
-        if (end < 0) { sb.append(value.substring(start)); break; }
-        sb.append(value, start, end);
-        sb.append('\n');
-        start = end + 1;
-    }
-}
-static String _tppSingleLineAlignedCell(String value) throws Exception {
-    if (value.indexOf('\n') >= 0 || value.indexOf('\r') >= 0)
-        throw new Exception("aligned cells must be single-line");
-    return value;
-}
-static String _tppBlockIndent(String raw, int indentColumns) {
-    if (raw.isEmpty()) return "";
-    String[] parts = raw.split("\n", -1);
-    boolean trailingNl = raw.endsWith("\n");
-    int lineCount = trailingNl ? parts.length - 1 : parts.length;
-    String zeroMarker = "";
-    for (int i = 0; i < lineCount; i++) {
-        if (!parts[i].trim().isEmpty()) {
-            int ws = 0;
-            while (ws < parts[i].length() && (parts[i].charAt(ws) == ' ' || parts[i].charAt(ws) == '\t')) ws++;
-            zeroMarker = parts[i].substring(0, ws);
-            break;
+template emit_java_writer_runtime()
+static class TppWriter {
+    static final class CaptureResult {
+        final String text;
+        final boolean topLevelIndented;
+
+        CaptureResult(String text, boolean topLevelIndented) {
+            this.text = text;
+            this.topLevelIndented = topLevelIndented;
         }
     }
-    String indent = indentColumns > 0 ? " ".repeat(indentColumns) : "";
-    StringBuilder result = new StringBuilder();
-    for (int i = 0; i < lineCount; i++) {
-        String l = parts[i];
-        if (!zeroMarker.isEmpty() && l.startsWith(zeroMarker)) l = l.substring(zeroMarker.length());
-        if (!l.isEmpty()) result.append(indent).append(l);
-        if (i + 1 < lineCount || trailingNl) result.append('\n');
+
+    private static final class OutputFrame {
+        final java.util.ArrayList<String> lines = new java.util.ArrayList<>();
+        final StringBuilder currentLine = new StringBuilder();
+        boolean trailingNewline = false;
+        boolean sawAnyOutput = false;
+        boolean topLevelIndentedOnly = false;
+
+        void append(String text) {
+            for (int i = 0; i < text.length(); ++i) {
+                char ch = text.charAt(i);
+                if (ch == '\n') {
+                    lines.add(currentLine.toString());
+                    currentLine.setLength(0);
+                    trailingNewline = true;
+                } else {
+                    currentLine.append(ch);
+                    trailingNewline = false;
+                }
+            }
+        }
+
+        boolean isEmpty() {
+            return lines.isEmpty() && currentLine.length() == 0 && !trailingNewline;
+        }
+
+        int currentColumn() {
+            return trailingNewline ? 0 : currentLine.length();
+        }
+
+        void notePlainOutput(String text) {
+            if (text.isEmpty())
+                return;
+            sawAnyOutput = true;
+            topLevelIndentedOnly = false;
+        }
+
+        void noteIndentedOutput(String text) {
+            if (text.isEmpty())
+                return;
+            if (!sawAnyOutput) {
+                sawAnyOutput = true;
+                topLevelIndentedOnly = true;
+                return;
+            }
+            sawAnyOutput = true;
+            topLevelIndentedOnly = false;
+        }
     }
-    return result.toString();
+
+    private final java.util.ArrayList<OutputFrame> outputStack = new java.util.ArrayList<>();
+    private final java.util.ArrayList<Integer> indentStack = new java.util.ArrayList<>();
+    private String error = "";
+
+    TppWriter() {
+        outputStack.add(new OutputFrame());
+    }
+
+    boolean emit(String text) {
+        output(text);
+        return true;
+    }
+
+    boolean emitValue(String value) {
+        emitWithMultilineIndent(value);
+        return true;
+    }
+
+    boolean emitValue(String value, TppPolicy policy) {
+        try {
+            value = policy.apply(value);
+        } catch (Exception e) {
+            error = e.getMessage();
+            return false;
+        }
+        emitWithMultilineIndent(value);
+        return true;
+    }
+
+    boolean pushIndent(int indentColumns) {
+        indentStack.add(indentColumns);
+        beginCapture();
+        return true;
+    }
+
+    boolean popIndent() {
+        if (indentStack.isEmpty()) {
+            error = "popIndent: scope stack underflow";
+            return false;
+        }
+        int indentColumns = indentStack.remove(indentStack.size() - 1);
+        return emitIndentedFrame(endCaptureFrame(), indentColumns);
+    }
+
+    void beginCapture() {
+        outputStack.add(new OutputFrame());
+    }
+
+    String endCapture() {
+        return serializeFrame(endCaptureFrame());
+    }
+
+    CaptureResult endCaptureResult() {
+        OutputFrame captured = endCaptureFrame();
+        return new CaptureResult(serializeFrame(captured), captured.topLevelIndentedOnly);
+    }
+
+    String takeOutput() {
+        return outputStack.isEmpty() ? "" : serializeFrame(outputStack.get(0));
+    }
+
+    String error() {
+        return error;
+    }
+
+    boolean hasError() {
+        return !error.isEmpty();
+    }
+
+    static String stripSingleTrailingNewline(String text) {
+        if (text.isEmpty() || text.charAt(text.length() - 1) != '\n')
+            return null;
+        if (text.chars().filter(ch -> ch == '\n').count() != 1)
+            return null;
+        return text.substring(0, text.length() - 1);
+    }
+
+    static boolean containsLineBreak(String text) {
+        return text.indexOf('\r') >= 0 || text.indexOf('\n') >= 0;
+    }
+
+    static String padCell(String text, int width, char spec) {
+        if (text.length() >= width)
+            return text;
+        int pad = width - text.length();
+        if (spec == 'r')
+            return " ".repeat(pad) + text;
+        if (spec == 'c') {
+            int left = pad / 2;
+            return " ".repeat(left) + text + " ".repeat(pad - left);
+        }
+        return text + " ".repeat(pad);
+    }
+
+    private static String serializeFrame(OutputFrame frame) {
+        if (frame.isEmpty())
+            return "";
+        StringBuilder result = new StringBuilder();
+        for (String line : frame.lines) {
+            result.append(line).append('\n');
+        }
+        result.append(frame.currentLine);
+        return result.toString();
+    }
+
+    private static boolean isTrimmedEmpty(String text) {
+        for (int i = 0; i < text.length(); ++i) {
+            char ch = text.charAt(i);
+            if (ch != ' ' && ch != '\t' && ch != '\r' && ch != '\n')
+                return false;
+        }
+        return true;
+    }
+
+    private static String findZeroMarker(OutputFrame frame) {
+        for (String line : frame.lines) {
+            if (isTrimmedEmpty(line))
+                continue;
+            int width = 0;
+            while (width < line.length() && (line.charAt(width) == ' ' || line.charAt(width) == '\t'))
+                ++width;
+            return line.substring(0, width);
+        }
+        if (!frame.trailingNewline && (!frame.lines.isEmpty() || frame.currentLine.length() > 0)) {
+            String line = frame.currentLine.toString();
+            if (!isTrimmedEmpty(line)) {
+                int width = 0;
+                while (width < line.length() && (line.charAt(width) == ' ' || line.charAt(width) == '\t'))
+                    ++width;
+                return line.substring(0, width);
+            }
+        }
+        return "";
+    }
+
+    private static String stripZeroMarker(String line, String zeroMarker) {
+        return !zeroMarker.isEmpty() && line.startsWith(zeroMarker)
+            ? line.substring(zeroMarker.length())
+            : line;
+    }
+
+    private static String renderIndentedFrame(OutputFrame frame, int indentColumns) {
+        if (frame.isEmpty())
+            return "";
+        String zeroMarker = findZeroMarker(frame);
+        String indent = indentColumns > 0 ? " ".repeat(indentColumns) : "";
+        StringBuilder result = new StringBuilder();
+        for (String line : frame.lines) {
+            String currentLine = stripZeroMarker(line, zeroMarker);
+            if (!currentLine.isEmpty())
+                result.append(indent).append(currentLine);
+            result.append('\n');
+        }
+        if (!frame.trailingNewline && (!frame.lines.isEmpty() || frame.currentLine.length() > 0)) {
+            String currentLine = stripZeroMarker(frame.currentLine.toString(), zeroMarker);
+            if (!currentLine.isEmpty())
+                result.append(indent).append(currentLine);
+        }
+        return result.toString();
+    }
+
+    private OutputFrame endCaptureFrame() {
+        return outputStack.remove(outputStack.size() - 1);
+    }
+
+    private boolean emitIndentedFrame(OutputFrame frame, int indentColumns) {
+        if (frame.isEmpty())
+            return true;
+        String rendered = renderIndentedFrame(frame, indentColumns);
+        OutputFrame out = activeFrame();
+        out.noteIndentedOutput(rendered);
+        out.append(rendered);
+        return true;
+    }
+
+    private OutputFrame activeFrame() {
+        return outputStack.get(outputStack.size() - 1);
+    }
+
+    private void output(String text) {
+        OutputFrame out = activeFrame();
+        out.notePlainOutput(text);
+        out.append(text);
+    }
+
+    private void emitWithMultilineIndent(String text) {
+        int column = activeFrame().currentColumn();
+        if (column > 0 && text.indexOf('\n') >= 0) {
+            String pad = " ".repeat(column);
+            StringBuilder indented = new StringBuilder();
+            int start = 0;
+            while (true) {
+                int end = text.indexOf('\n', start);
+                if (start > 0)
+                    indented.append(pad);
+                if (end < 0) {
+                    indented.append(text.substring(start));
+                    break;
+                }
+                indented.append(text, start, end).append('\n');
+                start = end + 1;
+            }
+            output(indented.toString());
+        } else {
+            output(text);
+        }
+    }
 }
-static String _tppPadCell(String s, int width, char spec) {
-    if (s.length() >= width) return s;
-    int pad = width - s.length();
-    if (spec == 'r') return " ".repeat(pad) + s;
-    if (spec == 'c') { int left = pad / 2; return " ".repeat(left) + s + " ".repeat(pad - left); }
-    return s + " ".repeat(pad);
-}
+END
+
+template emit_runtime_helpers(ctx: RenderFunctionsInput)
+@emit_java_writer_runtime()@
 END
 
 // ── Standalone runtime class ─────────────────────────────────────────────────
@@ -832,54 +1041,7 @@ class TppPolicy {
 }
 
 class TppRuntime {
-    static void _tppAppendValue(StringBuilder sb, String value) {
-        if (value.indexOf('\n') < 0) { sb.append(value); return; }
-        int lastNl = -1;
-        for (int i = sb.length() - 1; i >= 0; i--) { if (sb.charAt(i) == '\n') { lastNl = i; break; } }
-        int col = (lastNl < 0) ? sb.length() : sb.length() - lastNl - 1;
-        if (col <= 0) { sb.append(value); return; }
-        String pad = " ".repeat(col);
-        int start = 0;
-        while (true) {
-            int end = value.indexOf('\n', start);
-            if (start > 0) sb.append(pad);
-            if (end < 0) { sb.append(value.substring(start)); break; }
-            sb.append(value, start, end);
-            sb.append('\n');
-            start = end + 1;
-        }
-    }
-    static String _tppBlockIndent(String raw, int indentColumns) {
-        if (raw.isEmpty()) return "";
-        String[] parts = raw.split("\\n", -1);
-        boolean trailingNl = raw.endsWith("\n");
-        int lineCount = trailingNl ? parts.length - 1 : parts.length;
-        String zeroMarker = "";
-        for (int i = 0; i < lineCount; i++) {
-            if (!parts[i].trim().isEmpty()) {
-                int ws = 0;
-                while (ws < parts[i].length() && (parts[i].charAt(ws) == ' ' || parts[i].charAt(ws) == '\t')) ws++;
-                zeroMarker = parts[i].substring(0, ws);
-                break;
-            }
-        }
-        String indent = indentColumns > 0 ? " ".repeat(indentColumns) : "";
-        StringBuilder result = new StringBuilder();
-        for (int i = 0; i < lineCount; i++) {
-            String l = parts[i];
-            if (!zeroMarker.isEmpty() && l.startsWith(zeroMarker)) l = l.substring(zeroMarker.length());
-            if (!l.isEmpty()) result.append(indent).append(l);
-            if (i + 1 < lineCount || trailingNl) result.append('\n');
-        }
-        return result.toString();
-    }
-    static String _tppPadCell(String s, int width, char spec) {
-        if (s.length() >= width) return s;
-        int pad = width - s.length();
-        if (spec == 'r') return " ".repeat(pad) + s;
-        if (spec == 'c') { int left = pad / 2; return " ".repeat(left) + s + " ".repeat(pad - left); }
-        return s + " ".repeat(pad);
-    }
+    @emit_java_writer_runtime()@
 }
 END
 

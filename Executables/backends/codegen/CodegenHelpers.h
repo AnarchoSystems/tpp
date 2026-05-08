@@ -231,7 +231,7 @@ inline tpp::TypeKind getElemType(const tpp::TypeKind &t)
 
 struct BodyIndentInfo
 {
-    std::optional<int> blockIndent;
+    std::optional<int> indentAmount;
     size_t firstIndex = 0;
     size_t pastLastIndex = 0;
 };
@@ -251,7 +251,7 @@ inline BodyIndentInfo analyzeIndentedBody(const std::vector<tpp::Instruction> &b
         std::holds_alternative<tpp::PushIndentInstr>(body.front().value) &&
         std::holds_alternative<tpp::Instruction_PopIndent>(body.back().value))
     {
-        info.blockIndent = std::get<tpp::PushIndentInstr>(body.front().value).amount;
+        info.indentAmount = std::get<tpp::PushIndentInstr>(body.front().value).amount;
         info.firstIndex = 1;
         info.pastLastIndex = body.size() - 1;
     }
@@ -311,6 +311,9 @@ struct ConvertConfig
 
     /// Whether policy-using call sites need `try` (Swift only).
     bool callNeedsTry = false;
+
+    /// Preserve explicit PushIndent/PopIndent instructions in converted bodies.
+    bool preserveIndentInstructions = false;
 };
 
 inline RenderExprInfo exprInfoToContext(const tpp::ExprInfo &expr)
@@ -469,11 +472,24 @@ inline RenderInstruction convertInstruction(
         {
             return {RenderInstruction_AlignCell{}};
         }
+        else if constexpr (std::is_same_v<T, tpp::PushIndentInstr>)
+        {
+            RenderInstruction result;
+            result.value.emplace<3>(arg.amount);
+            return result;
+        }
+        else if constexpr (std::is_same_v<T, tpp::Instruction_PopIndent>)
+        {
+            RenderInstruction result;
+            result.value.emplace<4>();
+            return result;
+        }
         else if constexpr (std::is_same_v<T, std::unique_ptr<tpp::ForInstr>>)
         {
             int s = scope++;
             std::string pol = arg->policy.empty() ? activePolicy : arg->policy;
             auto elemType = getElemType(*arg->collection.type);
+            const bool preserveIndent = cfg.preserveIndentInstructions;
             const auto bodyIndent = analyzeIndentedBody(*arg->body);
 
             auto forData = std::make_unique<ForData>();
@@ -490,7 +506,7 @@ inline RenderInstruction convertInstruction(
                 forData->followedByLit = stringLiteral(*arg->followedBy);
             if (arg->precededBy.has_value())
                 forData->precededByLit = stringLiteral(*arg->precededBy);
-            forData->blockIndent = bodyIndent.blockIndent;
+            forData->capturesBody = bodyIndent.indentAmount.has_value();
             forData->sb = sb;
             forData->alignSpec = arg->alignSpec;
             forData->singleAlignChar = arg->alignSpec.has_value() && arg->alignSpec->size() == 1;
@@ -517,62 +533,57 @@ inline RenderInstruction convertInstruction(
             else
             {
                 auto bodyVec = std::make_unique<std::vector<RenderInstruction>>();
-                for (size_t index = bodyIndent.firstIndex; index < bodyIndent.pastLastIndex; ++index)
+                const size_t firstIndex = preserveIndent ? 0 : bodyIndent.firstIndex;
+                const size_t pastLastIndex = preserveIndent ? arg->body->size() : bodyIndent.pastLastIndex;
+                for (size_t index = firstIndex; index < pastLastIndex; ++index)
                     bodyVec->push_back(convertInstruction((*arg->body)[index], sb, pol, scope, ir, cfg));
                 forData->body = std::move(bodyVec);
                 forData->numCols = 0;
             }
 
             RenderInstruction result;
-            result.value.emplace<3>(std::move(forData));
+            result.value.emplace<5>(std::move(forData));
             return result;
         }
         else if constexpr (std::is_same_v<T, std::unique_ptr<tpp::IfInstr>>)
         {
+            const bool preserveIndent = cfg.preserveIndentInstructions;
             const auto thenIndent = analyzeIndentedBody(*arg->thenBody);
             const auto elseIndent = analyzeIndentedBody(*arg->elseBody);
-            const std::optional<int> blockIndent = thenIndent.blockIndent.has_value()
-                ? thenIndent.blockIndent
-                : elseIndent.blockIndent;
-            int thenScopeId = 0, elseScopeId = 0;
-            bool elseBodyPresent = elseIndent.firstIndex < elseIndent.pastLastIndex;
-            if (blockIndent.has_value())
-            {
-                thenScopeId = scope++;
-                if (elseBodyPresent)
-                {
-                    elseScopeId = scope++;
-                }
-            }
+            bool elseBodyPresent = preserveIndent
+                ? !arg->elseBody->empty()
+                : elseIndent.firstIndex < elseIndent.pastLastIndex;
 
             auto ifData = std::make_unique<IfData>();
             ifData->condPath = exprInfoPath(arg->condExpr);
             ifData->condIsBool = arg->condExpr.type->value.index() == 2;
             ifData->isNegated = arg->negated;
-            ifData->blockIndent = blockIndent;
             ifData->sb = sb;
-            ifData->thenScopeId = thenScopeId;
-            ifData->elseScopeId = elseScopeId;
 
             auto thenVec = std::make_unique<std::vector<RenderInstruction>>();
-            for (size_t index = thenIndent.firstIndex; index < thenIndent.pastLastIndex; ++index)
+            const size_t thenFirstIndex = preserveIndent ? 0 : thenIndent.firstIndex;
+            const size_t thenPastLastIndex = preserveIndent ? arg->thenBody->size() : thenIndent.pastLastIndex;
+            for (size_t index = thenFirstIndex; index < thenPastLastIndex; ++index)
                 thenVec->push_back(convertInstruction((*arg->thenBody)[index], sb, activePolicy, scope, ir, cfg));
             ifData->thenBody = std::move(thenVec);
 
             if (elseBodyPresent)
             {
                 auto elseVec = std::make_unique<std::vector<RenderInstruction>>();
-                for (size_t index = elseIndent.firstIndex; index < elseIndent.pastLastIndex; ++index)
+                const size_t elseFirstIndex = preserveIndent ? 0 : elseIndent.firstIndex;
+                const size_t elsePastLastIndex = preserveIndent ? arg->elseBody->size() : elseIndent.pastLastIndex;
+                for (size_t index = elseFirstIndex; index < elsePastLastIndex; ++index)
                     elseVec->push_back(convertInstruction((*arg->elseBody)[index], sb, activePolicy, scope, ir, cfg));
                 ifData->elseBody = std::move(elseVec);
             }
 
             RenderInstruction result;
-            result.value.emplace<4>(std::move(ifData));
+            result.value.emplace<6>(std::move(ifData));
             return result;
         }
         else if constexpr (std::is_same_v<T, std::unique_ptr<tpp::SwitchInstr>>)
         {
+            const bool preserveIndent = cfg.preserveIndentInstructions;
             std::string pol = arg->policy.empty() ? activePolicy : arg->policy;
 
             // Unwrap OptionalType to find the underlying NamedType for enum lookup
@@ -592,19 +603,14 @@ inline RenderInstruction convertInstruction(
 
             auto casesVec = std::make_unique<std::vector<CaseData>>();
             bool first = true;
-            std::optional<int> switchBlockIndent;
             for (const auto &c : *arg->cases)
             {
                 const auto caseIndent = analyzeIndentedBody(*c.body);
-                int caseScopeId = 0;
-                if (caseIndent.blockIndent.has_value())
-                {
-                    switchBlockIndent = caseIndent.blockIndent;
-                    caseScopeId = scope++;
-                }
 
                 auto caseBody = std::make_unique<std::vector<RenderInstruction>>();
-                for (size_t index = caseIndent.firstIndex; index < caseIndent.pastLastIndex; ++index)
+                const size_t caseFirstIndex = preserveIndent ? 0 : caseIndent.firstIndex;
+                const size_t casePastLastIndex = preserveIndent ? c.body->size() : caseIndent.pastLastIndex;
+                for (size_t index = caseFirstIndex; index < casePastLastIndex; ++index)
                     caseBody->push_back(convertInstruction((*c.body)[index], sb, pol, scope, ir, cfg));
 
                 int variantIndex = -1;
@@ -628,7 +634,6 @@ inline RenderInstruction convertInstruction(
                     : std::nullopt;
                 if (!caseBody->empty())
                     caseData.body = std::move(caseBody);
-                caseData.scopeId = caseScopeId;
                 caseData.isFirst = first;
                 caseData.variantIndex = variantIndex;
                 caseData.isRecursivePayload = c.payloadIsRecursive;
@@ -656,11 +661,10 @@ inline RenderInstruction convertInstruction(
             switchData->exprIsOptional = arg->expr.isOptional;
             switchData->enumTypeName = enumTypeName;
             switchData->cases = std::move(casesVec);
-            switchData->blockIndent = switchBlockIndent;
             switchData->sb = sb;
 
             RenderInstruction result;
-            result.value.emplace<5>(std::move(switchData));
+            result.value.emplace<7>(std::move(switchData));
             return result;
         }
         else if constexpr (std::is_same_v<T, tpp::CallInstr>)
@@ -678,7 +682,9 @@ inline RenderInstruction convertInstruction(
             callData.needsTry = cfg.callNeedsTry && !ir.policies.empty();
             callData.policyArg = makePolicyRef(activePolicy, ir);
 
-            return {std::move(callData)};
+            RenderInstruction result;
+            result.value.emplace<8>(std::move(callData));
+            return result;
         }
         else
         {
@@ -750,6 +756,7 @@ struct BuildFunctionsConfig
     std::string nullLiteral;
     std::string staticModifier;
     bool callNeedsTry = false;
+    bool preserveIndentInstructions = false;
     std::vector<std::string> includes;
 
     static BuildFunctionsConfig forCpp(const std::vector<std::string> &includes = {})
@@ -758,6 +765,7 @@ struct BuildFunctionsConfig
         cfg.nullLiteral = "std::nullopt";
         cfg.staticModifier = "";
         cfg.callNeedsTry = false;
+        cfg.preserveIndentInstructions = true;
         cfg.includes = includes;
         return cfg;
     }
@@ -768,6 +776,7 @@ struct BuildFunctionsConfig
         cfg.nullLiteral = "null";
         cfg.staticModifier = "static ";
         cfg.callNeedsTry = false;
+        cfg.preserveIndentInstructions = true;
         return cfg;
     }
 
@@ -777,6 +786,7 @@ struct BuildFunctionsConfig
         cfg.nullLiteral = "nil";
         cfg.staticModifier = namespaceName.empty() ? "" : "static ";
         cfg.callNeedsTry = policiesPresent;
+        cfg.preserveIndentInstructions = true;
         return cfg;
     }
 };
@@ -792,6 +802,7 @@ inline RenderFunctionsInput buildFunctionsContext(
     ConvertConfig cfg;
     cfg.functionPrefix = functionPrefix;
     cfg.callNeedsTry = bfCfg.callNeedsTry;
+    cfg.preserveIndentInstructions = bfCfg.preserveIndentInstructions;
 
     std::vector<RenderFunctionDef> functions;
     for (const auto &fn : ir.functions)
@@ -805,7 +816,7 @@ inline RenderFunctionsInput buildFunctionsContext(
         auto body = std::make_unique<std::vector<RenderInstruction>>();
         for (const auto &instr : *fn.body)
         {
-            if (isIndentInstruction(instr))
+            if (!cfg.preserveIndentInstructions && isIndentInstruction(instr))
                 continue;
             body->push_back(convertInstruction(instr, "_sb", fn.policy, scope, ir, cfg));
         }

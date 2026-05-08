@@ -25,6 +25,12 @@ namespace tpp
             bool stripSingleTrailingNewline = false;
         };
 
+        struct CaptureResult
+        {
+            std::string text;
+            bool topLevelIndented = false;
+        };
+
         explicit Writer(std::map<std::string, TppPolicy> namedPolicies = {})
             : namedPolicies_(std::move(namedPolicies))
         {
@@ -112,7 +118,7 @@ namespace tpp
 
             const int indentColumns = indentStack_.back();
             indentStack_.pop_back();
-            return emit(blockIndent(endCapture(), indentColumns));
+            return emitIndentedFrame(endCaptureFrame(), indentColumns);
         }
 
         template <typename Body>
@@ -131,14 +137,11 @@ namespace tpp
 
             if (hasError())
             {
-                endCapture();
+                endCaptureFrame();
                 return false;
             }
 
-            const std::string raw = endCapture();
-            if (!raw.empty())
-                return emit(blockIndent(raw, indentColumns));
-            return true;
+            return emitIndentedFrame(endCaptureFrame(), indentColumns);
         }
 
         template <typename Collection, typename Body>
@@ -185,6 +188,72 @@ namespace tpp
 
         template <typename Collection, typename Body>
         bool emitBlockForEach(const Collection &collection,
+                              const NativeLoopOptions &options,
+                              Body &&body)
+        {
+            beginForEach(collection.size());
+            struct Guard
+            {
+                Writer &writer;
+                bool active = true;
+                ~Guard()
+                {
+                    if (active)
+                        writer.endForEach();
+                }
+            } guard{*this};
+
+            while (nextForEach())
+            {
+                beginCapture();
+                try
+                {
+                    body(collection[forEachIndex()], forEachEnumerator());
+                }
+                catch (...)
+                {
+                    endCapture();
+                    throw;
+                }
+
+                if (hasError())
+                {
+                    endCaptureFrame();
+                    return false;
+                }
+
+                CaptureResult iterResult = endCaptureResult();
+                bool strippedNewline = false;
+                if (iterResult.topLevelIndented && options.stripSingleTrailingNewline)
+                    strippedNewline = stripSingleTrailingNewline(iterResult.text);
+
+                if (!emitOptionalText(options.precededBy))
+                    return false;
+                if (!emit(iterResult.text))
+                    return false;
+
+                if (forEachHasNext())
+                {
+                    if (!emitOptionalText(options.sep))
+                        return false;
+                }
+                else
+                {
+                    if (options.followedBy.has_value() && !collection.empty() &&
+                        !emitOptionalText(options.followedBy))
+                    {
+                        return false;
+                    }
+                    if (strippedNewline && !emit("\n"))
+                        return false;
+                }
+            }
+
+            return !hasError();
+        }
+
+        template <typename Collection, typename Body>
+        bool emitBlockForEach(const Collection &collection,
                               int indentColumns,
                               const NativeLoopOptions &options,
                               Body &&body)
@@ -217,11 +286,12 @@ namespace tpp
 
                 if (hasError())
                 {
-                    endCapture();
+                    endCaptureFrame();
                     return false;
                 }
 
-                std::string iterResult = blockIndent(endCapture(), indentColumns);
+                OutputFrame iterFrame = endCaptureFrame();
+                std::string iterResult = renderIndentedFrame(iterFrame, indentColumns);
                 bool strippedNewline = false;
                 if (options.stripSingleTrailingNewline)
                     strippedNewline = stripSingleTrailingNewline(iterResult);
@@ -279,7 +349,7 @@ namespace tpp
 
             if (hasError())
             {
-                endCapture();
+                endCaptureFrame();
                 return false;
             }
 
@@ -369,19 +439,23 @@ namespace tpp
 
         std::string endCapture()
         {
-            std::string captured = std::move(outputStack_.back());
-            outputStack_.pop_back();
-            return captured;
+            return serializeFrame(endCaptureFrame());
+        }
+
+        CaptureResult endCaptureResult()
+        {
+            OutputFrame captured = endCaptureFrame();
+            return {serializeFrame(captured), captured.topLevelIndentedOnly};
         }
 
         std::string endBlockCapture(int indentColumns)
         {
-            return blockIndent(endCapture(), indentColumns);
+            return renderIndentedFrame(endCaptureFrame(), indentColumns);
         }
 
         std::string takeOutput()
         {
-            return outputStack_.empty() ? std::string{} : std::move(outputStack_.front());
+            return outputStack_.empty() ? std::string{} : serializeFrame(outputStack_.front());
         }
 
         std::string &error()
@@ -414,6 +488,25 @@ namespace tpp
             return text.find_first_of("\r\n") != std::string::npos;
         }
 
+        static std::string padCell(const std::string &text, int width, char spec)
+        {
+            const int len = static_cast<int>(text.size());
+            if (len >= width)
+                return text;
+
+            const int pad = width - len;
+            if (spec == 'r')
+                return std::string(static_cast<size_t>(pad), ' ') + text;
+            if (spec == 'c')
+            {
+                const int left = pad / 2;
+                const int right = pad - left;
+                return std::string(static_cast<size_t>(left), ' ') + text +
+                       std::string(static_cast<size_t>(right), ' ');
+            }
+            return text + std::string(static_cast<size_t>(pad), ' ');
+        }
+
         static std::string renderAlignedRow(const std::vector<std::string> &row,
                                             const std::vector<int> &colWidth,
                                             const std::vector<char> &colSpec,
@@ -442,6 +535,68 @@ namespace tpp
         }
 
     private:
+        struct OutputFrame
+        {
+            std::vector<std::string> lines;
+            std::string currentLine;
+            bool trailingNewline = false;
+            bool sawAnyOutput = false;
+            bool topLevelIndentedOnly = false;
+
+            void append(std::string_view text)
+            {
+                for (char ch : text)
+                {
+                    if (ch == '\n')
+                    {
+                        lines.push_back(std::move(currentLine));
+                        currentLine.clear();
+                        trailingNewline = true;
+                    }
+                    else
+                    {
+                        currentLine.push_back(ch);
+                        trailingNewline = false;
+                    }
+                }
+            }
+
+            bool empty() const
+            {
+                return lines.empty() && currentLine.empty() && !trailingNewline;
+            }
+
+            size_t currentColumn() const
+            {
+                return trailingNewline ? 0U : currentLine.size();
+            }
+
+            void notePlainOutput(std::string_view text)
+            {
+                if (text.empty())
+                    return;
+
+                sawAnyOutput = true;
+                topLevelIndentedOnly = false;
+            }
+
+            void noteIndentedOutput(std::string_view text)
+            {
+                if (text.empty())
+                    return;
+
+                if (!sawAnyOutput)
+                {
+                    sawAnyOutput = true;
+                    topLevelIndentedOnly = true;
+                    return;
+                }
+
+                sawAnyOutput = true;
+                topLevelIndentedOnly = false;
+            }
+        };
+
         struct ForState
         {
             std::vector<std::vector<std::string>> rows;
@@ -459,6 +614,36 @@ namespace tpp
             bool started = false;
         };
 
+        static std::string serializeFrame(const OutputFrame &frame)
+        {
+            if (frame.empty())
+                return "";
+
+            size_t size = frame.currentLine.size();
+            for (const auto &line : frame.lines)
+                size += line.size() + 1;
+
+            std::string result;
+            result.reserve(size);
+            for (const auto &line : frame.lines)
+            {
+                result += line;
+                result += '\n';
+            }
+            result += frame.currentLine;
+            return result;
+        }
+ 
+        template <typename Func>
+        static void forEachLogicalLine(const OutputFrame &frame, Func &&func)
+        {
+            for (const auto &line : frame.lines)
+                func(line, true);
+
+            if (!frame.trailingNewline && (!frame.currentLine.empty() || !frame.lines.empty()))
+                func(frame.currentLine, false);
+        }
+
         static std::string trim(const std::string &text)
         {
             const size_t start = text.find_first_not_of(" \t\r\n");
@@ -468,90 +653,99 @@ namespace tpp
             return text.substr(start, end - start + 1);
         }
 
-        static std::string blockIndent(const std::string &raw, int indentColumns)
+        static std::string findZeroMarker(const OutputFrame &frame)
         {
-            if (raw.empty())
-                return "";
-
-            std::vector<std::string> lines;
-            std::istringstream input(raw);
-            std::string line;
-            while (std::getline(input, line))
-                lines.push_back(line);
-            const bool trailingNewline = !raw.empty() && raw.back() == '\n';
-
             std::string zeroMarker;
-            for (const auto &currentLine : lines)
-            {
-                if (trim(currentLine).empty())
-                    continue;
+            bool found = false;
+            forEachLogicalLine(frame, [&](const std::string &line, bool) {
+                if (found || trim(line).empty())
+                    return;
 
                 size_t width = 0;
-                while (width < currentLine.size() &&
-                       (currentLine[width] == ' ' || currentLine[width] == '\t'))
-                {
+                while (width < line.size() && (line[width] == ' ' || line[width] == '\t'))
                     ++width;
-                }
 
-                zeroMarker = currentLine.substr(0, width);
-                break;
+                zeroMarker = line.substr(0, width);
+                found = true;
+            });
+            return zeroMarker;
+        }
+
+        static std::string stripZeroMarker(std::string_view line, const std::string &zeroMarker)
+        {
+            if (!zeroMarker.empty() &&
+                line.size() >= zeroMarker.size() &&
+                line.compare(0, zeroMarker.size(), zeroMarker) == 0)
+            {
+                line.remove_prefix(zeroMarker.size());
             }
 
+            return std::string(line);
+        }
+
+        static std::string renderIndentedFrame(const OutputFrame &frame, int indentColumns)
+        {
+            if (frame.empty())
+                return "";
+
+            const std::string zeroMarker = findZeroMarker(frame);
             const std::string indent(static_cast<size_t>(indentColumns), ' ');
             std::string result;
-            for (size_t index = 0; index < lines.size(); ++index)
-            {
-                std::string currentLine = lines[index];
-                if (!currentLine.empty() && !zeroMarker.empty() &&
-                    currentLine.size() >= zeroMarker.size() &&
-                    currentLine.compare(0, zeroMarker.size(), zeroMarker) == 0)
-                {
-                    currentLine = currentLine.substr(zeroMarker.size());
-                }
 
+            forEachLogicalLine(frame, [&](const std::string &line, bool terminated) {
+                const std::string currentLine = stripZeroMarker(line, zeroMarker);
                 if (!currentLine.empty())
-                    result += indent + currentLine;
-                if (index + 1 < lines.size() || trailingNewline)
+                {
+                    result += indent;
+                    result += currentLine;
+                }
+                if (terminated)
                     result += '\n';
-            }
+            });
 
             return result;
         }
 
-        static std::string padCell(const std::string &text, int width, char spec)
+        OutputFrame endCaptureFrame()
         {
-            const int len = static_cast<int>(text.size());
-            if (len >= width)
-                return text;
+            OutputFrame captured = std::move(outputStack_.back());
+            outputStack_.pop_back();
+            return captured;
+        }
 
-            const int pad = width - len;
-            if (spec == 'r')
-                return std::string(static_cast<size_t>(pad), ' ') + text;
-            if (spec == 'c')
-            {
-                const int left = pad / 2;
-                const int right = pad - left;
-                return std::string(static_cast<size_t>(left), ' ') + text +
-                       std::string(static_cast<size_t>(right), ' ');
-            }
-            return text + std::string(static_cast<size_t>(pad), ' ');
+        bool emitIndentedFrame(const OutputFrame &frame, int indentColumns)
+        {
+            if (frame.empty())
+                return true;
+
+            auto &out = activeFrame();
+            const std::string rendered = renderIndentedFrame(frame, indentColumns);
+            out.noteIndentedOutput(rendered);
+            out.append(rendered);
+
+            return true;
         }
 
         void output(std::string_view text)
         {
-            activeOutput().append(text.data(), text.size());
+            auto &out = activeFrame();
+            out.notePlainOutput(text);
+            out.append(text);
         }
 
-        std::string &activeOutput()
+        OutputFrame &activeFrame()
+        {
+            return outputStack_.back();
+        }
+
+        const OutputFrame &activeFrame() const
         {
             return outputStack_.back();
         }
 
         void emitWithMultilineIndent(const std::string &text)
         {
-            auto &out = activeOutput();
-            const auto lastNewline = out.rfind('\n');
-            const size_t column = (lastNewline == std::string::npos) ? out.size() : out.size() - lastNewline - 1;
+            const size_t column = activeFrame().currentColumn();
 
             if (column > 0 && text.find('\n') != std::string::npos)
             {
@@ -729,7 +923,7 @@ namespace tpp
         }
 
         std::map<std::string, TppPolicy> namedPolicies_;
-        std::vector<std::string> outputStack_;
+        std::vector<OutputFrame> outputStack_;
         std::vector<int> indentStack_;
         std::string activePolicy_;
         std::vector<std::string> policyScopeStack_;

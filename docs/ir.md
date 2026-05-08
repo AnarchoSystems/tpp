@@ -379,6 +379,8 @@ Block indentation is encoded structurally rather than via dedicated flags on `Fo
 
 The renderer uses the same rule as the static backends: a body that begins with `PushIndent` and ends with `PopIndent` is treated as block-indented, and the enclosed text is re-indented relative to the recorded indentation column.
 
+Static backends do not reconstruct separate `blockIndent` metadata from source syntax. The shared lowering keeps indentation structural, and only loop lowering carries a backend-neutral capture/no-capture hint so separator handling can stay consistent without reintroducing frontend-only indentation fields.
+
 ---
 
 ## Producing and Consuming the IR

@@ -58,7 +58,7 @@ struct ForData
     sepLit : optional<string>;
     followedByLit : optional<string>;
     precededByLit : optional<string>;
-    blockIndent : optional<int>;
+    capturesBody : bool;
     sb : string;
     alignSpec : optional<string>;
     cells : optional<list<AlignCellInfo>>;
@@ -74,7 +74,6 @@ struct CaseData
     bindingName : optional<string>;
     payloadType : optional<RenderTypeKind>;
     body : optional<list<RenderInstruction>>;
-    scopeId : int;
     isFirst : bool;
     variantIndex : int;
     isRecursivePayload : bool;
@@ -87,10 +86,7 @@ struct IfData
     isNegated : bool;
     thenBody : list<RenderInstruction>;
     elseBody : optional<list<RenderInstruction>>;
-    blockIndent : optional<int>;
     sb : string;
-    thenScopeId : int;
-    elseScopeId : int;
 }
 
 struct SwitchData
@@ -100,7 +96,6 @@ struct SwitchData
     exprIsOptional : bool;
     enumTypeName : string;
     cases : list<CaseData>;
-    blockIndent : optional<int>;
     sb : string;
 }
 
@@ -132,6 +127,8 @@ enum RenderInstruction
     Emit(EmitData),
     EmitExpr(EmitExprData),
     AlignCell,
+    PushIndent(int),
+    PopIndent,
     For(ForData),
     If(IfData),
     Switch(SwitchData),

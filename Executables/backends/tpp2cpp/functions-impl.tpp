@@ -115,6 +115,14 @@ template emit_instr(instr: RenderInstruction)
 @end case@
 @case AlignCell@
 @end case@
+@case PushIndent(amount)@
+if (!_sb.pushIndent(@amount@))
+    throw std::runtime_error("tpp render error: " + _sb.error());
+@end case@
+@case PopIndent@
+if (!_sb.popIndent())
+    throw std::runtime_error("tpp render error: " + _sb.error());
+@end case@
 @case For(f)@
 @emit_for(f)@
 @end case@
@@ -140,7 +148,7 @@ template emit_for(f: ForData)
 @if f.cells@
 @emit_aligned_for(f)@
 @else@
-@if f.blockIndent@
+@if f.capturesBody@
 @emit_for_block(f)@
 @else@
 @emit_for_inline(f)@
@@ -171,7 +179,6 @@ template emit_for_block(f: ForData)
 const auto& _coll@f.scopeId@ = (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@);
 if (!@f.sb@.emitBlockForEach(
         _coll@f.scopeId@,
-    @if f.blockIndent@@f.blockIndent@@end if@,
     @cpp_block_loop_options(f)@,
         [&](const auto& @f.varName@, int _tppEnumerator@f.scopeId@) {
             @if f.enumeratorName@
@@ -222,14 +229,6 @@ END
 // ── If / Else ────────────────────────────────────────────────────────────────
 
 template emit_if(i: IfData)
-@if i.blockIndent@
-@emit_if_block(i)@
-@else@
-@emit_if_inline(i)@
-@end if@
-END
-
-template emit_if_inline(i: IfData)
 @if i.isNegated@
 if (!@i.condPath@) {
 @else@
@@ -247,42 +246,7 @@ if (@i.condPath@) {
 }
 END
 
-template emit_if_block(i: IfData)
-@if i.isNegated@
-if (!@i.condPath@) {
-@else@
-if (@i.condPath@) {
-@end if@
-    if (!@i.sb@.emitBlock(@if i.blockIndent@@i.blockIndent@@end if@, [&]() {
-            @for instr in i.thenBody@
-            @emit_instr(instr)@
-            @end for@
-        }))
-        throw std::runtime_error("tpp render error: " + @i.sb@.error());
-@if i.elseBody@
-} else {
-    if (!@i.sb@.emitBlock(@if i.blockIndent@@i.blockIndent@@end if@, [&]() {
-            @for instr in i.elseBody@
-            @emit_instr(instr)@
-            @end for@
-        }))
-        throw std::runtime_error("tpp render error: " + @i.sb@.error());
-@end if@
-}
-END
-
 // ── Switch / Case ────────────────────────────────────────────────────────────
-
-template emit_switch_case_block(s: SwitchData, c: CaseData)
-if (!@s.sb@.emitBlock(@if s.blockIndent@@s.blockIndent@@end if@, [&]() {
-        @if c.body@
-        @for instr in c.body@
-        @emit_instr(instr)@
-        @end for@
-        @end if@
-    }))
-    throw std::runtime_error("tpp render error: " + @s.sb@.error());
-END
 
 template emit_switch(s: SwitchData)
 switch ((@cpp_value_path(s.exprPath, s.exprIsRecursive, s.exprIsOptional)@).value.index()) {
@@ -295,14 +259,10 @@ switch ((@cpp_value_path(s.exprPath, s.exprIsRecursive, s.exprIsOptional)@).valu
         [[maybe_unused]] const auto& @c.bindingName@ = std::get<@c.variantIndex@>((@cpp_value_path(s.exprPath, s.exprIsRecursive, s.exprIsOptional)@).value);
         @end if@
         @end if@
-        @if s.blockIndent@
-        @emit_switch_case_block(s, c)@
-        @else@
         @if c.body@
         @for instr in c.body@
         @emit_instr(instr)@
         @end for@
-        @end if@
         @end if@
         break;
     }

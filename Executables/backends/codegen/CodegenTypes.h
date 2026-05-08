@@ -105,7 +105,7 @@ struct ForData
     std::optional<std::string> sepLit;
     std::optional<std::string> followedByLit;
     std::optional<std::string> precededByLit;
-    std::optional<int> blockIndent;
+    bool capturesBody;
     std::string sb;
     std::optional<std::string> alignSpec;
     std::unique_ptr<std::vector<AlignCellInfo>> cells;
@@ -114,7 +114,7 @@ struct ForData
     bool singleAlignChar;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct ForData\n{\n    scopeId : int;\n    collPath : string;\n    collIsRecursive : bool;\n    collIsOptional : bool;\n    elemType : RenderTypeKind;\n    varName : string;\n    enumeratorName : optional<string>;\n    body : optional<list<RenderInstruction>>;\n    sepLit : optional<string>;\n    followedByLit : optional<string>;\n    precededByLit : optional<string>;\n    blockIndent : optional<int>;\n    sb : string;\n    alignSpec : optional<string>;\n    cells : optional<list<AlignCellInfo>>;\n    numCols : int;\n    alignSpecChars : list<string>;\n    singleAlignChar : bool;\n}";
+        return "struct ForData\n{\n    scopeId : int;\n    collPath : string;\n    collIsRecursive : bool;\n    collIsOptional : bool;\n    elemType : RenderTypeKind;\n    varName : string;\n    enumeratorName : optional<string>;\n    body : optional<list<RenderInstruction>>;\n    sepLit : optional<string>;\n    followedByLit : optional<string>;\n    precededByLit : optional<string>;\n    capturesBody : bool;\n    sb : string;\n    alignSpec : optional<string>;\n    cells : optional<list<AlignCellInfo>>;\n    numCols : int;\n    alignSpecChars : list<string>;\n    singleAlignChar : bool;\n}";
     }
 };
 struct CaseData
@@ -124,13 +124,12 @@ struct CaseData
     std::optional<std::string> bindingName;
     std::unique_ptr<RenderTypeKind> payloadType;
     std::unique_ptr<std::vector<RenderInstruction>> body;
-    int scopeId;
     bool isFirst;
     int variantIndex;
     bool isRecursivePayload;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct CaseData\n{\n    tag : string;\n    tagLit : string;\n    bindingName : optional<string>;\n    payloadType : optional<RenderTypeKind>;\n    body : optional<list<RenderInstruction>>;\n    scopeId : int;\n    isFirst : bool;\n    variantIndex : int;\n    isRecursivePayload : bool;\n}";
+        return "struct CaseData\n{\n    tag : string;\n    tagLit : string;\n    bindingName : optional<string>;\n    payloadType : optional<RenderTypeKind>;\n    body : optional<list<RenderInstruction>>;\n    isFirst : bool;\n    variantIndex : int;\n    isRecursivePayload : bool;\n}";
     }
 };
 struct IfData
@@ -140,13 +139,10 @@ struct IfData
     bool isNegated;
     std::unique_ptr<std::vector<RenderInstruction>> thenBody;
     std::unique_ptr<std::vector<RenderInstruction>> elseBody;
-    std::optional<int> blockIndent;
     std::string sb;
-    int thenScopeId;
-    int elseScopeId;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct IfData\n{\n    condPath : string;\n    condIsBool : bool;\n    isNegated : bool;\n    thenBody : list<RenderInstruction>;\n    elseBody : optional<list<RenderInstruction>>;\n    blockIndent : optional<int>;\n    sb : string;\n    thenScopeId : int;\n    elseScopeId : int;\n}";
+        return "struct IfData\n{\n    condPath : string;\n    condIsBool : bool;\n    isNegated : bool;\n    thenBody : list<RenderInstruction>;\n    elseBody : optional<list<RenderInstruction>>;\n    sb : string;\n}";
     }
 };
 struct SwitchData
@@ -156,11 +152,10 @@ struct SwitchData
     bool exprIsOptional;
     std::string enumTypeName;
     std::unique_ptr<std::vector<CaseData>> cases;
-    std::optional<int> blockIndent;
     std::string sb;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct SwitchData\n{\n    exprPath : string;\n    exprIsRecursive : bool;\n    exprIsOptional : bool;\n    enumTypeName : string;\n    cases : list<CaseData>;\n    blockIndent : optional<int>;\n    sb : string;\n}";
+        return "struct SwitchData\n{\n    exprPath : string;\n    exprIsRecursive : bool;\n    exprIsOptional : bool;\n    enumTypeName : string;\n    cases : list<CaseData>;\n    sb : string;\n}";
     }
 };
 struct CallArgInfo
@@ -290,13 +285,18 @@ struct RenderInstruction_AlignCell
     friend void to_json(nlohmann::json& j, const RenderInstruction_AlignCell&) { j = nlohmann::json::object(); }
     friend void from_json(const nlohmann::json&, RenderInstruction_AlignCell&) {}
 };
+struct RenderInstruction_PopIndent
+{
+    friend void to_json(nlohmann::json& j, const RenderInstruction_PopIndent&) { j = nlohmann::json::object(); }
+    friend void from_json(const nlohmann::json&, RenderInstruction_PopIndent&) {}
+};
 struct RenderInstruction
 {
-    using Value = std::variant<EmitData, EmitExprData, RenderInstruction_AlignCell, std::unique_ptr<ForData>, std::unique_ptr<IfData>, std::unique_ptr<SwitchData>, CallData>;
+    using Value = std::variant<EmitData, EmitExprData, RenderInstruction_AlignCell, int, RenderInstruction_PopIndent, std::unique_ptr<ForData>, std::unique_ptr<IfData>, std::unique_ptr<SwitchData>, CallData>;
     Value value;
     static std::string tpp_typedefs() noexcept
     {
-        return "enum RenderInstruction\n{\n    Emit(EmitData),\n    EmitExpr(EmitExprData),\n    AlignCell,\n    For(ForData),\n    If(IfData),\n    Switch(SwitchData),\n    Call(CallData)\n}";
+        return "enum RenderInstruction\n{\n    Emit(EmitData),\n    EmitExpr(EmitExprData),\n    AlignCell,\n    PushIndent(int),\n    PopIndent,\n    For(ForData),\n    If(IfData),\n    Switch(SwitchData),\n    Call(CallData)\n}";
     }
 };
 
@@ -377,14 +377,16 @@ inline void from_json(const nlohmann::json& j, RenderInstruction& v)
     if (j.contains("Emit")) v.value.emplace<0>(j["Emit"].get<EmitData>());
     else     if (j.contains("EmitExpr")) v.value.emplace<1>(j["EmitExpr"].get<EmitExprData>());
     else     if (j.contains("AlignCell")) v.value.emplace<2>();
-    else     if (j.contains("For")) v.value.emplace<3>(std::make_unique<ForData>(j["For"].get<ForData>()));
-    else     if (j.contains("If")) v.value.emplace<4>(std::make_unique<IfData>(j["If"].get<IfData>()));
-    else     if (j.contains("Switch")) v.value.emplace<5>(std::make_unique<SwitchData>(j["Switch"].get<SwitchData>()));
-    else     if (j.contains("Call")) v.value.emplace<6>(j["Call"].get<CallData>());
+    else     if (j.contains("PushIndent")) v.value.emplace<3>(j["PushIndent"].get<int>());
+    else     if (j.contains("PopIndent")) v.value.emplace<4>();
+    else     if (j.contains("For")) v.value.emplace<5>(std::make_unique<ForData>(j["For"].get<ForData>()));
+    else     if (j.contains("If")) v.value.emplace<6>(std::make_unique<IfData>(j["If"].get<IfData>()));
+    else     if (j.contains("Switch")) v.value.emplace<7>(std::make_unique<SwitchData>(j["Switch"].get<SwitchData>()));
+    else     if (j.contains("Call")) v.value.emplace<8>(j["Call"].get<CallData>());
 }
 inline void to_json(nlohmann::json& j, const RenderInstruction& v)
 {
-    const char* _tags[] = {"Emit", "EmitExpr", "AlignCell", "For", "If", "Switch", "Call"};
+    const char* _tags[] = {"Emit", "EmitExpr", "AlignCell", "PushIndent", "PopIndent", "For", "If", "Switch", "Call"};
     std::visit([&](const auto& arg) {
         j = nlohmann::json::object();
         j[_tags[v.value.index()]] = _tpp_j(arg);
@@ -457,7 +459,7 @@ inline void from_json(const nlohmann::json& j, ForData& v)
     if (j.contains("sepLit") && !j.at("sepLit").is_null()) v.sepLit = j.at("sepLit").get<std::string>();
     if (j.contains("followedByLit") && !j.at("followedByLit").is_null()) v.followedByLit = j.at("followedByLit").get<std::string>();
     if (j.contains("precededByLit") && !j.at("precededByLit").is_null()) v.precededByLit = j.at("precededByLit").get<std::string>();
-    if (j.contains("blockIndent") && !j.at("blockIndent").is_null()) v.blockIndent = j.at("blockIndent").get<int>();
+    v.capturesBody = j.at("capturesBody").get<bool>();
     v.sb = j.at("sb").get<std::string>();
     if (j.contains("alignSpec") && !j.at("alignSpec").is_null()) v.alignSpec = j.at("alignSpec").get<std::string>();
     if (j.contains("cells") && !j.at("cells").is_null()) v.cells = std::make_unique<std::vector<AlignCellInfo>>(j.at("cells").get<std::vector<AlignCellInfo>>());
@@ -479,7 +481,7 @@ inline void to_json(nlohmann::json& j, const ForData& v)
     if (v.sepLit.has_value()) j["sepLit"] = *v.sepLit;
     if (v.followedByLit.has_value()) j["followedByLit"] = *v.followedByLit;
     if (v.precededByLit.has_value()) j["precededByLit"] = *v.precededByLit;
-    if (v.blockIndent.has_value()) j["blockIndent"] = *v.blockIndent;
+    j["capturesBody"] = v.capturesBody;
     j["sb"] = v.sb;
     if (v.alignSpec.has_value()) j["alignSpec"] = *v.alignSpec;
     if (v.cells) j["cells"] = *v.cells;
@@ -494,7 +496,6 @@ inline void from_json(const nlohmann::json& j, CaseData& v)
     if (j.contains("bindingName") && !j.at("bindingName").is_null()) v.bindingName = j.at("bindingName").get<std::string>();
     if (j.contains("payloadType") && !j.at("payloadType").is_null()) v.payloadType = std::make_unique<RenderTypeKind>(j.at("payloadType").get<RenderTypeKind>());
     if (j.contains("body") && !j.at("body").is_null()) v.body = std::make_unique<std::vector<RenderInstruction>>(j.at("body").get<std::vector<RenderInstruction>>());
-    v.scopeId = j.at("scopeId").get<int>();
     v.isFirst = j.at("isFirst").get<bool>();
     v.variantIndex = j.at("variantIndex").get<int>();
     v.isRecursivePayload = j.at("isRecursivePayload").get<bool>();
@@ -507,7 +508,6 @@ inline void to_json(nlohmann::json& j, const CaseData& v)
     if (v.bindingName.has_value()) j["bindingName"] = *v.bindingName;
     if (v.payloadType) j["payloadType"] = *v.payloadType;
     if (v.body) j["body"] = *v.body;
-    j["scopeId"] = v.scopeId;
     j["isFirst"] = v.isFirst;
     j["variantIndex"] = v.variantIndex;
     j["isRecursivePayload"] = v.isRecursivePayload;
@@ -519,10 +519,7 @@ inline void from_json(const nlohmann::json& j, IfData& v)
     v.isNegated = j.at("isNegated").get<bool>();
     v.thenBody = std::make_unique<std::vector<RenderInstruction>>(j.at("thenBody").get<std::vector<RenderInstruction>>());
     if (j.contains("elseBody") && !j.at("elseBody").is_null()) v.elseBody = std::make_unique<std::vector<RenderInstruction>>(j.at("elseBody").get<std::vector<RenderInstruction>>());
-    if (j.contains("blockIndent") && !j.at("blockIndent").is_null()) v.blockIndent = j.at("blockIndent").get<int>();
     v.sb = j.at("sb").get<std::string>();
-    v.thenScopeId = j.at("thenScopeId").get<int>();
-    v.elseScopeId = j.at("elseScopeId").get<int>();
 }
 inline void to_json(nlohmann::json& j, const IfData& v)
 {
@@ -532,10 +529,7 @@ inline void to_json(nlohmann::json& j, const IfData& v)
     j["isNegated"] = v.isNegated;
     j["thenBody"] = *v.thenBody;
     if (v.elseBody) j["elseBody"] = *v.elseBody;
-    if (v.blockIndent.has_value()) j["blockIndent"] = *v.blockIndent;
     j["sb"] = v.sb;
-    j["thenScopeId"] = v.thenScopeId;
-    j["elseScopeId"] = v.elseScopeId;
 }
 inline void from_json(const nlohmann::json& j, SwitchData& v)
 {
@@ -544,7 +538,6 @@ inline void from_json(const nlohmann::json& j, SwitchData& v)
     v.exprIsOptional = j.at("exprIsOptional").get<bool>();
     v.enumTypeName = j.at("enumTypeName").get<std::string>();
     v.cases = std::make_unique<std::vector<CaseData>>(j.at("cases").get<std::vector<CaseData>>());
-    if (j.contains("blockIndent") && !j.at("blockIndent").is_null()) v.blockIndent = j.at("blockIndent").get<int>();
     v.sb = j.at("sb").get<std::string>();
 }
 inline void to_json(nlohmann::json& j, const SwitchData& v)
@@ -555,7 +548,6 @@ inline void to_json(nlohmann::json& j, const SwitchData& v)
     j["exprIsOptional"] = v.exprIsOptional;
     j["enumTypeName"] = v.enumTypeName;
     j["cases"] = *v.cases;
-    if (v.blockIndent.has_value()) j["blockIndent"] = *v.blockIndent;
     j["sb"] = v.sb;
 }
 inline void from_json(const nlohmann::json& j, CallArgInfo& v)

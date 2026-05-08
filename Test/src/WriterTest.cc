@@ -95,6 +95,18 @@ TEST(WriterTest, EmitBlock)
     EXPECT_EQ(writer.takeOutput(), "    alpha\n    beta\n");
 }
 
+TEST(WriterTest, PushPopIndent)
+{
+    Writer writer;
+
+    EXPECT_TRUE(writer.emit("header\n"));
+    EXPECT_TRUE(writer.pushIndent(4));
+    EXPECT_TRUE(writer.emit("  alpha\n  beta\n"));
+    EXPECT_TRUE(writer.popIndent());
+
+    EXPECT_EQ(writer.takeOutput(), "header\n    alpha\n    beta\n");
+}
+
 TEST(WriterTest, EmitForEach)
 {
     Writer writer;

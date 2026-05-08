@@ -25,7 +25,7 @@ namespace tpp
 
     struct BodyIndentInfo
     {
-        std::optional<int> blockIndent;
+        std::optional<int> indentAmount;
         size_t firstIndex = 0;
         size_t pastLastIndex = 0;
     };
@@ -39,7 +39,7 @@ namespace tpp
             std::holds_alternative<PushIndentInstr>(body.front().value) &&
             std::holds_alternative<Instruction_PopIndent>(body.back().value))
         {
-            info.blockIndent = std::get<PushIndentInstr>(body.front().value).amount;
+            info.indentAmount = std::get<PushIndentInstr>(body.front().value).amount;
             info.firstIndex = 1;
             info.pastLastIndex = body.size() - 1;
         }
@@ -314,7 +314,6 @@ namespace tpp
 
         bool exec_for_normal(const ForInstr &instr, const nlohmann::json &collection)
         {
-            const bool bodyIsIndented = analyze_indented_body(*instr.body).blockIndent.has_value();
             const auto &items = collection;
 
             for (size_t index = 0; index < items.size(); ++index)
@@ -327,19 +326,19 @@ namespace tpp
                 scopes_.push_back(std::move(bindings));
                 writer_.beginCapture();
                 const bool ok = exec_body(*instr.body);
-                std::string iterResult = writer_.endCapture();
+                Writer::CaptureResult iterResult = writer_.endCaptureResult();
                 scopes_.pop_back();
                 if (!ok)
                     return false;
 
                 bool strippedNl = false;
-                if (bodyIsIndented && instr.sep.has_value() && !instr.sep->empty())
-                    strippedNl = Writer::stripSingleTrailingNewline(iterResult);
+                if (iterResult.topLevelIndented && instr.sep.has_value() && !instr.sep->empty())
+                    strippedNl = Writer::stripSingleTrailingNewline(iterResult.text);
 
                 if (instr.precededBy.has_value())
                     writer_.emit(*instr.precededBy);
 
-                writer_.emit(iterResult);
+                writer_.emit(iterResult.text);
 
                 if (index + 1 < items.size())
                 {
