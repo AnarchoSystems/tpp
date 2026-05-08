@@ -74,11 +74,11 @@ StructDef to_public_struct(const compiler::StructDef &def,
                            bool includeRanges,
                            bool includeRawTypedefs)
 {
-    StructDef out;
+    StructDef out{};
     out.name = def.name;
     for (const auto &field : def.fields)
     {
-        FieldDef fieldDef;
+        FieldDef fieldDef{};
         fieldDef.name = field.name;
         fieldDef.type = std::make_unique<TypeKind>(to_public_type(field.type));
         fieldDef.recursive = field.recursive;
@@ -97,11 +97,11 @@ EnumDef to_public_enum(const compiler::EnumDef &def,
                        bool includeRanges,
                        bool includeRawTypedefs)
 {
-    EnumDef out;
+    EnumDef out{};
     out.name = def.name;
     for (const auto &variant : def.variants)
     {
-        VariantDef variantDef;
+        VariantDef variantDef{};
         variantDef.tag = variant.tag;
         if (variant.payload.has_value())
             variantDef.payload = std::make_unique<TypeKind>(to_public_type(*variant.payload));

@@ -199,7 +199,7 @@ template emit_for(f: ForData)
 @if f.cells@
 @emit_aligned_for(f)@
 @else@
-@if f.isBlock@
+@if f.blockIndent@
 @emit_for_block(f)@
 @else@
 @emit_for_inline(f)@
@@ -268,10 +268,10 @@ for _i@f.scopeId@ in 0..<@swift_value_path(f.collPath, f.collIsRecursive, f.coll
     @emit_instr(instr)@
     @end for@
     @if f.sepLit@
-    var _iter@f.scopeId@ = _tppBlockIndent(_blk@f.scopeId@, @f.insertCol@)
+    var _iter@f.scopeId@ = _tppBlockIndent(_blk@f.scopeId@, @if f.blockIndent@@f.blockIndent@@end if@)
     @emit_for_block_sep(f)@
     @else@
-    let _iter@f.scopeId@ = _tppBlockIndent(_blk@f.scopeId@, @f.insertCol@)
+    let _iter@f.scopeId@ = _tppBlockIndent(_blk@f.scopeId@, @if f.blockIndent@@f.blockIndent@@end if@)
     @if f.precededByLit@
     @f.sb@ += @f.precededByLit@
     @end if@
@@ -305,7 +305,7 @@ do {
     @for instr in cell.body@
     @emit_instr(instr)@
     @end for@
-    _row@scopeId@[@cell.cellIndex@] = _cell@scopeId@_@cell.cellIndex@
+    _row@scopeId@[@cell.cellIndex@] = try _tppSingleLineAlignedCell(_cell@scopeId@_@cell.cellIndex@)
 }
 END
 
@@ -359,7 +359,7 @@ END
 // ── If / Else ────────────────────────────────────────────────────────────────
 
 template emit_if(i: IfData)
-@if i.isBlock@
+@if i.blockIndent@
 @emit_if_block(i)@
 @else@
 @emit_if_inline(i)@
@@ -410,14 +410,14 @@ if @i.condPath@ != nil {
     @for instr in i.thenBody@
     @emit_instr(instr)@
     @end for@
-    @i.sb@ += _tppBlockIndent(_blk@i.thenScopeId@, @i.insertCol@)
+    @i.sb@ += _tppBlockIndent(_blk@i.thenScopeId@, @if i.blockIndent@@i.blockIndent@@end if@)
 @if i.elseBody@
 } else {
     var _blk@i.elseScopeId@ = ""
     @for instr in i.elseBody@
     @emit_instr(instr)@
     @end for@
-    @i.sb@ += _tppBlockIndent(_blk@i.elseScopeId@, @i.insertCol@)
+    @i.sb@ += _tppBlockIndent(_blk@i.elseScopeId@, @if i.blockIndent@@i.blockIndent@@end if@)
 @end if@
 }
 END
@@ -430,7 +430,7 @@ var _blk@c.scopeId@ = ""
 @for instr in c.body@
 @emit_instr(instr)@
 @end for@
-@s.sb@ += _tppBlockIndent(_blk@c.scopeId@, @s.insertCol@)
+@s.sb@ += _tppBlockIndent(_blk@c.scopeId@, @if s.blockIndent@@s.blockIndent@@end if@)
 @else@
 break
 @end if@
@@ -448,7 +448,7 @@ case .@c.tag@(_):
 case .@c.tag@:
 @end if@
 @end if@
-    @if s.isBlock@
+    @if s.blockIndent@
     @emit_switch_case_block(s, c)@
     @else@
     @if c.body@
@@ -589,6 +589,13 @@ END
 // ── Runtime helpers (shared across generated files) ──────────────────────────
 
 template emit_runtime_helpers(ctx: RenderFunctionsInput)
+enum TppRuntimeError: Error, CustomStringConvertible {
+    case violation(String)
+    var description: String {
+        switch self { case .violation(let msg): return msg }
+    }
+}
+
 @if ctx.policies@
 
 enum TppPolicyError: Error, CustomStringConvertible {
@@ -625,7 +632,14 @@ enum TppPolicyError: Error, CustomStringConvertible {
     }
 }
 
-@ctx.staticModifier@func _tppBlockIndent(_ raw: String, _ insertCol: Int) -> String {
+@ctx.staticModifier@func _tppSingleLineAlignedCell(_ value: String) throws -> String {
+    if value.contains("\n") || value.contains("\r") {
+        throw TppRuntimeError.violation("aligned cells must be single-line")
+    }
+    return value
+}
+
+@ctx.staticModifier@func _tppBlockIndent(_ raw: String, _ indentColumns: Int) -> String {
     if raw.isEmpty { return "" }
     let parts = raw.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
     let trailingNl = raw.hasSuffix("\n")
@@ -641,7 +655,7 @@ enum TppPolicyError: Error, CustomStringConvertible {
             break
         }
     }
-    let indent = insertCol > 0 ? String(repeating: " ", count: insertCol) : ""
+    let indent = indentColumns > 0 ? String(repeating: " ", count: indentColumns) : ""
     var result = ""
     for i in 0..<lineCount {
         var l = parts[i]
@@ -787,7 +801,7 @@ func _tppAppendValue(_ sb: inout String, _ value: String) {
     }
 }
 
-func _tppBlockIndent(_ raw: String, _ insertCol: Int) -> String {
+func _tppBlockIndent(_ raw: String, _ indentColumns: Int) -> String {
     if raw.isEmpty { return "" }
     let parts = raw.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
     let trailingNl = raw.hasSuffix("\n")
@@ -803,7 +817,7 @@ func _tppBlockIndent(_ raw: String, _ insertCol: Int) -> String {
             break
         }
     }
-    let indent = insertCol > 0 ? String(repeating: " ", count: insertCol) : ""
+    let indent = indentColumns > 0 ? String(repeating: " ", count: indentColumns) : ""
     var result = ""
     for i in 0..<lineCount {
         var l = parts[i]

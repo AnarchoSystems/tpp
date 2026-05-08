@@ -152,17 +152,44 @@ namespace tpp::compiler
         return TypeRef{StringType{}};
     }
 
+    static std::vector<tpp::ExprPathSegment> lowerPublicExprSegments(const std::string &path)
+    {
+        std::vector<tpp::ExprPathSegment> segments;
+
+        std::size_t pos = path.find('.');
+        while (pos != std::string::npos)
+        {
+            const std::size_t next = path.find('.', pos + 1);
+            const std::size_t fieldStart = pos + 1;
+            const std::size_t fieldLen = (next == std::string::npos)
+                ? path.size() - fieldStart
+                : next - fieldStart;
+
+            if (fieldLen > 0)
+            {
+                tpp::ExprPathSegment segment;
+                segment.field = path.substr(fieldStart, fieldLen);
+                segments.push_back(std::move(segment));
+            }
+
+            pos = next;
+        }
+
+        return segments;
+    }
+
     static tpp::ExprInfo lowerPublicExpr(const std::string &path,
                                          const TypeRef &type,
                                          bool isRecursive,
                                          bool isOptional)
     {
         tpp::ExprInfo expr;
-        expr.path = path;
+        const std::size_t dot = path.find('.');
+        expr.bindingName = (dot == std::string::npos) ? path : path.substr(0, dot);
+        expr.segments = lowerPublicExprSegments(path);
         expr.type = std::make_unique<tpp::TypeKind>(tpp::to_public_type(type));
         expr.isRecursive = isRecursive;
         expr.isOptional = isOptional;
-        expr.slotOffset = 0;
         return expr;
     }
 
@@ -237,6 +264,33 @@ namespace tpp::compiler
         return value;
     }
 
+    static tpp::Instruction makePushIndentInstruction(int indentColumns)
+    {
+        tpp::PushIndentInstr pushIndent;
+        pushIndent.amount = indentColumns;
+        return tpp::Instruction{tpp::Instruction::Value{std::in_place_index<7>, std::move(pushIndent)}};
+    }
+
+    static tpp::Instruction makePopIndentInstruction()
+    {
+        return tpp::Instruction{tpp::Instruction::Value{std::in_place_index<8>}};
+    }
+
+    static std::vector<tpp::Instruction> wrapIndentedBody(std::vector<tpp::Instruction> body,
+                                                          int indentColumns)
+    {
+        std::vector<tpp::Instruction> wrapped;
+        wrapped.reserve(body.size() + 2);
+
+        wrapped.push_back(makePushIndentInstruction(indentColumns));
+
+        for (auto &instr : body)
+            wrapped.push_back(std::move(instr));
+
+        wrapped.push_back(makePopIndentInstruction());
+        return wrapped;
+    }
+
     struct ResolvedCallArgument
     {
         std::string path;
@@ -244,6 +298,20 @@ namespace tpp::compiler
         bool isRecursive = false;
         bool isOptional = false;
     };
+
+    static const FunctionCallNode *findSyntheticRenderCall(const std::vector<ASTNode> &body)
+    {
+        if (body.empty())
+            return nullptr;
+
+        if (const auto *callNode = std::get_if<std::shared_ptr<FunctionCallNode>>(&body.front()))
+            return (callNode && *callNode) ? callNode->get() : nullptr;
+
+        if (const auto *indentNode = std::get_if<std::shared_ptr<IndentNode>>(&body.front()))
+            return (indentNode && *indentNode) ? findSyntheticRenderCall((*indentNode)->body) : nullptr;
+
+        return nullptr;
+    }
 
     static tpp::CallInstr lowerResolvedCall(const std::string &functionName,
                                             const std::vector<ResolvedCallArgument> &arguments,
@@ -289,8 +357,6 @@ namespace tpp::compiler
     {
         auto switchInstr = std::make_unique<tpp::SwitchInstr>();
         switchInstr->expr = std::move(expr);
-        switchInstr->isBlock = false;
-        switchInstr->insertCol = 0;
         switchInstr->policy = policy;
 
         auto cases = std::make_unique<std::vector<tpp::CaseInstr>>();
@@ -299,8 +365,6 @@ namespace tpp::compiler
             tpp::CaseInstr caseInstr;
             caseInstr.tag = variant.tag;
             caseInstr.variantIndex = 0;
-            caseInstr.payloadSlotCount = 0;
-            caseInstr.bindingSlotOffset = -1;
 
             std::vector<ResolvedCallArgument> callArguments;
             if (wholeEnumArgument.has_value())
@@ -351,36 +415,31 @@ namespace tpp::compiler
             forInstr->varName = itemName;
             forInstr->collection = lowerPublicExpr(collectionExpr);
 
-            auto body = std::make_unique<std::vector<tpp::Instruction>>();
+            std::vector<tpp::Instruction> body;
             if (renderEnum && !wholeEnumOverload)
             {
-                body->push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<5>, lowerRenderViaSwitch(lowerPublicExpr(itemName,
-                                                                                                                                           renderElemType,
-                                                                                                                                           false,
-                                                                                                                                           isOptionalTypeRef(renderElemType)),
-                                                                                                                         *renderEnum,
-                                                                                                                         node.functionName,
-                                                                                                                         functions,
-                                                                                                                         std::nullopt,
-                                                                                                                         "",
-                                                                                                                         syntheticCounter)}});
+                body.push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<5>, lowerRenderViaSwitch(lowerPublicExpr(itemName,
+                                                                                                                                      renderElemType,
+                                                                                                                                      false,
+                                                                                                                                      isOptionalTypeRef(renderElemType)),
+                                                                                                                    *renderEnum,
+                                                                                                                    node.functionName,
+                                                                                                                    functions,
+                                                                                                                    std::nullopt,
+                                                                                                                    "",
+                                                                                                                    syntheticCounter)}});
             }
             else
             {
                 std::vector<ResolvedCallArgument> callArguments = {{itemName, renderElemType, false, isOptionalTypeRef(renderElemType)}};
-                body->push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<6>, lowerResolvedCall(node.functionName, callArguments, functions)}});
+                body.push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<6>, lowerResolvedCall(node.functionName, callArguments, functions)}});
             }
 
-            forInstr->body = std::move(body);
+            forInstr->body = std::make_unique<std::vector<tpp::Instruction>>(std::move(body));
             forInstr->sep = lowerOptionalString(node.sep);
             forInstr->followedBy = lowerOptionalString(node.followedBy);
             forInstr->precededBy = lowerOptionalString(node.precededBy);
-            forInstr->isBlock = false;
-            forInstr->insertCol = 0;
             forInstr->policy = node.policy;
-            forInstr->elementSlotCount = 0;
-            forInstr->varSlotOffset = 0;
-            forInstr->enumeratorSlotOffset = -1;
             out.push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<3>, std::move(forInstr)}});
             return out;
         }
@@ -456,6 +515,29 @@ namespace tpp::compiler
                 else if constexpr (std::is_same_v<T, CommentNode>)
                 {
                 }
+                else if constexpr (std::is_same_v<T, std::shared_ptr<IndentNode>>)
+                {
+                    auto body = lowerPublicNodes(arg->body, env, functions, syntheticCounter);
+
+                    if (arg->wrapSingleForBody &&
+                        body.size() == 1 &&
+                        std::holds_alternative<std::unique_ptr<tpp::ForInstr>>(body.front().value))
+                    {
+                        auto &forInstr = std::get<std::unique_ptr<tpp::ForInstr>>(body.front().value);
+                        std::vector<tpp::Instruction> forBody;
+                        if (forInstr->body)
+                            forBody = std::move(*forInstr->body);
+                        forInstr->body = std::make_unique<std::vector<tpp::Instruction>>(wrapIndentedBody(std::move(forBody), arg->amount));
+                        out.push_back(std::move(body.front()));
+                    }
+                    else
+                    {
+                        auto wrapped = wrapIndentedBody(std::move(body), arg->amount);
+                        out.insert(out.end(),
+                                   std::make_move_iterator(wrapped.begin()),
+                                   std::make_move_iterator(wrapped.end()));
+                    }
+                }
                 else if constexpr (std::is_same_v<T, std::shared_ptr<ForNode>>)
                 {
                     TypeRef elementType{StringType{}};
@@ -481,13 +563,8 @@ namespace tpp::compiler
                     forInstr->sep = lowerOptionalString(arg->sep);
                     forInstr->followedBy = lowerOptionalString(arg->followedBy);
                     forInstr->precededBy = lowerOptionalString(arg->precededBy);
-                    forInstr->isBlock = arg->isBlock;
-                    forInstr->insertCol = arg->insertCol;
                     forInstr->policy = arg->policy;
                     forInstr->alignSpec = arg->alignSpec;
-                    forInstr->elementSlotCount = 0;
-                    forInstr->varSlotOffset = 0;
-                    forInstr->enumeratorSlotOffset = -1;
                     out.push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<3>, std::move(forInstr)}});
                 }
                 else if constexpr (std::is_same_v<T, std::shared_ptr<IfNode>>)
@@ -495,10 +572,10 @@ namespace tpp::compiler
                     auto ifInstr = std::make_unique<tpp::IfInstr>();
                     ifInstr->condExpr = lowerPublicExpr(arg->condExpr, env);
                     ifInstr->negated = arg->negated;
-                    ifInstr->thenBody = std::make_unique<std::vector<tpp::Instruction>>(lowerPublicNodes(arg->thenBody, env, functions, syntheticCounter));
-                    ifInstr->elseBody = std::make_unique<std::vector<tpp::Instruction>>(lowerPublicNodes(arg->elseBody, env, functions, syntheticCounter));
-                    ifInstr->isBlock = arg->isBlock;
-                    ifInstr->insertCol = arg->insertCol;
+                    auto thenBody = lowerPublicNodes(arg->thenBody, env, functions, syntheticCounter);
+                    auto elseBody = lowerPublicNodes(arg->elseBody, env, functions, syntheticCounter);
+                    ifInstr->thenBody = std::make_unique<std::vector<tpp::Instruction>>(std::move(thenBody));
+                    ifInstr->elseBody = std::make_unique<std::vector<tpp::Instruction>>(std::move(elseBody));
                     out.push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<4>, std::move(ifInstr)}});
                 }
                 else if constexpr (std::is_same_v<T, std::shared_ptr<SwitchNode>>)
@@ -522,8 +599,6 @@ namespace tpp::compiler
                             caseInstr.tag = variant.tag;
                             caseInstr.payloadIsRecursive = variant.recursive && variant.payload.has_value();
                             caseInstr.variantIndex = 0;
-                            caseInstr.payloadSlotCount = 0;
-                            caseInstr.bindingSlotOffset = -1;
                             if (variant.payload.has_value())
                                 caseInstr.payloadType = std::make_unique<tpp::TypeKind>(tpp::to_public_type(*variant.payload));
 
@@ -532,14 +607,13 @@ namespace tpp::compiler
                                 ? nullptr
                                 : explicitCaseIt->second;
 
+                            std::vector<tpp::Instruction> loweredCaseBody;
+
                             if (sourceCase && sourceCase->isSyntheticRenderCase)
                             {
-                                const auto *callNode = (!sourceCase->body.empty())
-                                    ? std::get_if<std::shared_ptr<FunctionCallNode>>(&sourceCase->body.front())
-                                    : nullptr;
                                 std::string functionName;
-                                if (callNode && *callNode)
-                                    functionName = (*callNode)->functionName;
+                                if (const auto *callNode = findSyntheticRenderCall(sourceCase->body))
+                                    functionName = callNode->functionName;
 
                                 std::vector<ResolvedCallArgument> callArguments;
                                 if (variant.payload.has_value())
@@ -552,15 +626,13 @@ namespace tpp::compiler
                                                              isOptionalTypeRef(*variant.payload)});
                                 }
 
-                                auto body = std::make_unique<std::vector<tpp::Instruction>>();
-                                body->push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<6>, lowerResolvedCall(functionName, callArguments, functions)}});
-                                caseInstr.body = std::move(body);
+                                                        loweredCaseBody.push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<6>, lowerResolvedCall(functionName, callArguments, functions)}});
                             }
                             else if (sourceCase)
                             {
                                 if (sourceCase->bindingName.empty())
                                 {
-                                    caseInstr.body = std::make_unique<std::vector<tpp::Instruction>>(lowerPublicNodes(sourceCase->body, env, functions, syntheticCounter));
+                                                            loweredCaseBody = lowerPublicNodes(sourceCase->body, env, functions, syntheticCounter);
                                 }
                                 else if (variant.payload.has_value())
                                 {
@@ -569,30 +641,26 @@ namespace tpp::compiler
                                              *variant.payload,
                                              false,
                                              isOptionalTypeRef(*variant.payload));
-                                    caseInstr.body = std::make_unique<std::vector<tpp::Instruction>>(lowerPublicNodes(sourceCase->body, env, functions, syntheticCounter));
+                                                            loweredCaseBody = lowerPublicNodes(sourceCase->body, env, functions, syntheticCounter);
                                     env.pop();
                                 }
                                 else
                                 {
-                                    caseInstr.body = std::make_unique<std::vector<tpp::Instruction>>(lowerPublicNodes(sourceCase->body, env, functions, syntheticCounter));
+                                                            loweredCaseBody = lowerPublicNodes(sourceCase->body, env, functions, syntheticCounter);
                                 }
                             }
                             else if (arg->defaultCase)
                             {
-                                caseInstr.body = std::make_unique<std::vector<tpp::Instruction>>(lowerPublicNodes(arg->defaultCase->body, env, functions, syntheticCounter));
+                                                        loweredCaseBody = lowerPublicNodes(arg->defaultCase->body, env, functions, syntheticCounter);
                             }
-                            else
-                            {
-                                caseInstr.body = std::make_unique<std::vector<tpp::Instruction>>();
-                            }
+
+                                                    caseInstr.body = std::make_unique<std::vector<tpp::Instruction>>(std::move(loweredCaseBody));
 
                             cases->push_back(std::move(caseInstr));
                         }
                     }
 
                     switchInstr->cases = std::move(cases);
-                    switchInstr->isBlock = arg->isBlock;
-                    switchInstr->insertCol = arg->insertCol;
                     switchInstr->policy = arg->policy;
                     out.push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<5>, std::move(switchInstr)}});
                 }
@@ -645,15 +713,12 @@ namespace tpp::compiler
                 tpp::ParamDef paramDef;
                 paramDef.name = param.name;
                 paramDef.type = std::make_unique<tpp::TypeKind>(tpp::to_public_type(param.type));
-                paramDef.slotOffset = 0;
-                paramDef.slotCount = 0;
                 functionDef.params.push_back(std::move(paramDef));
             }
             functionDef.body = std::make_unique<std::vector<tpp::Instruction>>(lowerPublicNodes(fn.body, env, functions, syntheticCounter));
             functionDef.policy = fn.policy;
             functionDef.doc = fn.doc;
             functionDef.sourceRange = tpp::to_public_range(fn.sourceRange, includeSourceRanges);
-            functionDef.frameSlotCount = 0;
 
             out.push_back(std::move(functionDef));
         }

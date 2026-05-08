@@ -138,9 +138,14 @@ TEST(IRStability, GeneratedImplementationContainsTakeOutput)
     checkPatternInImplFiles(".takeOutput()");
 }
 
-TEST(IRStability, GeneratedImplementationContainsTppVM)
+TEST(IRStability, GeneratedImplementationContainsTppWriter)
 {
-    checkPatternInImplFiles("tpp::VM");
+    checkPatternInImplFiles("tpp::Writer");
+}
+
+TEST(IRStability, GeneratedImplementationDoesNotContainTppVM)
+{
+    checkPatternAbsentInImplFiles("tpp::VM");
 }
 
 TEST(IRStability, GeneratedImplementationUsesNativeVmHelpers)
@@ -177,44 +182,52 @@ TEST(IRStability, SchemaCheck)
         if (!std::filesystem::exists(snapshotPath))
             continue;
 
-        // Load snapshot
-        std::ifstream snapFile(snapshotPath);
-        ASSERT_TRUE(snapFile.good()) << "Cannot read " << snapshotPath;
-        nlohmann::json expectedIR;
-        snapFile >> expectedIR;
-
-        // Compile in-process
-        auto loaded = tc.extract();
-        tpp::TppProject project;
-        for (const auto &src : loaded.sources)
+        try
         {
-            if (src.isTypes)
-                project.add_type_source(src.content, src.url);
-            else
-                project.add_template_source(src.content, src.url);
+            // Load snapshot
+            std::ifstream snapFile(snapshotPath);
+            ASSERT_TRUE(snapFile.good()) << "Cannot read " << snapshotPath;
+            nlohmann::json expectedIR;
+            snapFile >> expectedIR;
+
+            // Compile in-process
+            auto loaded = tc.extract();
+            tpp::TppProject project;
+            for (const auto &src : loaded.sources)
+            {
+                if (src.isTypes)
+                    project.add_type_source(src.content, src.url);
+                else
+                    project.add_template_source(src.content, src.url);
+            }
+            for (size_t index = 0; index < loaded.policies.size(); ++index)
+                project.add_policy_source(loaded.policies[index], loaded.name + "/policy_" + std::to_string(index) + ".json");
+
+            std::vector<tpp::DiagnosticLSPMessage> diagnostics;
+            tpp::LexedProject lexed;
+            tpp::ParsedProject parsed;
+            tpp::IR output;
+            bool ok = tpp::lex(project, lexed, diagnostics) &&
+                      tpp::parse(lexed, parsed, diagnostics) &&
+                      tpp::compile(parsed, output, diagnostics);
+            ASSERT_TRUE(ok) << "Failed to compile test case: " << tc.name;
+
+            nlohmann::json actualIR = output;
+
+            // Collect key paths
+            std::set<std::string> expectedPaths, actualPaths;
+            collectPaths(expectedIR, "", expectedPaths);
+            collectPaths(actualIR, "", actualPaths);
+
+            allExpectedPaths.insert(expectedPaths.begin(), expectedPaths.end());
+            allActualPaths.insert(actualPaths.begin(), actualPaths.end());
+            ++snapshotsChecked;
         }
-        for (size_t index = 0; index < loaded.policies.size(); ++index)
-            project.add_policy_source(loaded.policies[index], loaded.name + "/policy_" + std::to_string(index) + ".json");
-
-        std::vector<tpp::DiagnosticLSPMessage> diagnostics;
-        tpp::LexedProject lexed;
-        tpp::ParsedProject parsed;
-        tpp::IR output;
-        bool ok = tpp::lex(project, lexed, diagnostics) &&
-              tpp::parse(lexed, parsed, diagnostics) &&
-              tpp::compile(parsed, output, diagnostics);
-        ASSERT_TRUE(ok) << "Failed to compile test case: " << tc.name;
-
-        nlohmann::json actualIR = output;
-
-        // Collect key paths
-        std::set<std::string> expectedPaths, actualPaths;
-        collectPaths(expectedIR, "", expectedPaths);
-        collectPaths(actualIR, "", actualPaths);
-
-        allExpectedPaths.insert(expectedPaths.begin(), expectedPaths.end());
-        allActualPaths.insert(actualPaths.begin(), actualPaths.end());
-        ++snapshotsChecked;
+        catch (const std::exception &e)
+        {
+            FAIL() << "IR schema check failed for " << tc.name
+                   << " (" << snapshotPath << "): " << e.what();
+        }
     }
 
     ASSERT_GT(snapshotsChecked, 0)

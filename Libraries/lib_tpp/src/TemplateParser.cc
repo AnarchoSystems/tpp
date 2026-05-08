@@ -670,7 +670,7 @@ namespace tpp::compiler
                 tl.segments.push_back(std::move(ls));
             }
 
-            tl.isBlockLine = hasStructural && !hasText && !hasExprDirective;
+            tl.isStructuralLine = hasStructural && !hasText && !hasExprDirective;
 
             size_t ws = 0;
             while (ws < raw.size() && (raw[ws] == ' ' || raw[ws] == '\t'))
@@ -680,6 +680,17 @@ namespace tpp::compiler
             result.push_back(std::move(tl));
         }
         return result;
+    }
+
+    static std::vector<ASTNode> wrapIndentedAstBody(std::vector<ASTNode> body,
+                                                    int amount,
+                                                    bool wrapSingleForBody = false)
+    {
+        auto indentNode = std::make_shared<IndentNode>();
+        indentNode->amount = amount;
+        indentNode->body = std::move(body);
+        indentNode->wrapSingleForBody = wrapSingleForBody;
+        return {ASTNode{std::move(indentNode)}};
     }
 
     std::vector<ASTNode> ASTBuilder::parseInline(const std::vector<LineSeg> &segs,
@@ -733,7 +744,6 @@ namespace tpp::compiler
                     forNode->precededBy = d->precededBy;
                     forNode->policy = d->policy;
                     forNode->alignSpec = d->alignSpec;
-                    forNode->isBlock = false;
                     forNode->sourceRange = makeRange(lineIndex, s);
                     ++pos;
                     forNode->body = recurse();
@@ -780,7 +790,6 @@ namespace tpp::compiler
                     ifNode->condExpr = d->cond;
                     ifNode->negated = d->negated;
                     ifNode->condText = d->condText;
-                    ifNode->isBlock = false;
                     ifNode->sourceRange = makeRange(lineIndex, s);
                     ++pos;
                     ifNode->thenBody = recurse();
@@ -816,7 +825,6 @@ namespace tpp::compiler
                     switchNode->expr = d->expr;
                     switchNode->checkExhaustive = d->checkExhaustive;
                     switchNode->policy = d->policy;
-                    switchNode->isBlock = false;
                     switchNode->sourceRange = makeRange(lineIndex, s);
                     ++pos;
                     while (pos < segs.size())
@@ -888,14 +896,14 @@ namespace tpp::compiler
         return nodes;
     }
 
-    std::vector<ASTNode> ASTBuilder::parseBlock(int insertCol, Range *outEndRange)
+    std::vector<ASTNode> ASTBuilder::parseBlock(Range *outEndRange)
     {
         std::vector<ASTNode> nodes;
         while (pos < lines.size())
         {
             auto &tl = lines[pos];
 
-            if (tl.isBlockLine)
+            if (tl.isStructuralLine)
             {
                 for (auto &seg : tl.segments)
                 {
@@ -912,12 +920,10 @@ namespace tpp::compiler
                         forNode->precededBy = d->precededBy;
                         forNode->policy = d->policy;
                         forNode->alignSpec = d->alignSpec;
-                        forNode->isBlock = true;
-                        forNode->insertCol = tl.indent;
                         forNode->sourceRange = makeRange((int)pos, seg);
                         ++pos;
                         Range forEndRange{};
-                        forNode->body = parseBlock(tl.indent, &forEndRange);
+                        forNode->body = wrapIndentedAstBody(parseBlock(&forEndRange), tl.indent);
                         forNode->endRange = forEndRange;
                         nodes.push_back(std::move(forNode));
                     }
@@ -959,13 +965,11 @@ namespace tpp::compiler
                         ifNode->condExpr = d->cond;
                         ifNode->negated = d->negated;
                         ifNode->condText = d->condText;
-                        ifNode->isBlock = true;
-                        ifNode->insertCol = tl.indent;
                         ifNode->sourceRange = makeRange((int)pos, seg);
                         ++pos;
                         Range ifEndRange{};
-                        ifNode->thenBody = parseBlock(tl.indent, &ifEndRange);
-                        if (pos < lines.size() && lines[pos].isBlockLine)
+                        ifNode->thenBody = wrapIndentedAstBody(parseBlock(&ifEndRange), tl.indent);
+                        if (pos < lines.size() && lines[pos].isStructuralLine)
                         {
                             for (auto &s2 : lines[pos].segments)
                             {
@@ -973,7 +977,7 @@ namespace tpp::compiler
                                 {
                                     ifNode->elseRange = makeRange((int)pos, s2);
                                     ++pos;
-                                    ifNode->elseBody = parseBlock(tl.indent, &ifEndRange);
+                                    ifNode->elseBody = wrapIndentedAstBody(parseBlock(&ifEndRange), tl.indent);
                                     break;
                                 }
                             }
@@ -1001,8 +1005,6 @@ namespace tpp::compiler
                         switchNode->expr = d->expr;
                         switchNode->checkExhaustive = d->checkExhaustive;
                         switchNode->policy = d->policy;
-                        switchNode->isBlock = true;
-                        switchNode->insertCol = tl.indent;
                         switchNode->sourceRange = makeRange((int)pos, seg);
                         ++pos;
                         while (pos < lines.size())
@@ -1039,6 +1041,7 @@ namespace tpp::compiler
                                         cn.body = parseInline(lines[pos].segments, segIndex + 1, (int)pos, &caseEndRange);
                                         cn.endRange = caseEndRange;
                                         cn.body.push_back(TextNode{"\n"});
+                                        cn.body = wrapIndentedAstBody(std::move(cn.body), tl.indent);
                                         switchNode->cases.push_back(std::move(cn));
                                         ++pos;
                                         advancedLine = true;
@@ -1047,7 +1050,7 @@ namespace tpp::compiler
                                     {
                                         ++pos;
                                         Range caseEndRange{};
-                                        cn.body = parseBlock(tl.indent, &caseEndRange);
+                                        cn.body = wrapIndentedAstBody(parseBlock(&caseEndRange), tl.indent);
                                         cn.endRange = caseEndRange;
                                         switchNode->cases.push_back(std::move(cn));
                                         advancedLine = true;
@@ -1066,6 +1069,7 @@ namespace tpp::compiler
                                         cn.body = parseInline(lines[pos].segments, segIndex + 1, (int)pos, &caseEndRange);
                                         cn.endRange = caseEndRange;
                                         cn.body.push_back(TextNode{"\n"});
+                                        cn.body = wrapIndentedAstBody(std::move(cn.body), tl.indent);
                                         switchNode->defaultCase = std::move(cn);
                                         ++pos;
                                         advancedLine = true;
@@ -1074,7 +1078,7 @@ namespace tpp::compiler
                                     {
                                         ++pos;
                                         Range caseEndRange{};
-                                        cn.body = parseBlock(tl.indent, &caseEndRange);
+                                        cn.body = wrapIndentedAstBody(parseBlock(&caseEndRange), tl.indent);
                                         cn.endRange = caseEndRange;
                                         switchNode->defaultCase = std::move(cn);
                                         advancedLine = true;
@@ -1091,13 +1095,14 @@ namespace tpp::compiler
                                     auto callNode = std::make_shared<FunctionCallNode>();
                                     callNode->functionName = rd->func;
                                     cn.body.push_back(std::move(callNode));
+                                    cn.body = wrapIndentedAstBody(std::move(cn.body), tl.indent);
                                     switchNode->cases.push_back(std::move(cn));
                                     ++pos;
                                     advancedLine = true;
                                     break;
                                 }
 
-                                if (lines[pos].isBlockLine)
+                                if (lines[pos].isStructuralLine)
                                 {
                                     ++pos;
                                     advancedLine = true;
@@ -1141,10 +1146,10 @@ namespace tpp::compiler
                         renderNode->followedBy = d->followedBy;
                         renderNode->precededBy = d->precededBy;
                         renderNode->policy = d->policy;
-                        renderNode->isBlock = true;
-                        renderNode->insertCol = tl.indent;
                         renderNode->sourceRange = makeRange((int)pos, seg);
-                        nodes.push_back(std::move(renderNode));
+                        auto wrappedRenderNodes = wrapIndentedAstBody({ASTNode{renderNode}}, tl.indent, true);
+                        for (auto &wrappedNode : wrappedRenderNodes)
+                            nodes.push_back(std::move(wrappedNode));
                         ++pos;
                     }
                     else
@@ -1399,7 +1404,7 @@ namespace tpp::compiler
         func.sourceRange = {{(int)headerLineNum, 0}, {(int)headerLineNum, (int)(nl - lineStart)}};
 
         ASTBuilder builder{templateLines, 0, bodyStartLine};
-        func.body = builder.parseBlock(0);
+            func.body = builder.parseBlock();
 
         if (outBodyText)
             *outBodyText = body;

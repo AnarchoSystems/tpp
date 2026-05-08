@@ -86,7 +86,7 @@ template cpp_policy_ref(ref: PolicyRef)
 END
 
 template cpp_inline_loop_options(f: ForData)
-tpp::VM::NativeLoopOptions{
+tpp::Writer::NativeLoopOptions{
     @if f.precededByLit@std::optional<std::string_view>{@f.precededByLit@}@else@std::nullopt@end if@,
     @if f.sepLit@std::optional<std::string_view>{@f.sepLit@}@else@std::nullopt@end if@,
     @if f.followedByLit@std::optional<std::string_view>{@f.followedByLit@}@else@std::nullopt@end if@,
@@ -95,7 +95,7 @@ tpp::VM::NativeLoopOptions{
 END
 
 template cpp_block_loop_options(f: ForData)
-tpp::VM::NativeLoopOptions{
+tpp::Writer::NativeLoopOptions{
     @if f.precededByLit@std::optional<std::string_view>{@f.precededByLit@}@else@std::nullopt@end if@,
     @if f.sepLit@std::optional<std::string_view>{@f.sepLit@}@else@std::nullopt@end if@,
     @if f.followedByLit@std::optional<std::string_view>{@f.followedByLit@}@else@std::nullopt@end if@,
@@ -140,7 +140,7 @@ template emit_for(f: ForData)
 @if f.cells@
 @emit_aligned_for(f)@
 @else@
-@if f.isBlock@
+@if f.blockIndent@
 @emit_for_block(f)@
 @else@
 @emit_for_inline(f)@
@@ -171,7 +171,7 @@ template emit_for_block(f: ForData)
 const auto& _coll@f.scopeId@ = (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@);
 if (!@f.sb@.emitBlockForEach(
         _coll@f.scopeId@,
-        @f.insertCol@,
+    @if f.blockIndent@@f.blockIndent@@end if@,
     @cpp_block_loop_options(f)@,
         [&](const auto& @f.varName@, int _tppEnumerator@f.scopeId@) {
             @if f.enumeratorName@
@@ -222,7 +222,7 @@ END
 // ── If / Else ────────────────────────────────────────────────────────────────
 
 template emit_if(i: IfData)
-@if i.isBlock@
+@if i.blockIndent@
 @emit_if_block(i)@
 @else@
 @emit_if_inline(i)@
@@ -253,7 +253,7 @@ if (!@i.condPath@) {
 @else@
 if (@i.condPath@) {
 @end if@
-    if (!@i.sb@.emitBlock(@i.insertCol@, [&]() {
+    if (!@i.sb@.emitBlock(@if i.blockIndent@@i.blockIndent@@end if@, [&]() {
             @for instr in i.thenBody@
             @emit_instr(instr)@
             @end for@
@@ -261,7 +261,7 @@ if (@i.condPath@) {
         throw std::runtime_error("tpp render error: " + @i.sb@.error());
 @if i.elseBody@
 } else {
-    if (!@i.sb@.emitBlock(@i.insertCol@, [&]() {
+    if (!@i.sb@.emitBlock(@if i.blockIndent@@i.blockIndent@@end if@, [&]() {
             @for instr in i.elseBody@
             @emit_instr(instr)@
             @end for@
@@ -274,7 +274,7 @@ END
 // ── Switch / Case ────────────────────────────────────────────────────────────
 
 template emit_switch_case_block(s: SwitchData, c: CaseData)
-if (!@s.sb@.emitBlock(@s.insertCol@, [&]() {
+if (!@s.sb@.emitBlock(@if s.blockIndent@@s.blockIndent@@end if@, [&]() {
         @if c.body@
         @for instr in c.body@
         @emit_instr(instr)@
@@ -295,7 +295,7 @@ switch ((@cpp_value_path(s.exprPath, s.exprIsRecursive, s.exprIsOptional)@).valu
         [[maybe_unused]] const auto& @c.bindingName@ = std::get<@c.variantIndex@>((@cpp_value_path(s.exprPath, s.exprIsRecursive, s.exprIsOptional)@).value);
         @end if@
         @end if@
-        @if s.isBlock@
+        @if s.blockIndent@
         @emit_switch_case_block(s, c)@
         @else@
         @if c.body@
@@ -360,7 +360,7 @@ template render_cpp_native_implementation(ctx: RenderFunctionsInput)
 @end if@
 #include <tpp/ArgType.h>
 #include <tpp/Policy.h>
-#include <tpp/VM.h>
+#include <tpp/Writer.h>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -371,13 +371,6 @@ template render_cpp_native_implementation(ctx: RenderFunctionsInput)
 @if ctx.namespaceName@
 namespace @ctx.namespaceName@ {
 @end if@
-
-namespace {
-const tpp::LayoutTable& _tppEmptyLayouts() {
-    static const tpp::LayoutTable layouts{};
-    return layouts;
-}
-} // anonymous namespace
 
 @if ctx.policies@
 
@@ -393,7 +386,7 @@ static std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep="
 
 @if ctx.policies@
 static std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@, const tpp::TppPolicy& _policy) {
-    tpp::VM _sb(_tppEmptyLayouts());
+    tpp::Writer _sb;
     @for instr in fn.body@
     @emit_instr(instr)@
     @end for@
@@ -408,7 +401,7 @@ static std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep="
 }
 @else@
 @ctx.staticModifier@std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@) {
-    tpp::VM _sb(_tppEmptyLayouts());
+    tpp::Writer _sb;
     @for instr in fn.body@
     @emit_instr(instr)@
     @end for@

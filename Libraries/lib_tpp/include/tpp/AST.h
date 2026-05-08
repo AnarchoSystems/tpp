@@ -28,16 +28,25 @@ namespace tpp::compiler
     struct SwitchNode;
     struct FunctionCallNode;
     struct RenderViaNode;
+    struct IndentNode;
 
     using ASTNode = std::variant<TextNode,
                                  AlignmentCellNode,
                                  CommentNode,
                                  InterpolationNode,
+                                 std::shared_ptr<IndentNode>,
                                  std::shared_ptr<ForNode>,
                                  std::shared_ptr<IfNode>,
                                  std::shared_ptr<SwitchNode>,
                                  std::shared_ptr<FunctionCallNode>,
                                  std::shared_ptr<RenderViaNode>>;
+
+    struct IndentNode
+    {
+        int amount = 0;
+        std::vector<ASTNode> body;
+        bool wrapSingleForBody = false;
+    };
 
     struct ForNode
     {
@@ -48,8 +57,6 @@ namespace tpp::compiler
         std::string sep;
         std::string followedBy;
         std::string precededBy;
-        bool isBlock = false;
-        int insertCol = 0;
         std::string policy;
         std::optional<std::string> alignSpec; // nullopt = no alignment; "" = left-align all
         Range sourceRange{};
@@ -63,8 +70,6 @@ namespace tpp::compiler
         std::string condText;
         std::vector<ASTNode> thenBody;
         std::vector<ASTNode> elseBody;
-        bool isBlock = false;
-        int insertCol = 0;
         Range sourceRange{};
         Range elseRange{};
         Range endRange{};
@@ -86,8 +91,6 @@ namespace tpp::compiler
         bool checkExhaustive = false;
         std::vector<CaseNode> cases;
         std::optional<CaseNode> defaultCase;
-        bool isBlock = false;
-        int insertCol = 0;
         std::string policy;
         Range sourceRange{};
         Range endRange{};
@@ -107,8 +110,6 @@ namespace tpp::compiler
         std::string sep;
         std::string followedBy;
         std::string precededBy;
-        bool isBlock = false;
-        int insertCol = 0;
         std::string policy;
         Range sourceRange{};
     };
@@ -166,6 +167,8 @@ namespace tpp::compiler
     { return a.text == b.text; }
     inline bool operator==(const InterpolationNode &a, const InterpolationNode &b)
     { return a.expr == b.expr && a.policy == b.policy; }
+    inline bool operator==(const IndentNode &a, const IndentNode &b)
+    { return a.amount == b.amount && a.body == b.body && a.wrapSingleForBody == b.wrapSingleForBody; }
     inline bool operator==(const CaseNode &a, const CaseNode &b)
     {
         return a.tag == b.tag && a.bindingName == b.bindingName &&
@@ -176,21 +179,17 @@ namespace tpp::compiler
         return a.varName == b.varName && a.enumeratorName == b.enumeratorName &&
                a.collectionExpr == b.collectionExpr && a.body == b.body &&
                a.sep == b.sep && a.followedBy == b.followedBy && a.precededBy == b.precededBy &&
-               a.isBlock == b.isBlock && a.insertCol == b.insertCol && a.policy == b.policy &&
-             a.alignSpec == b.alignSpec;
+               a.policy == b.policy && a.alignSpec == b.alignSpec;
     }
     inline bool operator==(const IfNode &a, const IfNode &b)
     {
         return a.condExpr == b.condExpr && a.negated == b.negated && a.condText == b.condText &&
-               a.thenBody == b.thenBody && a.elseBody == b.elseBody &&
-               a.isBlock == b.isBlock && a.insertCol == b.insertCol;
+               a.thenBody == b.thenBody && a.elseBody == b.elseBody;
     }
     inline bool operator==(const SwitchNode &a, const SwitchNode &b)
     {
         return a.expr == b.expr && a.checkExhaustive == b.checkExhaustive &&
-               a.cases == b.cases && a.defaultCase == b.defaultCase &&
-               a.isBlock == b.isBlock && a.insertCol == b.insertCol &&
-               a.policy == b.policy;
+               a.cases == b.cases && a.defaultCase == b.defaultCase && a.policy == b.policy;
     }
     inline bool operator==(const FunctionCallNode &a, const FunctionCallNode &b)
     { return a.functionName == b.functionName && a.arguments == b.arguments; }
@@ -198,7 +197,7 @@ namespace tpp::compiler
     {
         return a.collectionExpr == b.collectionExpr && a.functionName == b.functionName &&
                a.sep == b.sep && a.followedBy == b.followedBy && a.precededBy == b.precededBy &&
-               a.isBlock == b.isBlock && a.insertCol == b.insertCol && a.policy == b.policy;
+               a.policy == b.policy;
     }
     inline bool operator==(const ASTNode &a, const ASTNode &b)
     {
@@ -207,7 +206,8 @@ namespace tpp::compiler
         {
             using T = std::decay_t<decltype(av)>;
             const auto &bv = std::get<T>(b);
-            if constexpr (std::is_same_v<T, std::shared_ptr<ForNode>> ||
+            if constexpr (std::is_same_v<T, std::shared_ptr<IndentNode>> ||
+                          std::is_same_v<T, std::shared_ptr<ForNode>> ||
                           std::is_same_v<T, std::shared_ptr<IfNode>>  ||
                           std::is_same_v<T, std::shared_ptr<SwitchNode>> ||
                           std::is_same_v<T, std::shared_ptr<FunctionCallNode>> ||

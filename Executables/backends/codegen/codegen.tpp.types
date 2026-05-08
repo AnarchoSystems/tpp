@@ -58,8 +58,7 @@ struct ForData
     sepLit : optional<string>;
     followedByLit : optional<string>;
     precededByLit : optional<string>;
-    isBlock : bool;
-    insertCol : int;
+    blockIndent : optional<int>;
     sb : string;
     alignSpec : optional<string>;
     cells : optional<list<AlignCellInfo>>;
@@ -88,8 +87,7 @@ struct IfData
     isNegated : bool;
     thenBody : list<RenderInstruction>;
     elseBody : optional<list<RenderInstruction>>;
-    isBlock : bool;
-    insertCol : int;
+    blockIndent : optional<int>;
     sb : string;
     thenScopeId : int;
     elseScopeId : int;
@@ -102,8 +100,7 @@ struct SwitchData
     exprIsOptional : bool;
     enumTypeName : string;
     cases : list<CaseData>;
-    isBlock : bool;
-    insertCol : int;
+    blockIndent : optional<int>;
     sb : string;
 }
 

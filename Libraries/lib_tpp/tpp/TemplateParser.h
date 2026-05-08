@@ -121,7 +121,7 @@ namespace tpp::compiler
     struct TemplateLine
     {
         std::vector<LineSeg> segments;
-        bool isBlockLine = false;
+        bool isStructuralLine = false;
         int indent = 0;
     };
 
@@ -147,7 +147,7 @@ namespace tpp::compiler
 
         // outEndRange, if non-null, is filled with the range of the closing directive
         // (e.g. @end for@, @end if@) when the block is terminated by one.
-        std::vector<ASTNode> parseBlock(int insertCol, Range *outEndRange = nullptr);
+        std::vector<ASTNode> parseBlock(Range *outEndRange = nullptr);
 
     private:
         // Parses inline segments (a single non-block line) into AST nodes.

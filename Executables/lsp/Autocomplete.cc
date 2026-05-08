@@ -17,6 +17,7 @@ using SemanticModel    = compiler::SemanticModel;
 using TemplateFunction = compiler::TemplateFunction;
 using ASTNode          = compiler::ASTNode;
 using Variable         = compiler::Variable;
+using IndentNode       = compiler::IndentNode;
 using ForNode          = compiler::ForNode;
 using IfNode           = compiler::IfNode;
 using SwitchNode       = compiler::SwitchNode;
@@ -69,6 +70,10 @@ static bool walkForScope(const std::vector<ASTNode> &nodes, int line, int charac
         bool found = std::visit([&](auto &&arg) -> bool
         {
             using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, std::shared_ptr<IndentNode>>)
+            {
+                return walkForScope(arg->body, line, character, scope, model);
+            }
             if constexpr (std::is_same_v<T, std::shared_ptr<ForNode>>)
             {
                 if (arg->sourceRange.start.line > line) return false;

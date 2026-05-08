@@ -229,6 +229,36 @@ inline tpp::TypeKind getElemType(const tpp::TypeKind &t)
     return cloneTypeKind(t);
 }
 
+struct BodyIndentInfo
+{
+    std::optional<int> blockIndent;
+    size_t firstIndex = 0;
+    size_t pastLastIndex = 0;
+};
+
+inline bool isIndentInstruction(const tpp::Instruction &instr)
+{
+    return std::holds_alternative<tpp::PushIndentInstr>(instr.value) ||
+           std::holds_alternative<tpp::Instruction_PopIndent>(instr.value);
+}
+
+inline BodyIndentInfo analyzeIndentedBody(const std::vector<tpp::Instruction> &body)
+{
+    BodyIndentInfo info;
+    info.pastLastIndex = body.size();
+
+    if (body.size() >= 2 &&
+        std::holds_alternative<tpp::PushIndentInstr>(body.front().value) &&
+        std::holds_alternative<tpp::Instruction_PopIndent>(body.back().value))
+    {
+        info.blockIndent = std::get<tpp::PushIndentInstr>(body.front().value).amount;
+        info.firstIndex = 1;
+        info.pastLastIndex = body.size() - 1;
+    }
+
+    return info;
+}
+
 /// Split instructions at AlignCell boundaries into separate cell bodies.
 /// Returns pointers into the original vector (Instruction is non-copyable).
 inline std::vector<std::vector<const tpp::Instruction*>> splitCells(
@@ -236,8 +266,10 @@ inline std::vector<std::vector<const tpp::Instruction*>> splitCells(
 {
     std::vector<std::vector<const tpp::Instruction*>> cells;
     cells.emplace_back();
-    for (const auto &instr : body)
+    const auto indentInfo = analyzeIndentedBody(body);
+    for (size_t index = indentInfo.firstIndex; index < indentInfo.pastLastIndex; ++index)
     {
+        const auto &instr = body[index];
         if (std::holds_alternative<tpp::Instruction_AlignCell>(instr.value))
             cells.emplace_back();
         else
@@ -284,11 +316,21 @@ struct ConvertConfig
 inline RenderExprInfo exprInfoToContext(const tpp::ExprInfo &expr)
 {
     RenderExprInfo result;
-    result.path = expr.path;
+    result.path = expr.bindingName;
+    for (const auto &segment : expr.segments)
+        result.path += "." + segment.field;
     result.type = std::make_unique<RenderTypeKind>(typeKindToContext(*expr.type));
     result.isRecursive = expr.isRecursive;
     result.isOptional = expr.isOptional;
     return result;
+}
+
+inline std::string exprInfoPath(const tpp::ExprInfo &expr)
+{
+    std::string path = expr.bindingName;
+    for (const auto &segment : expr.segments)
+        path += "." + segment.field;
+    return path;
 }
 
 inline bool pathUsesBinding(const std::string &path, const std::string &bindingName)
@@ -315,7 +357,7 @@ inline bool instructionUsesBinding(
 
         if constexpr (std::is_same_v<T, tpp::EmitExprInstr>)
         {
-            return !shadowed && pathUsesBinding(arg.expr.path, bindingName);
+            return !shadowed && pathUsesBinding(exprInfoPath(arg.expr), bindingName);
         }
         else if constexpr (std::is_same_v<T, std::unique_ptr<tpp::ForInstr>>)
         {
@@ -326,7 +368,7 @@ inline bool instructionUsesBinding(
                 arg->varName == bindingName ||
                 (arg->enumeratorName.has_value() && *arg->enumeratorName == bindingName);
 
-            return (!shadowed && pathUsesBinding(arg->collection.path, bindingName)) ||
+                 return (!shadowed && pathUsesBinding(exprInfoPath(arg->collection), bindingName)) ||
                    instructionListUsesBinding(*arg->body, bindingName, bodyShadowed);
         }
         else if constexpr (std::is_same_v<T, std::unique_ptr<tpp::IfInstr>>)
@@ -334,7 +376,7 @@ inline bool instructionUsesBinding(
             if (!arg)
                 return false;
 
-            return (!shadowed && pathUsesBinding(arg->condExpr.path, bindingName)) ||
+                 return (!shadowed && pathUsesBinding(exprInfoPath(arg->condExpr), bindingName)) ||
                    instructionListUsesBinding(*arg->thenBody, bindingName, shadowed) ||
                    instructionListUsesBinding(*arg->elseBody, bindingName, shadowed);
         }
@@ -343,7 +385,7 @@ inline bool instructionUsesBinding(
             if (!arg)
                 return false;
 
-            if (!shadowed && pathUsesBinding(arg->expr.path, bindingName))
+            if (!shadowed && pathUsesBinding(exprInfoPath(arg->expr), bindingName))
                 return true;
 
             for (const auto &caseInstr : *arg->cases)
@@ -362,7 +404,7 @@ inline bool instructionUsesBinding(
 
             for (const auto &callArg : arg.arguments)
             {
-                if (pathUsesBinding(callArg.path, bindingName))
+                if (pathUsesBinding(exprInfoPath(callArg), bindingName))
                     return true;
             }
             return false;
@@ -432,10 +474,11 @@ inline RenderInstruction convertInstruction(
             int s = scope++;
             std::string pol = arg->policy.empty() ? activePolicy : arg->policy;
             auto elemType = getElemType(*arg->collection.type);
+            const auto bodyIndent = analyzeIndentedBody(*arg->body);
 
             auto forData = std::make_unique<ForData>();
             forData->scopeId = s;
-            forData->collPath = arg->collection.path;
+            forData->collPath = exprInfoPath(arg->collection);
             forData->collIsRecursive = arg->collection.isRecursive;
             forData->collIsOptional = arg->collection.isOptional;
             forData->elemType = std::make_unique<RenderTypeKind>(typeKindToContext(elemType));
@@ -447,8 +490,7 @@ inline RenderInstruction convertInstruction(
                 forData->followedByLit = stringLiteral(*arg->followedBy);
             if (arg->precededBy.has_value())
                 forData->precededByLit = stringLiteral(*arg->precededBy);
-            forData->isBlock = arg->isBlock;
-            forData->insertCol = arg->insertCol;
+            forData->blockIndent = bodyIndent.blockIndent;
             forData->sb = sb;
             forData->alignSpec = arg->alignSpec;
             forData->singleAlignChar = arg->alignSpec.has_value() && arg->alignSpec->size() == 1;
@@ -475,8 +517,8 @@ inline RenderInstruction convertInstruction(
             else
             {
                 auto bodyVec = std::make_unique<std::vector<RenderInstruction>>();
-                for (const auto &bi : *arg->body)
-                    bodyVec->push_back(convertInstruction(bi, sb, pol, scope, ir, cfg));
+                for (size_t index = bodyIndent.firstIndex; index < bodyIndent.pastLastIndex; ++index)
+                    bodyVec->push_back(convertInstruction((*arg->body)[index], sb, pol, scope, ir, cfg));
                 forData->body = std::move(bodyVec);
                 forData->numCols = 0;
             }
@@ -487,9 +529,14 @@ inline RenderInstruction convertInstruction(
         }
         else if constexpr (std::is_same_v<T, std::unique_ptr<tpp::IfInstr>>)
         {
+            const auto thenIndent = analyzeIndentedBody(*arg->thenBody);
+            const auto elseIndent = analyzeIndentedBody(*arg->elseBody);
+            const std::optional<int> blockIndent = thenIndent.blockIndent.has_value()
+                ? thenIndent.blockIndent
+                : elseIndent.blockIndent;
             int thenScopeId = 0, elseScopeId = 0;
-            bool elseBodyPresent = !arg->elseBody->empty();
-            if (arg->isBlock)
+            bool elseBodyPresent = elseIndent.firstIndex < elseIndent.pastLastIndex;
+            if (blockIndent.has_value())
             {
                 thenScopeId = scope++;
                 if (elseBodyPresent)
@@ -499,25 +546,24 @@ inline RenderInstruction convertInstruction(
             }
 
             auto ifData = std::make_unique<IfData>();
-            ifData->condPath = arg->condExpr.path;
+            ifData->condPath = exprInfoPath(arg->condExpr);
             ifData->condIsBool = arg->condExpr.type->value.index() == 2;
             ifData->isNegated = arg->negated;
-            ifData->isBlock = arg->isBlock;
-            ifData->insertCol = arg->insertCol;
+            ifData->blockIndent = blockIndent;
             ifData->sb = sb;
             ifData->thenScopeId = thenScopeId;
             ifData->elseScopeId = elseScopeId;
 
             auto thenVec = std::make_unique<std::vector<RenderInstruction>>();
-            for (const auto &ti : *arg->thenBody)
-                thenVec->push_back(convertInstruction(ti, sb, activePolicy, scope, ir, cfg));
+            for (size_t index = thenIndent.firstIndex; index < thenIndent.pastLastIndex; ++index)
+                thenVec->push_back(convertInstruction((*arg->thenBody)[index], sb, activePolicy, scope, ir, cfg));
             ifData->thenBody = std::move(thenVec);
 
             if (elseBodyPresent)
             {
                 auto elseVec = std::make_unique<std::vector<RenderInstruction>>();
-                for (const auto &ei : *arg->elseBody)
-                    elseVec->push_back(convertInstruction(ei, sb, activePolicy, scope, ir, cfg));
+                for (size_t index = elseIndent.firstIndex; index < elseIndent.pastLastIndex; ++index)
+                    elseVec->push_back(convertInstruction((*arg->elseBody)[index], sb, activePolicy, scope, ir, cfg));
                 ifData->elseBody = std::move(elseVec);
             }
 
@@ -546,17 +592,20 @@ inline RenderInstruction convertInstruction(
 
             auto casesVec = std::make_unique<std::vector<CaseData>>();
             bool first = true;
+            std::optional<int> switchBlockIndent;
             for (const auto &c : *arg->cases)
             {
+                const auto caseIndent = analyzeIndentedBody(*c.body);
                 int caseScopeId = 0;
-                if (arg->isBlock)
+                if (caseIndent.blockIndent.has_value())
                 {
+                    switchBlockIndent = caseIndent.blockIndent;
                     caseScopeId = scope++;
                 }
 
                 auto caseBody = std::make_unique<std::vector<RenderInstruction>>();
-                for (const auto &bi : *c.body)
-                    caseBody->push_back(convertInstruction(bi, sb, pol, scope, ir, cfg));
+                for (size_t index = caseIndent.firstIndex; index < caseIndent.pastLastIndex; ++index)
+                    caseBody->push_back(convertInstruction((*c.body)[index], sb, pol, scope, ir, cfg));
 
                 int variantIndex = -1;
                 if (enumDef)
@@ -602,13 +651,12 @@ inline RenderInstruction convertInstruction(
                 enumTypeName = std::get<3>(switchType->value);
 
             auto switchData = std::make_unique<SwitchData>();
-            switchData->exprPath = arg->expr.path;
+            switchData->exprPath = exprInfoPath(arg->expr);
             switchData->exprIsRecursive = arg->expr.isRecursive;
             switchData->exprIsOptional = arg->expr.isOptional;
             switchData->enumTypeName = enumTypeName;
             switchData->cases = std::move(casesVec);
-            switchData->isBlock = arg->isBlock;
-            switchData->insertCol = arg->insertCol;
+            switchData->blockIndent = switchBlockIndent;
             switchData->sb = sb;
 
             RenderInstruction result;
@@ -619,7 +667,7 @@ inline RenderInstruction convertInstruction(
         {
             std::vector<CallArgInfo> argsVec;
             for (size_t i = 0; i < arg.arguments.size(); ++i)
-                argsVec.push_back({arg.arguments[i].path,
+                argsVec.push_back({exprInfoPath(arg.arguments[i]),
                                    arg.arguments[i].isRecursive,
                                    arg.arguments[i].isOptional});
 
@@ -756,7 +804,11 @@ inline RenderFunctionsInput buildFunctionsContext(
         int scope = 0;
         auto body = std::make_unique<std::vector<RenderInstruction>>();
         for (const auto &instr : *fn.body)
+        {
+            if (isIndentInstruction(instr))
+                continue;
             body->push_back(convertInstruction(instr, "_sb", fn.policy, scope, ir, cfg));
+        }
 
         RenderFunctionDef def;
         def.name = fn.name;

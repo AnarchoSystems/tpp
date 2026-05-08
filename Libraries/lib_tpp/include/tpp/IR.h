@@ -13,9 +13,11 @@ inline nlohmann::json _tpp_j(const std::unique_ptr<_TppT>& v) { return v ? nlohm
 
 struct SourcePosition;
 struct SourceRange;
+struct ExprPathSegment;
 struct ExprInfo;
 struct EmitInstr;
 struct EmitExprInstr;
+struct PushIndentInstr;
 struct ForInstr;
 struct CaseBinding;
 struct CaseInstr;
@@ -56,16 +58,24 @@ struct SourceRange
         return "struct SourceRange\n{\n    start : SourcePosition;\n    end : SourcePosition;\n}";
     }
 };
+struct ExprPathSegment
+{
+    std::string field;
+    static std::string tpp_typedefs() noexcept
+    {
+        return "// ── Instruction types (backend-neutral) ─────────────────────────────────────\n\n/// One named field access in an expression path.\nstruct ExprPathSegment\n{\n    field : string;\n}";
+    }
+};
 struct ExprInfo
 {
-    std::string path;
+    std::string bindingName;
+    std::vector<ExprPathSegment> segments;
     std::unique_ptr<TypeKind> type;
     bool isRecursive;
     bool isOptional;
-    int slotOffset;
     static std::string tpp_typedefs() noexcept
     {
-        return "// ── Instruction types (backend-neutral) ─────────────────────────────────────\n\n/// Expression with resolved type.\nstruct ExprInfo\n{\n    path : string;\n    type : TypeKind;\n    isRecursive : bool;\n    isOptional : bool;\n    slotOffset : int;\n}";
+        return "/// Expression with resolved type.\nstruct ExprInfo\n{\n    bindingName : string;\n    segments : list<ExprPathSegment>;\n    type : TypeKind;\n    isRecursive : bool;\n    isOptional : bool;\n}";
     }
 };
 struct EmitInstr
@@ -85,6 +95,14 @@ struct EmitExprInstr
         return "/// Emit an interpolated expression value.\nstruct EmitExprInstr\n{\n    expr : ExprInfo;\n    policy : string;\n}";
     }
 };
+struct PushIndentInstr
+{
+    int amount;
+    static std::string tpp_typedefs() noexcept
+    {
+        return "/// Start a block-indented output scope.\nstruct PushIndentInstr\n{\n    amount : int;\n}";
+    }
+};
 struct ForInstr
 {
     std::string varName;
@@ -94,16 +112,11 @@ struct ForInstr
     std::optional<std::string> sep;
     std::optional<std::string> followedBy;
     std::optional<std::string> precededBy;
-    bool isBlock;
-    int insertCol;
     std::string policy;
     std::optional<std::string> alignSpec;
-    int elementSlotCount;
-    int varSlotOffset;
-    int enumeratorSlotOffset;
     static std::string tpp_typedefs() noexcept
     {
-        return "/// For loop over a collection.\nstruct ForInstr\n{\n    varName : string;\n    enumeratorName : optional<string>;\n    collection : ExprInfo;\n    body : list<Instruction>;\n    sep : optional<string>;\n    followedBy : optional<string>;\n    precededBy : optional<string>;\n    isBlock : bool;\n    insertCol : int;\n    policy : string;\n    alignSpec : optional<string>;\n    elementSlotCount : int;\n    varSlotOffset : int;\n    enumeratorSlotOffset : int;\n}";
+        return "/// For loop over a collection.\nstruct ForInstr\n{\n    varName : string;\n    enumeratorName : optional<string>;\n    collection : ExprInfo;\n    body : list<Instruction>;\n    sep : optional<string>;\n    followedBy : optional<string>;\n    precededBy : optional<string>;\n    policy : string;\n    alignSpec : optional<string>;\n}";
     }
 };
 struct CaseBinding
@@ -123,11 +136,9 @@ struct CaseInstr
     bool payloadIsRecursive;
     std::unique_ptr<std::vector<Instruction>> body;
     int variantIndex;
-    int payloadSlotCount;
-    int bindingSlotOffset;
     static std::string tpp_typedefs() noexcept
     {
-        return "/// One case branch in a switch.\nstruct CaseInstr\n{\n    tag : string;\n    bindingName : optional<CaseBinding>;\n    payloadType : optional<TypeKind>;\n    payloadIsRecursive : bool;\n    body : list<Instruction>;\n    variantIndex : int;\n    payloadSlotCount : int;\n    bindingSlotOffset : int;\n}";
+        return "/// One case branch in a switch.\nstruct CaseInstr\n{\n    tag : string;\n    bindingName : optional<CaseBinding>;\n    payloadType : optional<TypeKind>;\n    payloadIsRecursive : bool;\n    body : list<Instruction>;\n    variantIndex : int;\n}";
     }
 };
 struct IfInstr
@@ -136,23 +147,19 @@ struct IfInstr
     bool negated;
     std::unique_ptr<std::vector<Instruction>> thenBody;
     std::unique_ptr<std::vector<Instruction>> elseBody;
-    bool isBlock;
-    int insertCol;
     static std::string tpp_typedefs() noexcept
     {
-        return "/// Conditional.\nstruct IfInstr\n{\n    condExpr : ExprInfo;\n    negated : bool;\n    thenBody : list<Instruction>;\n    elseBody : list<Instruction>;\n    isBlock : bool;\n    insertCol : int;\n}";
+        return "/// Conditional.\nstruct IfInstr\n{\n    condExpr : ExprInfo;\n    negated : bool;\n    thenBody : list<Instruction>;\n    elseBody : list<Instruction>;\n}";
     }
 };
 struct SwitchInstr
 {
     ExprInfo expr;
     std::unique_ptr<std::vector<CaseInstr>> cases;
-    bool isBlock;
-    int insertCol;
     std::string policy;
     static std::string tpp_typedefs() noexcept
     {
-        return "/// Switch on a variant expression.\nstruct SwitchInstr\n{\n    expr : ExprInfo;\n    cases : list<CaseInstr>;\n    isBlock : bool;\n    insertCol : int;\n    policy : string;\n}";
+        return "/// Switch on a variant expression.\nstruct SwitchInstr\n{\n    expr : ExprInfo;\n    cases : list<CaseInstr>;\n    policy : string;\n}";
     }
 };
 struct CallInstr
@@ -169,11 +176,9 @@ struct ParamDef
 {
     std::string name;
     std::unique_ptr<TypeKind> type;
-    int slotOffset;
-    int slotCount;
     static std::string tpp_typedefs() noexcept
     {
-        return "// ── Template function definition ────────────────────────────────────────────\n\nstruct ParamDef\n{\n    name : string;\n    type : TypeKind;\n    slotOffset : int;\n    slotCount : int;\n}";
+        return "// ── Template function definition ────────────────────────────────────────────\n\nstruct ParamDef\n{\n    name : string;\n    type : TypeKind;\n}";
     }
 };
 struct FunctionDef
@@ -184,10 +189,9 @@ struct FunctionDef
     std::string policy;
     std::string doc;
     std::optional<SourceRange> sourceRange;
-    int frameSlotCount;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct FunctionDef\n{\n    name : string;\n    params : list<ParamDef>;\n    body : list<Instruction>;\n    policy : string;\n    doc : string;\n    sourceRange : optional<SourceRange>;\n    frameSlotCount : int;\n}";
+        return "struct FunctionDef\n{\n    name : string;\n    params : list<ParamDef>;\n    body : list<Instruction>;\n    policy : string;\n    doc : string;\n    sourceRange : optional<SourceRange>;\n}";
     }
 };
 struct FieldDef
@@ -197,11 +201,9 @@ struct FieldDef
     bool recursive;
     std::string doc;
     std::optional<SourceRange> sourceRange;
-    int slotOffset;
-    int slotSize;
     static std::string tpp_typedefs() noexcept
     {
-        return "// ── Schema types (for type generation) ──────────────────────────────────────\n\nstruct FieldDef\n{\n    name : string;\n    type : TypeKind;\n    recursive : bool;\n    doc : string;\n    sourceRange : optional<SourceRange>;\n    slotOffset : int;\n    slotSize : int;\n}";
+        return "// ── Schema types (for type generation) ──────────────────────────────────────\n\nstruct FieldDef\n{\n    name : string;\n    type : TypeKind;\n    recursive : bool;\n    doc : string;\n    sourceRange : optional<SourceRange>;\n}";
     }
 };
 struct StructDef
@@ -211,10 +213,9 @@ struct StructDef
     std::string doc;
     std::optional<SourceRange> sourceRange;
     std::string rawTypedefs;
-    int slotCount;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct StructDef\n{\n    name : string;\n    fields : list<FieldDef>;\n    doc : string;\n    sourceRange : optional<SourceRange>;\n    rawTypedefs : string;\n    slotCount : int;\n}";
+        return "struct StructDef\n{\n    name : string;\n    fields : list<FieldDef>;\n    doc : string;\n    sourceRange : optional<SourceRange>;\n    rawTypedefs : string;\n}";
     }
 };
 struct VariantDef
@@ -224,10 +225,9 @@ struct VariantDef
     bool recursive;
     std::string doc;
     std::optional<SourceRange> sourceRange;
-    int payloadSlotSize;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct VariantDef\n{\n    tag : string;\n    payload : optional<TypeKind>;\n    recursive : bool;\n    doc : string;\n    sourceRange : optional<SourceRange>;\n    payloadSlotSize : int;\n}";
+        return "struct VariantDef\n{\n    tag : string;\n    payload : optional<TypeKind>;\n    recursive : bool;\n    doc : string;\n    sourceRange : optional<SourceRange>;\n}";
     }
 };
 struct EnumDef
@@ -237,10 +237,9 @@ struct EnumDef
     std::string doc;
     std::optional<SourceRange> sourceRange;
     std::string rawTypedefs;
-    int slotCount;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct EnumDef\n{\n    name : string;\n    variants : list<VariantDef>;\n    doc : string;\n    sourceRange : optional<SourceRange>;\n    rawTypedefs : string;\n    slotCount : int;\n}";
+        return "struct EnumDef\n{\n    name : string;\n    variants : list<VariantDef>;\n    doc : string;\n    sourceRange : optional<SourceRange>;\n    rawTypedefs : string;\n}";
     }
 };
 struct PolicyReplacement
@@ -343,13 +342,18 @@ struct Instruction_AlignCell
     friend void to_json(nlohmann::json& j, const Instruction_AlignCell&) { j = nlohmann::json::object(); }
     friend void from_json(const nlohmann::json&, Instruction_AlignCell&) {}
 };
+struct Instruction_PopIndent
+{
+    friend void to_json(nlohmann::json& j, const Instruction_PopIndent&) { j = nlohmann::json::object(); }
+    friend void from_json(const nlohmann::json&, Instruction_PopIndent&) {}
+};
 struct Instruction
 {
-    using Value = std::variant<EmitInstr, EmitExprInstr, Instruction_AlignCell, std::unique_ptr<ForInstr>, std::unique_ptr<IfInstr>, std::unique_ptr<SwitchInstr>, CallInstr>;
+    using Value = std::variant<EmitInstr, EmitExprInstr, Instruction_AlignCell, std::unique_ptr<ForInstr>, std::unique_ptr<IfInstr>, std::unique_ptr<SwitchInstr>, CallInstr, PushIndentInstr, Instruction_PopIndent>;
     Value value;
     static std::string tpp_typedefs() noexcept
     {
-        return "enum Instruction\n{\n    Emit(EmitInstr),\n    EmitExpr(EmitExprInstr),\n    AlignCell,\n    For(ForInstr),\n    If(IfInstr),\n    Switch(SwitchInstr),\n    Call(CallInstr)\n}";
+        return "enum Instruction\n{\n    Emit(EmitInstr),\n    EmitExpr(EmitExprInstr),\n    AlignCell,\n    For(ForInstr),\n    If(IfInstr),\n    Switch(SwitchInstr),\n    Call(CallInstr),\n    PushIndent(PushIndentInstr),\n    PopIndent\n}";
     }
 };
 
@@ -361,12 +365,16 @@ inline void from_json(const nlohmann::json& j, SourcePosition& v);
 inline void to_json(nlohmann::json& j, const SourcePosition& v);
 inline void from_json(const nlohmann::json& j, SourceRange& v);
 inline void to_json(nlohmann::json& j, const SourceRange& v);
+inline void from_json(const nlohmann::json& j, ExprPathSegment& v);
+inline void to_json(nlohmann::json& j, const ExprPathSegment& v);
 inline void from_json(const nlohmann::json& j, ExprInfo& v);
 inline void to_json(nlohmann::json& j, const ExprInfo& v);
 inline void from_json(const nlohmann::json& j, EmitInstr& v);
 inline void to_json(nlohmann::json& j, const EmitInstr& v);
 inline void from_json(const nlohmann::json& j, EmitExprInstr& v);
 inline void to_json(nlohmann::json& j, const EmitExprInstr& v);
+inline void from_json(const nlohmann::json& j, PushIndentInstr& v);
+inline void to_json(nlohmann::json& j, const PushIndentInstr& v);
 inline void from_json(const nlohmann::json& j, ForInstr& v);
 inline void to_json(nlohmann::json& j, const ForInstr& v);
 inline void from_json(const nlohmann::json& j, CaseBinding& v);
@@ -432,10 +440,12 @@ inline void from_json(const nlohmann::json& j, Instruction& v)
     else     if (j.contains("If")) v.value.emplace<4>(std::make_unique<IfInstr>(j["If"].get<IfInstr>()));
     else     if (j.contains("Switch")) v.value.emplace<5>(std::make_unique<SwitchInstr>(j["Switch"].get<SwitchInstr>()));
     else     if (j.contains("Call")) v.value.emplace<6>(j["Call"].get<CallInstr>());
+    else     if (j.contains("PushIndent")) v.value.emplace<7>(j["PushIndent"].get<PushIndentInstr>());
+    else     if (j.contains("PopIndent")) v.value.emplace<8>();
 }
 inline void to_json(nlohmann::json& j, const Instruction& v)
 {
-    const char* _tags[] = {"Emit", "EmitExpr", "AlignCell", "For", "If", "Switch", "Call"};
+    const char* _tags[] = {"Emit", "EmitExpr", "AlignCell", "For", "If", "Switch", "Call", "PushIndent", "PopIndent"};
     std::visit([&](const auto& arg) {
         j = nlohmann::json::object();
         j[_tags[v.value.index()]] = _tpp_j(arg);
@@ -463,22 +473,31 @@ inline void to_json(nlohmann::json& j, const SourceRange& v)
     j["start"] = v.start;
     j["end"] = v.end;
 }
+inline void from_json(const nlohmann::json& j, ExprPathSegment& v)
+{
+    v.field = j.at("field").get<std::string>();
+}
+inline void to_json(nlohmann::json& j, const ExprPathSegment& v)
+{
+    j = nlohmann::json{};
+    j["field"] = v.field;
+}
 inline void from_json(const nlohmann::json& j, ExprInfo& v)
 {
-    v.path = j.at("path").get<std::string>();
+    v.bindingName = j.at("bindingName").get<std::string>();
+    v.segments = j.at("segments").get<std::vector<ExprPathSegment>>();
     v.type = std::make_unique<TypeKind>(j.at("type").get<TypeKind>());
     v.isRecursive = j.at("isRecursive").get<bool>();
     v.isOptional = j.at("isOptional").get<bool>();
-    v.slotOffset = j.at("slotOffset").get<int>();
 }
 inline void to_json(nlohmann::json& j, const ExprInfo& v)
 {
     j = nlohmann::json{};
-    j["path"] = v.path;
+    j["bindingName"] = v.bindingName;
+    j["segments"] = v.segments;
     j["type"] = *v.type;
     j["isRecursive"] = v.isRecursive;
     j["isOptional"] = v.isOptional;
-    j["slotOffset"] = v.slotOffset;
 }
 inline void from_json(const nlohmann::json& j, EmitInstr& v)
 {
@@ -500,6 +519,15 @@ inline void to_json(nlohmann::json& j, const EmitExprInstr& v)
     j["expr"] = v.expr;
     j["policy"] = v.policy;
 }
+inline void from_json(const nlohmann::json& j, PushIndentInstr& v)
+{
+    v.amount = j.at("amount").get<int>();
+}
+inline void to_json(nlohmann::json& j, const PushIndentInstr& v)
+{
+    j = nlohmann::json{};
+    j["amount"] = v.amount;
+}
 inline void from_json(const nlohmann::json& j, ForInstr& v)
 {
     v.varName = j.at("varName").get<std::string>();
@@ -509,13 +537,8 @@ inline void from_json(const nlohmann::json& j, ForInstr& v)
     if (j.contains("sep") && !j.at("sep").is_null()) v.sep = j.at("sep").get<std::string>();
     if (j.contains("followedBy") && !j.at("followedBy").is_null()) v.followedBy = j.at("followedBy").get<std::string>();
     if (j.contains("precededBy") && !j.at("precededBy").is_null()) v.precededBy = j.at("precededBy").get<std::string>();
-    v.isBlock = j.at("isBlock").get<bool>();
-    v.insertCol = j.at("insertCol").get<int>();
     v.policy = j.at("policy").get<std::string>();
     if (j.contains("alignSpec") && !j.at("alignSpec").is_null()) v.alignSpec = j.at("alignSpec").get<std::string>();
-    v.elementSlotCount = j.at("elementSlotCount").get<int>();
-    v.varSlotOffset = j.at("varSlotOffset").get<int>();
-    v.enumeratorSlotOffset = j.at("enumeratorSlotOffset").get<int>();
 }
 inline void to_json(nlohmann::json& j, const ForInstr& v)
 {
@@ -527,13 +550,8 @@ inline void to_json(nlohmann::json& j, const ForInstr& v)
     if (v.sep.has_value()) j["sep"] = *v.sep;
     if (v.followedBy.has_value()) j["followedBy"] = *v.followedBy;
     if (v.precededBy.has_value()) j["precededBy"] = *v.precededBy;
-    j["isBlock"] = v.isBlock;
-    j["insertCol"] = v.insertCol;
     j["policy"] = v.policy;
     if (v.alignSpec.has_value()) j["alignSpec"] = *v.alignSpec;
-    j["elementSlotCount"] = v.elementSlotCount;
-    j["varSlotOffset"] = v.varSlotOffset;
-    j["enumeratorSlotOffset"] = v.enumeratorSlotOffset;
 }
 inline void from_json(const nlohmann::json& j, CaseBinding& v)
 {
@@ -554,8 +572,6 @@ inline void from_json(const nlohmann::json& j, CaseInstr& v)
     v.payloadIsRecursive = j.at("payloadIsRecursive").get<bool>();
     v.body = std::make_unique<std::vector<Instruction>>(j.at("body").get<std::vector<Instruction>>());
     v.variantIndex = j.at("variantIndex").get<int>();
-    v.payloadSlotCount = j.at("payloadSlotCount").get<int>();
-    v.bindingSlotOffset = j.at("bindingSlotOffset").get<int>();
 }
 inline void to_json(nlohmann::json& j, const CaseInstr& v)
 {
@@ -566,8 +582,6 @@ inline void to_json(nlohmann::json& j, const CaseInstr& v)
     j["payloadIsRecursive"] = v.payloadIsRecursive;
     j["body"] = *v.body;
     j["variantIndex"] = v.variantIndex;
-    j["payloadSlotCount"] = v.payloadSlotCount;
-    j["bindingSlotOffset"] = v.bindingSlotOffset;
 }
 inline void from_json(const nlohmann::json& j, IfInstr& v)
 {
@@ -575,8 +589,6 @@ inline void from_json(const nlohmann::json& j, IfInstr& v)
     v.negated = j.at("negated").get<bool>();
     v.thenBody = std::make_unique<std::vector<Instruction>>(j.at("thenBody").get<std::vector<Instruction>>());
     v.elseBody = std::make_unique<std::vector<Instruction>>(j.at("elseBody").get<std::vector<Instruction>>());
-    v.isBlock = j.at("isBlock").get<bool>();
-    v.insertCol = j.at("insertCol").get<int>();
 }
 inline void to_json(nlohmann::json& j, const IfInstr& v)
 {
@@ -585,15 +597,11 @@ inline void to_json(nlohmann::json& j, const IfInstr& v)
     j["negated"] = v.negated;
     j["thenBody"] = *v.thenBody;
     j["elseBody"] = *v.elseBody;
-    j["isBlock"] = v.isBlock;
-    j["insertCol"] = v.insertCol;
 }
 inline void from_json(const nlohmann::json& j, SwitchInstr& v)
 {
     v.expr = j.at("expr").get<ExprInfo>();
     v.cases = std::make_unique<std::vector<CaseInstr>>(j.at("cases").get<std::vector<CaseInstr>>());
-    v.isBlock = j.at("isBlock").get<bool>();
-    v.insertCol = j.at("insertCol").get<int>();
     v.policy = j.at("policy").get<std::string>();
 }
 inline void to_json(nlohmann::json& j, const SwitchInstr& v)
@@ -601,8 +609,6 @@ inline void to_json(nlohmann::json& j, const SwitchInstr& v)
     j = nlohmann::json{};
     j["expr"] = v.expr;
     j["cases"] = *v.cases;
-    j["isBlock"] = v.isBlock;
-    j["insertCol"] = v.insertCol;
     j["policy"] = v.policy;
 }
 inline void from_json(const nlohmann::json& j, CallInstr& v)
@@ -622,16 +628,12 @@ inline void from_json(const nlohmann::json& j, ParamDef& v)
 {
     v.name = j.at("name").get<std::string>();
     v.type = std::make_unique<TypeKind>(j.at("type").get<TypeKind>());
-    v.slotOffset = j.at("slotOffset").get<int>();
-    v.slotCount = j.at("slotCount").get<int>();
 }
 inline void to_json(nlohmann::json& j, const ParamDef& v)
 {
     j = nlohmann::json{};
     j["name"] = v.name;
     j["type"] = *v.type;
-    j["slotOffset"] = v.slotOffset;
-    j["slotCount"] = v.slotCount;
 }
 inline void from_json(const nlohmann::json& j, FunctionDef& v)
 {
@@ -641,7 +643,6 @@ inline void from_json(const nlohmann::json& j, FunctionDef& v)
     v.policy = j.at("policy").get<std::string>();
     v.doc = j.at("doc").get<std::string>();
     if (j.contains("sourceRange") && !j.at("sourceRange").is_null()) v.sourceRange = j.at("sourceRange").get<SourceRange>();
-    v.frameSlotCount = j.at("frameSlotCount").get<int>();
 }
 inline void to_json(nlohmann::json& j, const FunctionDef& v)
 {
@@ -652,7 +653,6 @@ inline void to_json(nlohmann::json& j, const FunctionDef& v)
     j["policy"] = v.policy;
     j["doc"] = v.doc;
     if (v.sourceRange.has_value()) j["sourceRange"] = *v.sourceRange;
-    j["frameSlotCount"] = v.frameSlotCount;
 }
 inline void from_json(const nlohmann::json& j, FieldDef& v)
 {
@@ -661,8 +661,6 @@ inline void from_json(const nlohmann::json& j, FieldDef& v)
     v.recursive = j.at("recursive").get<bool>();
     v.doc = j.at("doc").get<std::string>();
     if (j.contains("sourceRange") && !j.at("sourceRange").is_null()) v.sourceRange = j.at("sourceRange").get<SourceRange>();
-    v.slotOffset = j.at("slotOffset").get<int>();
-    v.slotSize = j.at("slotSize").get<int>();
 }
 inline void to_json(nlohmann::json& j, const FieldDef& v)
 {
@@ -672,8 +670,6 @@ inline void to_json(nlohmann::json& j, const FieldDef& v)
     j["recursive"] = v.recursive;
     j["doc"] = v.doc;
     if (v.sourceRange.has_value()) j["sourceRange"] = *v.sourceRange;
-    j["slotOffset"] = v.slotOffset;
-    j["slotSize"] = v.slotSize;
 }
 inline void from_json(const nlohmann::json& j, StructDef& v)
 {
@@ -682,7 +678,6 @@ inline void from_json(const nlohmann::json& j, StructDef& v)
     v.doc = j.at("doc").get<std::string>();
     if (j.contains("sourceRange") && !j.at("sourceRange").is_null()) v.sourceRange = j.at("sourceRange").get<SourceRange>();
     v.rawTypedefs = j.at("rawTypedefs").get<std::string>();
-    v.slotCount = j.at("slotCount").get<int>();
 }
 inline void to_json(nlohmann::json& j, const StructDef& v)
 {
@@ -692,7 +687,6 @@ inline void to_json(nlohmann::json& j, const StructDef& v)
     j["doc"] = v.doc;
     if (v.sourceRange.has_value()) j["sourceRange"] = *v.sourceRange;
     j["rawTypedefs"] = v.rawTypedefs;
-    j["slotCount"] = v.slotCount;
 }
 inline void from_json(const nlohmann::json& j, VariantDef& v)
 {
@@ -701,7 +695,6 @@ inline void from_json(const nlohmann::json& j, VariantDef& v)
     v.recursive = j.at("recursive").get<bool>();
     v.doc = j.at("doc").get<std::string>();
     if (j.contains("sourceRange") && !j.at("sourceRange").is_null()) v.sourceRange = j.at("sourceRange").get<SourceRange>();
-    v.payloadSlotSize = j.at("payloadSlotSize").get<int>();
 }
 inline void to_json(nlohmann::json& j, const VariantDef& v)
 {
@@ -711,7 +704,6 @@ inline void to_json(nlohmann::json& j, const VariantDef& v)
     j["recursive"] = v.recursive;
     j["doc"] = v.doc;
     if (v.sourceRange.has_value()) j["sourceRange"] = *v.sourceRange;
-    j["payloadSlotSize"] = v.payloadSlotSize;
 }
 inline void from_json(const nlohmann::json& j, EnumDef& v)
 {
@@ -720,7 +712,6 @@ inline void from_json(const nlohmann::json& j, EnumDef& v)
     v.doc = j.at("doc").get<std::string>();
     if (j.contains("sourceRange") && !j.at("sourceRange").is_null()) v.sourceRange = j.at("sourceRange").get<SourceRange>();
     v.rawTypedefs = j.at("rawTypedefs").get<std::string>();
-    v.slotCount = j.at("slotCount").get<int>();
 }
 inline void to_json(nlohmann::json& j, const EnumDef& v)
 {
@@ -730,7 +721,6 @@ inline void to_json(nlohmann::json& j, const EnumDef& v)
     j["doc"] = v.doc;
     if (v.sourceRange.has_value()) j["sourceRange"] = *v.sourceRange;
     j["rawTypedefs"] = v.rawTypedefs;
-    j["slotCount"] = v.slotCount;
 }
 inline void from_json(const nlohmann::json& j, PolicyReplacement& v)
 {

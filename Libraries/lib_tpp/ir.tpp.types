@@ -35,14 +35,20 @@ enum TypeKind
 
 // ── Instruction types (backend-neutral) ─────────────────────────────────────
 
+/// One named field access in an expression path.
+struct ExprPathSegment
+{
+    field : string;
+}
+
 /// Expression with resolved type.
 struct ExprInfo
 {
-    path : string;
+    bindingName : string;
+    segments : list<ExprPathSegment>;
     type : TypeKind;
     isRecursive : bool;
     isOptional : bool;
-    slotOffset : int;
 }
 
 /// Emit literal text.
@@ -58,6 +64,12 @@ struct EmitExprInstr
     policy : string;
 }
 
+/// Start a block-indented output scope.
+struct PushIndentInstr
+{
+    amount : int;
+}
+
 /// For loop over a collection.
 struct ForInstr
 {
@@ -68,13 +80,8 @@ struct ForInstr
     sep : optional<string>;
     followedBy : optional<string>;
     precededBy : optional<string>;
-    isBlock : bool;
-    insertCol : int;
     policy : string;
     alignSpec : optional<string>;
-    elementSlotCount : int;
-    varSlotOffset : int;
-    enumeratorSlotOffset : int;
 }
 
 struct CaseBinding
@@ -92,8 +99,6 @@ struct CaseInstr
     payloadIsRecursive : bool;
     body : list<Instruction>;
     variantIndex : int;
-    payloadSlotCount : int;
-    bindingSlotOffset : int;
 }
 
 /// Conditional.
@@ -103,8 +108,6 @@ struct IfInstr
     negated : bool;
     thenBody : list<Instruction>;
     elseBody : list<Instruction>;
-    isBlock : bool;
-    insertCol : int;
 }
 
 /// Switch on a variant expression.
@@ -112,8 +115,6 @@ struct SwitchInstr
 {
     expr : ExprInfo;
     cases : list<CaseInstr>;
-    isBlock : bool;
-    insertCol : int;
     policy : string;
 }
 
@@ -133,7 +134,9 @@ enum Instruction
     For(ForInstr),
     If(IfInstr),
     Switch(SwitchInstr),
-    Call(CallInstr)
+    Call(CallInstr),
+    PushIndent(PushIndentInstr),
+    PopIndent
 }
 
 // ── Template function definition ────────────────────────────────────────────
@@ -142,8 +145,6 @@ struct ParamDef
 {
     name : string;
     type : TypeKind;
-    slotOffset : int;
-    slotCount : int;
 }
 
 struct FunctionDef
@@ -154,7 +155,6 @@ struct FunctionDef
     policy : string;
     doc : string;
     sourceRange : optional<SourceRange>;
-    frameSlotCount : int;
 }
 
 // ── Schema types (for type generation) ──────────────────────────────────────
@@ -166,8 +166,6 @@ struct FieldDef
     recursive : bool;
     doc : string;
     sourceRange : optional<SourceRange>;
-    slotOffset : int;
-    slotSize : int;
 }
 
 struct StructDef
@@ -177,7 +175,6 @@ struct StructDef
     doc : string;
     sourceRange : optional<SourceRange>;
     rawTypedefs : string;
-    slotCount : int;
 }
 
 struct VariantDef
@@ -187,7 +184,6 @@ struct VariantDef
     recursive : bool;
     doc : string;
     sourceRange : optional<SourceRange>;
-    payloadSlotSize : int;
 }
 
 struct EnumDef
@@ -197,7 +193,6 @@ struct EnumDef
     doc : string;
     sourceRange : optional<SourceRange>;
     rawTypedefs : string;
-    slotCount : int;
 }
 
 // ── Policy definitions ──────────────────────────────────────────────────────

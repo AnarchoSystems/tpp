@@ -17,11 +17,9 @@ namespace tpp
     // ════════════════════════════════════════════════════════════════════════════
     // Dynamic-mode entry points (used by render-tpp, tests, LSP preview)
     //
-    // The Runner interprets IR instructions (control flow, variable binding)
-    // and delegates output to the VirtualMachine (scalar emission, policies,
-    // alignment).  Each function gets a pre-allocated slot array; the Runner
-    // indexes directly by function index — no frame stack, no heap alloc
-    // during execution.
+    // The renderer interprets backend-neutral IR directly against JSON input
+    // and delegates output formatting, policies, indentation, and alignment to
+    // Writer.
     // ════════════════════════════════════════════════════════════════════════════
 
     [[nodiscard]] bool get_function(const IR &ir, const std::string &name,

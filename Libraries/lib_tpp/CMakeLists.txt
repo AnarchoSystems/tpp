@@ -9,9 +9,6 @@ add_library(lib_tpp
     src/PublicIRConverter.cc
     src/IRAssembler.cc
     src/Tooling.cc
-    src/Layout.cc
-    src/DataLoader.cc
-    src/VM.cc
 )
 
 target_link_libraries(lib_tpp PUBLIC ${TPP_NLOHMANN_JSON_TARGET})

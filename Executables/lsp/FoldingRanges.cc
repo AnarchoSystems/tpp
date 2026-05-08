@@ -7,6 +7,7 @@ namespace tpp
 // ── Compiler type aliases ─────────────────────────────────────────────────────
 using ASTNode          = compiler::ASTNode;
 using CommentNode      = compiler::CommentNode;
+using IndentNode       = compiler::IndentNode;
 using ForNode          = compiler::ForNode;
 using IfNode           = compiler::IfNode;
 using SwitchNode       = compiler::SwitchNode;
@@ -29,6 +30,10 @@ static void collectFoldNode(std::vector<nlohmann::json> &out, const ASTNode &nod
             if (arg.endRange.start.line > arg.startRange.start.line)
                 out.push_back(makeRange(arg.startRange.start.line,
                                         arg.endRange.start.line, "comment"));
+        }
+        else if constexpr (std::is_same_v<T, std::shared_ptr<IndentNode>>)
+        {
+            collectFolds(out, arg->body);
         }
         else if constexpr (std::is_same_v<T, std::shared_ptr<ForNode>>)
         {

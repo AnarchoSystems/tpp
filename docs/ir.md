@@ -233,8 +233,6 @@ Loop over each element of a collection expression.
 | `sep` | string, optional | Separator text emitted between iterations |
 | `followedBy` | string, optional | Text emitted after the last iteration if the collection is non-empty |
 | `precededBy` | string, optional | Text emitted before the first iteration if the collection is non-empty |
-| `isBlock` | bool | Whether the for loop was on a block line (affects whitespace handling) |
-| `insertCol` | int | Column position where block content is inserted (for indentation) |
 | `policy` | string | Policy tag for this scope |
 | `alignSpec` | string, optional | Alignment specification string (e.g. `"llr"` for left/left/right); present when alignment is active |
 
@@ -250,8 +248,6 @@ Conditional emission.
 | `negated` | bool | Whether the condition is negated (`@if not …@`) |
 | `thenBody` | array of Instruction | Body when condition is true |
 | `elseBody` | array of Instruction | Body when condition is false (empty if no else branch) |
-| `isBlock` | bool | Whether the if was on a block line |
-| `insertCol` | int | Column position for block content insertion |
 
 ### SwitchInstr
 
@@ -261,8 +257,6 @@ Pattern match on a variant (enum) expression.
 |---|---|---|
 | `expr` | [ExprInfo](#exprinfo) | The expression to match |
 | `cases` | array of [CaseInstr](#caseinstr) | Exhaustive case branches in enum declaration order |
-| `isBlock` | bool | Whether the switch was on a block line |
-| `insertCol` | int | Column position for block content insertion |
 | `policy` | string | Policy tag for this scope |
 
 The public IR does not carry a separate default branch. If the source switch contains a default, the compiler eagerly synthesizes per-variant cases using that body for any missing tags. If the source switch omits both an explicit case and a default for a tag, the compiler emits an empty body for that synthesized case.
@@ -377,12 +371,13 @@ Source locations are optional metadata. Consumers that do not need editor featur
 
 ## Whitespace Semantics
 
-Several instructions carry `isBlock` and `insertCol` fields. These encode whitespace decisions made by the compiler:
+Block indentation is encoded structurally rather than via dedicated flags on `ForInstr`, `IfInstr`, or `SwitchInstr`.
 
-- **`isBlock`**: The directive appeared on a line containing only structural directives (plus whitespace). Block lines are consumed without emitting their surrounding whitespace — the directive's body replaces the entire line.
-- **`insertCol`**: When `isBlock` is true, this records the column at which the directive started. Body content is re-indented to this column: the first non-empty line's leading whitespace becomes the "zero marker", and all body lines are de-indented by that amount, then re-indented to `insertCol`.
+- When a control-flow body came from a block line, the compiler wraps the body in `PushIndent` and `PopIndent` instructions.
+- `PushIndent.amount` records the indentation column to apply when rendering the enclosed body.
+- Inline directives simply omit that wrapper, so consumers can distinguish inline and block behavior from the instruction stream itself.
 
-Inline directives (`isBlock = false`) emit their content in-place without any indentation adjustment.
+The renderer uses the same rule as the static backends: a body that begins with `PushIndent` and ends with `PopIndent` is treated as block-indented, and the enclosed text is re-indented relative to the recorded indentation column.
 
 ---
 

@@ -31,6 +31,7 @@ using FunctionCallNode  = compiler::FunctionCallNode;
 using AlignmentCellNode = compiler::AlignmentCellNode;
 using CommentNode       = compiler::CommentNode;
 using InterpolationNode = compiler::InterpolationNode;
+using IndentNode        = compiler::IndentNode;
 using ForNode           = compiler::ForNode;
 using IfNode            = compiler::IfNode;
 using SwitchNode        = compiler::SwitchNode;
@@ -202,6 +203,20 @@ static std::string exprToText(const Expression &e)
 // ── Walk AST nodes recursively ────────────────────────────────────────────────
 static void walkNodes(std::vector<RawToken> &out, const std::vector<ASTNode> &nodes);
 
+static std::string syntheticRenderCaseFunctionName(const std::vector<ASTNode> &body)
+{
+    if (body.empty())
+        return {};
+
+    if (const auto *fn = std::get_if<std::shared_ptr<FunctionCallNode>>(&body.front()))
+        return (fn && *fn) ? (*fn)->functionName : std::string{};
+
+    if (const auto *indentNode = std::get_if<std::shared_ptr<IndentNode>>(&body.front()))
+        return (indentNode && *indentNode) ? syntheticRenderCaseFunctionName((*indentNode)->body) : std::string{};
+
+    return {};
+}
+
 // ── Emit sub-tokens for @case Tag[(binding)]@  ───────────────────────────────
 static void emitCaseDirective(std::vector<RawToken> &out, const CaseNode &c)
 {
@@ -256,10 +271,7 @@ static void emitSyntheticRenderCase(std::vector<RawToken> &out, const CaseNode &
     const int viaStart = start + 8 + (int)c.tag.size();
     out.push_back({ln, viaStart, 5, TT_KEYWORD, 0}); // " via "
 
-    std::string funcName;
-    if (!c.body.empty())
-        if (auto *fn = std::get_if<std::shared_ptr<FunctionCallNode>>(&c.body[0]))
-            if (*fn) funcName = (*fn)->functionName;
+    const std::string funcName = syntheticRenderCaseFunctionName(c.body);
 
     if (!funcName.empty())
         out.push_back({ln, viaStart + 5, (int)funcName.size(), TT_FUNCTION, 0});
@@ -284,6 +296,10 @@ static void walkNode(std::vector<RawToken> &out, const ASTNode &node)
             // Highlight every line of the block (opening, body, closing) as a comment
             for (int ln = arg.startRange.start.line; ln <= arg.endRange.end.line; ++ln)
                 out.push_back({ln, 0, 9999, TT_COMMENT, 0});
+        }
+        else if constexpr (std::is_same_v<T, std::shared_ptr<IndentNode>>)
+        {
+            walkNodes(out, arg->body);
         }
         else if constexpr (std::is_same_v<T, InterpolationNode>)
         {

@@ -1,7 +1,6 @@
 #include <tpp/Compiler.h>
 
 #include <tpp/IRAssembler.h>
-#include <tpp/Layout.h>
 #include <tpp/Lowering.h>
 
 #include "tpp/PublicIRConverter.h"
@@ -737,10 +736,8 @@ bool compile(const ParsedProject &project,
                              std::move(functions),
                              std::move(policies),
                              options.includeSourceRanges);
-
-        compute_ir_layouts(output);
-        compute_instruction_slots(output);
     }
+
     catch (const std::exception &error)
     {
         add_project_diagnostic(diagnostics,

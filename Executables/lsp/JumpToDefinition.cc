@@ -18,6 +18,7 @@ using FieldAccess      = compiler::FieldAccess;
 using ASTNode          = compiler::ASTNode;
 using InterpolationNode = compiler::InterpolationNode;
 using FunctionCallNode  = compiler::FunctionCallNode;
+using IndentNode        = compiler::IndentNode;
 using ForNode           = compiler::ForNode;
 using IfNode            = compiler::IfNode;
 using SwitchNode        = compiler::SwitchNode;
@@ -366,6 +367,10 @@ static nlohmann::json walkNode(const ASTNode &node,
                     }
                 }
             }
+        }
+        else if constexpr (std::is_same_v<T, std::shared_ptr<IndentNode>>)
+        {
+            return walkNodes(arg->body, line, character, scope, model, project, uri);
         }
         else if constexpr (std::is_same_v<T, std::shared_ptr<ForNode>>)
         {

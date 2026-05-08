@@ -105,8 +105,7 @@ struct ForData
     std::optional<std::string> sepLit;
     std::optional<std::string> followedByLit;
     std::optional<std::string> precededByLit;
-    bool isBlock;
-    int insertCol;
+    std::optional<int> blockIndent;
     std::string sb;
     std::optional<std::string> alignSpec;
     std::unique_ptr<std::vector<AlignCellInfo>> cells;
@@ -115,7 +114,7 @@ struct ForData
     bool singleAlignChar;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct ForData\n{\n    scopeId : int;\n    collPath : string;\n    collIsRecursive : bool;\n    collIsOptional : bool;\n    elemType : RenderTypeKind;\n    varName : string;\n    enumeratorName : optional<string>;\n    body : optional<list<RenderInstruction>>;\n    sepLit : optional<string>;\n    followedByLit : optional<string>;\n    precededByLit : optional<string>;\n    isBlock : bool;\n    insertCol : int;\n    sb : string;\n    alignSpec : optional<string>;\n    cells : optional<list<AlignCellInfo>>;\n    numCols : int;\n    alignSpecChars : list<string>;\n    singleAlignChar : bool;\n}";
+        return "struct ForData\n{\n    scopeId : int;\n    collPath : string;\n    collIsRecursive : bool;\n    collIsOptional : bool;\n    elemType : RenderTypeKind;\n    varName : string;\n    enumeratorName : optional<string>;\n    body : optional<list<RenderInstruction>>;\n    sepLit : optional<string>;\n    followedByLit : optional<string>;\n    precededByLit : optional<string>;\n    blockIndent : optional<int>;\n    sb : string;\n    alignSpec : optional<string>;\n    cells : optional<list<AlignCellInfo>>;\n    numCols : int;\n    alignSpecChars : list<string>;\n    singleAlignChar : bool;\n}";
     }
 };
 struct CaseData
@@ -141,14 +140,13 @@ struct IfData
     bool isNegated;
     std::unique_ptr<std::vector<RenderInstruction>> thenBody;
     std::unique_ptr<std::vector<RenderInstruction>> elseBody;
-    bool isBlock;
-    int insertCol;
+    std::optional<int> blockIndent;
     std::string sb;
     int thenScopeId;
     int elseScopeId;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct IfData\n{\n    condPath : string;\n    condIsBool : bool;\n    isNegated : bool;\n    thenBody : list<RenderInstruction>;\n    elseBody : optional<list<RenderInstruction>>;\n    isBlock : bool;\n    insertCol : int;\n    sb : string;\n    thenScopeId : int;\n    elseScopeId : int;\n}";
+        return "struct IfData\n{\n    condPath : string;\n    condIsBool : bool;\n    isNegated : bool;\n    thenBody : list<RenderInstruction>;\n    elseBody : optional<list<RenderInstruction>>;\n    blockIndent : optional<int>;\n    sb : string;\n    thenScopeId : int;\n    elseScopeId : int;\n}";
     }
 };
 struct SwitchData
@@ -158,12 +156,11 @@ struct SwitchData
     bool exprIsOptional;
     std::string enumTypeName;
     std::unique_ptr<std::vector<CaseData>> cases;
-    bool isBlock;
-    int insertCol;
+    std::optional<int> blockIndent;
     std::string sb;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct SwitchData\n{\n    exprPath : string;\n    exprIsRecursive : bool;\n    exprIsOptional : bool;\n    enumTypeName : string;\n    cases : list<CaseData>;\n    isBlock : bool;\n    insertCol : int;\n    sb : string;\n}";
+        return "struct SwitchData\n{\n    exprPath : string;\n    exprIsRecursive : bool;\n    exprIsOptional : bool;\n    enumTypeName : string;\n    cases : list<CaseData>;\n    blockIndent : optional<int>;\n    sb : string;\n}";
     }
 };
 struct CallArgInfo
@@ -460,8 +457,7 @@ inline void from_json(const nlohmann::json& j, ForData& v)
     if (j.contains("sepLit") && !j.at("sepLit").is_null()) v.sepLit = j.at("sepLit").get<std::string>();
     if (j.contains("followedByLit") && !j.at("followedByLit").is_null()) v.followedByLit = j.at("followedByLit").get<std::string>();
     if (j.contains("precededByLit") && !j.at("precededByLit").is_null()) v.precededByLit = j.at("precededByLit").get<std::string>();
-    v.isBlock = j.at("isBlock").get<bool>();
-    v.insertCol = j.at("insertCol").get<int>();
+    if (j.contains("blockIndent") && !j.at("blockIndent").is_null()) v.blockIndent = j.at("blockIndent").get<int>();
     v.sb = j.at("sb").get<std::string>();
     if (j.contains("alignSpec") && !j.at("alignSpec").is_null()) v.alignSpec = j.at("alignSpec").get<std::string>();
     if (j.contains("cells") && !j.at("cells").is_null()) v.cells = std::make_unique<std::vector<AlignCellInfo>>(j.at("cells").get<std::vector<AlignCellInfo>>());
@@ -483,8 +479,7 @@ inline void to_json(nlohmann::json& j, const ForData& v)
     if (v.sepLit.has_value()) j["sepLit"] = *v.sepLit;
     if (v.followedByLit.has_value()) j["followedByLit"] = *v.followedByLit;
     if (v.precededByLit.has_value()) j["precededByLit"] = *v.precededByLit;
-    j["isBlock"] = v.isBlock;
-    j["insertCol"] = v.insertCol;
+    if (v.blockIndent.has_value()) j["blockIndent"] = *v.blockIndent;
     j["sb"] = v.sb;
     if (v.alignSpec.has_value()) j["alignSpec"] = *v.alignSpec;
     if (v.cells) j["cells"] = *v.cells;
@@ -524,8 +519,7 @@ inline void from_json(const nlohmann::json& j, IfData& v)
     v.isNegated = j.at("isNegated").get<bool>();
     v.thenBody = std::make_unique<std::vector<RenderInstruction>>(j.at("thenBody").get<std::vector<RenderInstruction>>());
     if (j.contains("elseBody") && !j.at("elseBody").is_null()) v.elseBody = std::make_unique<std::vector<RenderInstruction>>(j.at("elseBody").get<std::vector<RenderInstruction>>());
-    v.isBlock = j.at("isBlock").get<bool>();
-    v.insertCol = j.at("insertCol").get<int>();
+    if (j.contains("blockIndent") && !j.at("blockIndent").is_null()) v.blockIndent = j.at("blockIndent").get<int>();
     v.sb = j.at("sb").get<std::string>();
     v.thenScopeId = j.at("thenScopeId").get<int>();
     v.elseScopeId = j.at("elseScopeId").get<int>();
@@ -538,8 +532,7 @@ inline void to_json(nlohmann::json& j, const IfData& v)
     j["isNegated"] = v.isNegated;
     j["thenBody"] = *v.thenBody;
     if (v.elseBody) j["elseBody"] = *v.elseBody;
-    j["isBlock"] = v.isBlock;
-    j["insertCol"] = v.insertCol;
+    if (v.blockIndent.has_value()) j["blockIndent"] = *v.blockIndent;
     j["sb"] = v.sb;
     j["thenScopeId"] = v.thenScopeId;
     j["elseScopeId"] = v.elseScopeId;
@@ -551,8 +544,7 @@ inline void from_json(const nlohmann::json& j, SwitchData& v)
     v.exprIsOptional = j.at("exprIsOptional").get<bool>();
     v.enumTypeName = j.at("enumTypeName").get<std::string>();
     v.cases = std::make_unique<std::vector<CaseData>>(j.at("cases").get<std::vector<CaseData>>());
-    v.isBlock = j.at("isBlock").get<bool>();
-    v.insertCol = j.at("insertCol").get<int>();
+    if (j.contains("blockIndent") && !j.at("blockIndent").is_null()) v.blockIndent = j.at("blockIndent").get<int>();
     v.sb = j.at("sb").get<std::string>();
 }
 inline void to_json(nlohmann::json& j, const SwitchData& v)
@@ -563,8 +555,7 @@ inline void to_json(nlohmann::json& j, const SwitchData& v)
     j["exprIsOptional"] = v.exprIsOptional;
     j["enumTypeName"] = v.enumTypeName;
     j["cases"] = *v.cases;
-    j["isBlock"] = v.isBlock;
-    j["insertCol"] = v.insertCol;
+    if (v.blockIndent.has_value()) j["blockIndent"] = *v.blockIndent;
     j["sb"] = v.sb;
 }
 inline void from_json(const nlohmann::json& j, CallArgInfo& v)

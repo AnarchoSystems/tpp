@@ -105,8 +105,7 @@ add_executable(tpp_acceptance_test
     src/IRStabilityTest.cc
     src/LspClient.cc
     src/LspTest.cc
-    src/LayoutTest.cc
-    src/VMTest.cc
+    src/WriterTest.cc
 )
 
 target_link_libraries(tpp_acceptance_test PRIVATE ${TPP_GTEST_MAIN_TARGET} tpp_lsp_defs)
