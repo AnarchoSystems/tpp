@@ -6,7 +6,7 @@ template main(meta: list<Meta>)
 @for m in meta | sep="\n"@
 struct @m.name@
 {
-    @for field in m.fields | sep="\n"@
+    @for field in m.fields@
     @render_field(field.name, field.type)@
     @end for@
 }

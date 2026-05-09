@@ -64,10 +64,17 @@ struct EmitExprInstr
     policy : string;
 }
 
-/// Start a block-indented output scope.
-struct PushIndentInstr
+/// Begin capturing a block for deferred output.
+///
+/// When the matching `EmitCapturedBlock` instruction closes the scope, the
+/// runtime re-indents the captured block before emitting it. When present,
+/// `blockIndentInParentBlock` records the block's source-derived indentation
+/// baseline relative to the parent block. When absent, placement comes
+/// entirely from the live insertion column at the point where the block is
+/// emitted.
+struct BeginCapturedBlockInstr
 {
-    amount : int;
+    blockIndentInParentBlock : optional<int>;
 }
 
 /// For loop over a collection.
@@ -135,8 +142,8 @@ enum Instruction
     If(IfInstr),
     Switch(SwitchInstr),
     Call(CallInstr),
-    PushIndent(PushIndentInstr),
-    PopIndent
+    BeginCapturedBlock(BeginCapturedBlockInstr),
+    EmitCapturedBlock
 }
 
 // ── Template function definition ────────────────────────────────────────────

@@ -1,0 +1,4 @@
+{
+    "types": ["typedefs.tpp"],
+    "templates": ["template.tpp"]
+}

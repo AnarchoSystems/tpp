@@ -6,6 +6,26 @@ template cpp_ir_inner_type(t: TypeKind)
 @switch t@@case Optional(inner)@@cpp_ir_type(inner)@@end case@@case Str@std::string@end case@@case Int@int@end case@@case Bool@bool@end case@@case Named(n)@@n@@end case@@case List(e)@std::vector<@cpp_ir_type(e)@>@end case@@end switch@
 END
 
+template cpp_doc_struct_marker(name: string)
+__TPP_DOC__STRUCT__@name@__
+END
+
+template cpp_doc_enum_marker(name: string)
+__TPP_DOC__ENUM__@name@__
+END
+
+template cpp_doc_field_marker(structName: string, fieldName: string)
+__TPP_DOC__FIELD__@structName@__@fieldName@__
+END
+
+template cpp_doc_variant_marker(enumName: string, variantTag: string)
+__TPP_DOC__VARIANT__@enumName@__@variantTag@__
+END
+
+template cpp_doc_function_marker(index: int)
+__TPP_DOC__FUNCTION__@index@__
+END
+
 template cpp_struct_field_decl(field: FieldDef)
 @if field.recursive@
 std::unique_ptr<@cpp_ir_inner_type(field.type)@> @field.name@;
@@ -109,6 +129,7 @@ END
 template render_cpp_enum(e: EnumDef)
 @for variant in e.variants@
 @if not variant.payload@
+@cpp_doc_variant_marker(e.name, variant.tag)@
 struct @e.name@_@variant.tag@
 {
     friend void to_json(nlohmann::json& j, const @e.name@_@variant.tag@&) { j = nlohmann::json::object(); }
@@ -116,6 +137,7 @@ struct @e.name@_@variant.tag@
 };
 @end if@
 @end for@
+@cpp_doc_enum_marker(e.name)@
 struct @e.name@
 {
     using Value = std::variant<@for variant in e.variants | enumerator=variantIndex sep=", "@@if not variant.payload@@e.name@_@variant.tag@@else@@if variant.recursive@std::unique_ptr<@cpp_ir_type(variant.payload)@>@else@@cpp_ir_type(variant.payload)@@end if@@end if@@end for@>;
@@ -128,9 +150,11 @@ struct @e.name@
 END
 
 template render_cpp_struct(s: StructDef)
+@cpp_doc_struct_marker(s.name)@
 struct @s.name@
 {
     @for field in s.fields@
+    @cpp_doc_field_marker(s.name, field.name)@
     @cpp_struct_field_decl(field)@
     @end for@
     static std::string tpp_typedefs() noexcept

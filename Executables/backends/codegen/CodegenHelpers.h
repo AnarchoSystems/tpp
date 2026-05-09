@@ -229,29 +229,31 @@ inline tpp::TypeKind getElemType(const tpp::TypeKind &t)
     return cloneTypeKind(t);
 }
 
-struct BodyIndentInfo
+struct CapturedBlockInfo
 {
-    std::optional<int> indentAmount;
+    bool wrapped = false;
+    std::optional<int> blockIndentInParentBlock;
     size_t firstIndex = 0;
     size_t pastLastIndex = 0;
 };
 
-inline bool isIndentInstruction(const tpp::Instruction &instr)
+inline bool isCapturedBlockInstruction(const tpp::Instruction &instr)
 {
-    return std::holds_alternative<tpp::PushIndentInstr>(instr.value) ||
-           std::holds_alternative<tpp::Instruction_PopIndent>(instr.value);
+    return std::holds_alternative<tpp::BeginCapturedBlockInstr>(instr.value) ||
+           std::holds_alternative<tpp::Instruction_EmitCapturedBlock>(instr.value);
 }
 
-inline BodyIndentInfo analyzeIndentedBody(const std::vector<tpp::Instruction> &body)
+inline CapturedBlockInfo analyzeCapturedBlock(const std::vector<tpp::Instruction> &body)
 {
-    BodyIndentInfo info;
+    CapturedBlockInfo info;
     info.pastLastIndex = body.size();
 
     if (body.size() >= 2 &&
-        std::holds_alternative<tpp::PushIndentInstr>(body.front().value) &&
-        std::holds_alternative<tpp::Instruction_PopIndent>(body.back().value))
+        std::holds_alternative<tpp::BeginCapturedBlockInstr>(body.front().value) &&
+        std::holds_alternative<tpp::Instruction_EmitCapturedBlock>(body.back().value))
     {
-        info.indentAmount = std::get<tpp::PushIndentInstr>(body.front().value).amount;
+        info.wrapped = true;
+        info.blockIndentInParentBlock = std::get<tpp::BeginCapturedBlockInstr>(body.front().value).blockIndentInParentBlock;
         info.firstIndex = 1;
         info.pastLastIndex = body.size() - 1;
     }
@@ -266,8 +268,8 @@ inline std::vector<std::vector<const tpp::Instruction*>> splitCells(
 {
     std::vector<std::vector<const tpp::Instruction*>> cells;
     cells.emplace_back();
-    const auto indentInfo = analyzeIndentedBody(body);
-    for (size_t index = indentInfo.firstIndex; index < indentInfo.pastLastIndex; ++index)
+    const auto capturedBlockInfo = analyzeCapturedBlock(body);
+    for (size_t index = capturedBlockInfo.firstIndex; index < capturedBlockInfo.pastLastIndex; ++index)
     {
         const auto &instr = body[index];
         if (std::holds_alternative<tpp::Instruction_AlignCell>(instr.value))
@@ -312,8 +314,8 @@ struct ConvertConfig
     /// Whether policy-using call sites need `try` (Swift only).
     bool callNeedsTry = false;
 
-    /// Preserve explicit PushIndent/PopIndent instructions in converted bodies.
-    bool preserveIndentInstructions = false;
+    /// Preserve explicit BeginCapturedBlock/EmitCapturedBlock instructions in converted bodies.
+    bool preserveCapturedBlockInstructions = false;
 };
 
 inline RenderExprInfo exprInfoToContext(const tpp::ExprInfo &expr)
@@ -472,13 +474,15 @@ inline RenderInstruction convertInstruction(
         {
             return {RenderInstruction_AlignCell{}};
         }
-        else if constexpr (std::is_same_v<T, tpp::PushIndentInstr>)
+        else if constexpr (std::is_same_v<T, tpp::BeginCapturedBlockInstr>)
         {
+            BeginCapturedBlockData data;
+            data.blockIndentInParentBlock = arg.blockIndentInParentBlock;
             RenderInstruction result;
-            result.value.emplace<3>(arg.amount);
+            result.value.emplace<3>(std::move(data));
             return result;
         }
-        else if constexpr (std::is_same_v<T, tpp::Instruction_PopIndent>)
+        else if constexpr (std::is_same_v<T, tpp::Instruction_EmitCapturedBlock>)
         {
             RenderInstruction result;
             result.value.emplace<4>();
@@ -489,8 +493,8 @@ inline RenderInstruction convertInstruction(
             int s = scope++;
             std::string pol = arg->policy.empty() ? activePolicy : arg->policy;
             auto elemType = getElemType(*arg->collection.type);
-            const bool preserveIndent = cfg.preserveIndentInstructions;
-            const auto bodyIndent = analyzeIndentedBody(*arg->body);
+            const bool preserveCapturedBlock = cfg.preserveCapturedBlockInstructions;
+            const auto bodyIndent = analyzeCapturedBlock(*arg->body);
 
             auto forData = std::make_unique<ForData>();
             forData->scopeId = s;
@@ -506,7 +510,8 @@ inline RenderInstruction convertInstruction(
                 forData->followedByLit = stringLiteral(*arg->followedBy);
             if (arg->precededBy.has_value())
                 forData->precededByLit = stringLiteral(*arg->precededBy);
-            forData->capturesBody = bodyIndent.indentAmount.has_value();
+            forData->capturesBody = bodyIndent.wrapped;
+            forData->bodyBlockIndentInParentBlock = bodyIndent.blockIndentInParentBlock;
             forData->sb = sb;
             forData->alignSpec = arg->alignSpec;
             forData->singleAlignChar = arg->alignSpec.has_value() && arg->alignSpec->size() == 1;
@@ -533,8 +538,8 @@ inline RenderInstruction convertInstruction(
             else
             {
                 auto bodyVec = std::make_unique<std::vector<RenderInstruction>>();
-                const size_t firstIndex = preserveIndent ? 0 : bodyIndent.firstIndex;
-                const size_t pastLastIndex = preserveIndent ? arg->body->size() : bodyIndent.pastLastIndex;
+                const size_t firstIndex = bodyIndent.wrapped ? bodyIndent.firstIndex : (preserveCapturedBlock ? 0 : bodyIndent.firstIndex);
+                const size_t pastLastIndex = bodyIndent.wrapped ? bodyIndent.pastLastIndex : (preserveCapturedBlock ? arg->body->size() : bodyIndent.pastLastIndex);
                 for (size_t index = firstIndex; index < pastLastIndex; ++index)
                     bodyVec->push_back(convertInstruction((*arg->body)[index], sb, pol, scope, ir, cfg));
                 forData->body = std::move(bodyVec);
@@ -547,10 +552,10 @@ inline RenderInstruction convertInstruction(
         }
         else if constexpr (std::is_same_v<T, std::unique_ptr<tpp::IfInstr>>)
         {
-            const bool preserveIndent = cfg.preserveIndentInstructions;
-            const auto thenIndent = analyzeIndentedBody(*arg->thenBody);
-            const auto elseIndent = analyzeIndentedBody(*arg->elseBody);
-            bool elseBodyPresent = preserveIndent
+            const bool preserveCapturedBlock = cfg.preserveCapturedBlockInstructions;
+            const auto thenIndent = analyzeCapturedBlock(*arg->thenBody);
+            const auto elseIndent = analyzeCapturedBlock(*arg->elseBody);
+            bool elseBodyPresent = preserveCapturedBlock
                 ? !arg->elseBody->empty()
                 : elseIndent.firstIndex < elseIndent.pastLastIndex;
 
@@ -561,8 +566,8 @@ inline RenderInstruction convertInstruction(
             ifData->sb = sb;
 
             auto thenVec = std::make_unique<std::vector<RenderInstruction>>();
-            const size_t thenFirstIndex = preserveIndent ? 0 : thenIndent.firstIndex;
-            const size_t thenPastLastIndex = preserveIndent ? arg->thenBody->size() : thenIndent.pastLastIndex;
+            const size_t thenFirstIndex = preserveCapturedBlock ? 0 : thenIndent.firstIndex;
+            const size_t thenPastLastIndex = preserveCapturedBlock ? arg->thenBody->size() : thenIndent.pastLastIndex;
             for (size_t index = thenFirstIndex; index < thenPastLastIndex; ++index)
                 thenVec->push_back(convertInstruction((*arg->thenBody)[index], sb, activePolicy, scope, ir, cfg));
             ifData->thenBody = std::move(thenVec);
@@ -570,8 +575,8 @@ inline RenderInstruction convertInstruction(
             if (elseBodyPresent)
             {
                 auto elseVec = std::make_unique<std::vector<RenderInstruction>>();
-                const size_t elseFirstIndex = preserveIndent ? 0 : elseIndent.firstIndex;
-                const size_t elsePastLastIndex = preserveIndent ? arg->elseBody->size() : elseIndent.pastLastIndex;
+                const size_t elseFirstIndex = preserveCapturedBlock ? 0 : elseIndent.firstIndex;
+                const size_t elsePastLastIndex = preserveCapturedBlock ? arg->elseBody->size() : elseIndent.pastLastIndex;
                 for (size_t index = elseFirstIndex; index < elsePastLastIndex; ++index)
                     elseVec->push_back(convertInstruction((*arg->elseBody)[index], sb, activePolicy, scope, ir, cfg));
                 ifData->elseBody = std::move(elseVec);
@@ -583,7 +588,7 @@ inline RenderInstruction convertInstruction(
         }
         else if constexpr (std::is_same_v<T, std::unique_ptr<tpp::SwitchInstr>>)
         {
-            const bool preserveIndent = cfg.preserveIndentInstructions;
+            const bool preserveCapturedBlock = cfg.preserveCapturedBlockInstructions;
             std::string pol = arg->policy.empty() ? activePolicy : arg->policy;
 
             // Unwrap OptionalType to find the underlying NamedType for enum lookup
@@ -605,11 +610,11 @@ inline RenderInstruction convertInstruction(
             bool first = true;
             for (const auto &c : *arg->cases)
             {
-                const auto caseIndent = analyzeIndentedBody(*c.body);
+                const auto caseIndent = analyzeCapturedBlock(*c.body);
 
                 auto caseBody = std::make_unique<std::vector<RenderInstruction>>();
-                const size_t caseFirstIndex = preserveIndent ? 0 : caseIndent.firstIndex;
-                const size_t casePastLastIndex = preserveIndent ? c.body->size() : caseIndent.pastLastIndex;
+                const size_t caseFirstIndex = preserveCapturedBlock ? 0 : caseIndent.firstIndex;
+                const size_t casePastLastIndex = preserveCapturedBlock ? c.body->size() : caseIndent.pastLastIndex;
                 for (size_t index = caseFirstIndex; index < casePastLastIndex; ++index)
                     caseBody->push_back(convertInstruction((*c.body)[index], sb, pol, scope, ir, cfg));
 
@@ -756,7 +761,7 @@ struct BuildFunctionsConfig
     std::string nullLiteral;
     std::string staticModifier;
     bool callNeedsTry = false;
-    bool preserveIndentInstructions = false;
+    bool preserveCapturedBlockInstructions = false;
     std::vector<std::string> includes;
 
     static BuildFunctionsConfig forCpp(const std::vector<std::string> &includes = {})
@@ -765,7 +770,7 @@ struct BuildFunctionsConfig
         cfg.nullLiteral = "std::nullopt";
         cfg.staticModifier = "";
         cfg.callNeedsTry = false;
-        cfg.preserveIndentInstructions = true;
+        cfg.preserveCapturedBlockInstructions = true;
         cfg.includes = includes;
         return cfg;
     }
@@ -776,7 +781,7 @@ struct BuildFunctionsConfig
         cfg.nullLiteral = "null";
         cfg.staticModifier = "static ";
         cfg.callNeedsTry = false;
-        cfg.preserveIndentInstructions = true;
+        cfg.preserveCapturedBlockInstructions = true;
         return cfg;
     }
 
@@ -786,7 +791,7 @@ struct BuildFunctionsConfig
         cfg.nullLiteral = "nil";
         cfg.staticModifier = namespaceName.empty() ? "" : "static ";
         cfg.callNeedsTry = policiesPresent;
-        cfg.preserveIndentInstructions = true;
+        cfg.preserveCapturedBlockInstructions = true;
         return cfg;
     }
 };
@@ -802,7 +807,7 @@ inline RenderFunctionsInput buildFunctionsContext(
     ConvertConfig cfg;
     cfg.functionPrefix = functionPrefix;
     cfg.callNeedsTry = bfCfg.callNeedsTry;
-    cfg.preserveIndentInstructions = bfCfg.preserveIndentInstructions;
+    cfg.preserveCapturedBlockInstructions = bfCfg.preserveCapturedBlockInstructions;
 
     std::vector<RenderFunctionDef> functions;
     for (const auto &fn : ir.functions)
@@ -816,7 +821,7 @@ inline RenderFunctionsInput buildFunctionsContext(
         auto body = std::make_unique<std::vector<RenderInstruction>>();
         for (const auto &instr : *fn.body)
         {
-            if (!cfg.preserveIndentInstructions && isIndentInstruction(instr))
+            if (!cfg.preserveCapturedBlockInstructions && isCapturedBlockInstruction(instr))
                 continue;
             body->push_back(convertInstruction(instr, "_sb", fn.policy, scope, ir, cfg));
         }

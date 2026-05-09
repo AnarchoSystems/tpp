@@ -373,13 +373,14 @@ Source locations are optional metadata. Consumers that do not need editor featur
 
 Block indentation is encoded structurally rather than via dedicated flags on `ForInstr`, `IfInstr`, or `SwitchInstr`.
 
-- When a control-flow body came from a block line, the compiler wraps the body in `PushIndent` and `PopIndent` instructions.
-- `PushIndent.amount` records the indentation column to apply when rendering the enclosed body.
+- When a control-flow body came from a block line, the compiler wraps the body in `BeginCapturedBlock` and `EmitCapturedBlock` instructions.
+- `BeginCapturedBlock.blockIndentInParentBlock`, when present, records the block's source-derived indentation baseline relative to its parent block.
+- If `BeginCapturedBlock.blockIndentInParentBlock` is absent, consumers use the runtime insertion column only.
 - Inline directives simply omit that wrapper, so consumers can distinguish inline and block behavior from the instruction stream itself.
 
-The renderer uses the same rule as the static backends: a body that begins with `PushIndent` and ends with `PopIndent` is treated as block-indented, and the enclosed text is re-indented relative to the recorded indentation column.
+The renderer uses the same rule as the static backends: a body that begins with `BeginCapturedBlock` and ends with `EmitCapturedBlock` is treated as a captured block body, and the enclosed text is re-indented relative to the runtime insertion column, optionally preserving the stored parent-block indentation baseline from `BeginCapturedBlock.blockIndentInParentBlock`.
 
-Static backends do not reconstruct separate `blockIndent` metadata from source syntax. The shared lowering keeps indentation structural, and only loop lowering carries a backend-neutral capture/no-capture hint so separator handling can stay consistent without reintroducing frontend-only indentation fields.
+Static backends do not reconstruct separate frontend-only indentation state from source syntax. The shared lowering keeps indentation structural, and loop lowering only carries the same optional parent-block indent baseline when it lowers a wrapped block body into a loop helper.
 
 ---
 

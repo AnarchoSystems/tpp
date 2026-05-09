@@ -328,12 +328,16 @@ template emit_instr(instr: RenderInstruction)
 @end case@
 @case AlignCell@
 @end case@
-@case PushIndent(amount)@
-if (!_sb.pushIndent(@amount@))
+@case BeginCapturedBlock(p)@
+@if p.blockIndentInParentBlock@
+if (!_sb.beginCapturedBlock(@p.blockIndentInParentBlock@))
+@else@
+if (!_sb.beginCapturedBlock())
+@end if@
     throw new RuntimeException("tpp render error: " + _sb.error());
 @end case@
-@case PopIndent@
-if (!_sb.popIndent())
+@case EmitCapturedBlock@
+if (!_sb.emitCapturedBlock())
     throw new RuntimeException("tpp render error: " + _sb.error());
 @end case@
 @case For(f)@
@@ -401,6 +405,12 @@ END
 
 template emit_for_block(f: ForData)
 @if f.body@
+@if f.bodyBlockIndentInParentBlock@
+if (!@f.sb@.beginCapturedBlock(@f.bodyBlockIndentInParentBlock@))
+@else@
+if (!@f.sb@.beginCapturedBlock())
+@end if@
+    throw new RuntimeException("tpp render error: " + @f.sb@.error());
 for (int _i@f.scopeId@ = 0; _i@f.scopeId@ < @f.collPath@.size(); _i@f.scopeId@++) {
     @java_type(f.elemType)@ @f.varName@ = @f.collPath@.get(_i@f.scopeId@);
     @if f.enumeratorName@
@@ -416,17 +426,6 @@ for (int _i@f.scopeId@ = 0; _i@f.scopeId@ < @f.collPath@.size(); _i@f.scopeId@++
     }
     TppWriter.CaptureResult _iter@f.scopeId@ = @f.sb@.endCaptureResult();
     String _iterText@f.scopeId@ = _iter@f.scopeId@.text;
-    @if f.sepLit@
-    boolean _stripped@f.scopeId@ = false;
-    if (_iter@f.scopeId@.topLevelIndented) {
-        String _trimmed@f.scopeId@ = TppWriter.stripSingleTrailingNewline(_iterText@f.scopeId@);
-        if (_trimmed@f.scopeId@ != null) {
-            _iterText@f.scopeId@ = _trimmed@f.scopeId@;
-            _stripped@f.scopeId@ = true;
-        }
-    }
-    @else@
-    @end if@
     @if f.precededByLit@
     if (!@f.sb@.emit(@f.precededByLit@))
         throw new RuntimeException("tpp render error: " + @f.sb@.error());
@@ -442,8 +441,6 @@ for (int _i@f.scopeId@ = 0; _i@f.scopeId@ < @f.collPath@.size(); _i@f.scopeId@++
         if (!@f.collPath@.isEmpty() && !@f.sb@.emit(@f.followedByLit@))
             throw new RuntimeException("tpp render error: " + @f.sb@.error());
         @end if@
-        if (_stripped@f.scopeId@ && !@f.sb@.emit("\n"))
-            throw new RuntimeException("tpp render error: " + @f.sb@.error());
     }
     @else@
     @if f.followedByLit@
@@ -452,6 +449,8 @@ for (int _i@f.scopeId@ = 0; _i@f.scopeId@ < @f.collPath@.size(); _i@f.scopeId@++
     @end if@
     @end if@
 }
+if (!@f.sb@.emitCapturedBlock())
+    throw new RuntimeException("tpp render error: " + @f.sb@.error());
 @end if@
 END
 
@@ -725,6 +724,7 @@ static class TppWriter {
     private static final class OutputFrame {
         final java.util.ArrayList<String> lines = new java.util.ArrayList<>();
         final StringBuilder currentLine = new StringBuilder();
+        int firstLineBaseColumn = 0;
         boolean trailingNewline = false;
         boolean sawAnyOutput = false;
         boolean topLevelIndentedOnly = false;
@@ -748,7 +748,10 @@ static class TppWriter {
         }
 
         int currentColumn() {
-            return trailingNewline ? 0 : currentLine.length();
+            if (trailingNewline)
+                return 0;
+            int baseColumn = lines.isEmpty() ? firstLineBaseColumn : 0;
+            return baseColumn + currentLine.length();
         }
 
         void notePlainOutput(String text) {
@@ -772,7 +775,7 @@ static class TppWriter {
     }
 
     private final java.util.ArrayList<OutputFrame> outputStack = new java.util.ArrayList<>();
-    private final java.util.ArrayList<Integer> indentStack = new java.util.ArrayList<>();
+    private final java.util.ArrayList<Integer> capturedBlockColumnStack = new java.util.ArrayList<>();
     private String error = "";
 
     TppWriter() {
@@ -800,23 +803,31 @@ static class TppWriter {
         return true;
     }
 
-    boolean pushIndent(int indentColumns) {
-        indentStack.add(indentColumns);
+    boolean beginCapturedBlock() {
+        return beginCapturedBlock(0);
+    }
+
+    boolean beginCapturedBlock(int blockIndentInParentBlock) {
+        int outputColumn = Math.max(activeFrame().currentColumn(), blockIndentInParentBlock);
+        capturedBlockColumnStack.add(outputColumn);
         beginCapture();
         return true;
     }
 
-    boolean popIndent() {
-        if (indentStack.isEmpty()) {
-            error = "popIndent: scope stack underflow";
+    boolean emitCapturedBlock() {
+        if (capturedBlockColumnStack.isEmpty()) {
+            error = "emitCapturedBlock: scope stack underflow";
             return false;
         }
-        int indentColumns = indentStack.remove(indentStack.size() - 1);
-        return emitIndentedFrame(endCaptureFrame(), indentColumns);
+        int outputColumn = capturedBlockColumnStack.remove(capturedBlockColumnStack.size() - 1);
+        return emitIndentedFrame(endCaptureFrame(), outputColumn);
     }
 
     void beginCapture() {
-        outputStack.add(new OutputFrame());
+        OutputFrame frame = new OutputFrame();
+        if (!outputStack.isEmpty())
+            frame.firstLineBaseColumn = activeFrame().currentColumn();
+        outputStack.add(frame);
     }
 
     String endCapture() {
@@ -838,14 +849,6 @@ static class TppWriter {
 
     boolean hasError() {
         return !error.isEmpty();
-    }
-
-    static String stripSingleTrailingNewline(String text) {
-        if (text.isEmpty() || text.charAt(text.length() - 1) != '\n')
-            return null;
-        if (text.chars().filter(ch -> ch == '\n').count() != 1)
-            return null;
-        return text.substring(0, text.length() - 1);
     }
 
     static boolean containsLineBreak(String text) {
@@ -885,49 +888,72 @@ static class TppWriter {
         return true;
     }
 
-    private static String findZeroMarker(OutputFrame frame) {
-        for (String line : frame.lines) {
-            if (isTrimmedEmpty(line))
-                continue;
-            int width = 0;
-            while (width < line.length() && (line.charAt(width) == ' ' || line.charAt(width) == '\t'))
-                ++width;
-            return line.substring(0, width);
-        }
-        if (!frame.trailingNewline && (!frame.lines.isEmpty() || frame.currentLine.length() > 0)) {
-            String line = frame.currentLine.toString();
-            if (!isTrimmedEmpty(line)) {
-                int width = 0;
-                while (width < line.length() && (line.charAt(width) == ' ' || line.charAt(width) == '\t'))
-                    ++width;
-                return line.substring(0, width);
-            }
-        }
-        return "";
+    private static int sharedIndentWidth(String line) {
+        int width = 0;
+        while (width < line.length() && (line.charAt(width) == ' ' || line.charAt(width) == '\t'))
+            ++width;
+        return width;
     }
 
-    private static String stripZeroMarker(String line, String zeroMarker) {
-        return !zeroMarker.isEmpty() && line.startsWith(zeroMarker)
-            ? line.substring(zeroMarker.length())
-            : line;
+    private static String stripSharedIndent(String line, int indentWidth) {
+        int width = 0;
+        while (width < line.length() && width < indentWidth &&
+               (line.charAt(width) == ' ' || line.charAt(width) == '\t')) {
+            ++width;
+        }
+        return line.substring(width);
     }
 
     private static String renderIndentedFrame(OutputFrame frame, int indentColumns) {
         if (frame.isEmpty())
             return "";
-        String zeroMarker = findZeroMarker(frame);
-        String indent = indentColumns > 0 ? " ".repeat(indentColumns) : "";
-        StringBuilder result = new StringBuilder();
-        for (String line : frame.lines) {
-            String currentLine = stripZeroMarker(line, zeroMarker);
-            if (!currentLine.isEmpty())
-                result.append(indent).append(currentLine);
-            result.append('\n');
-        }
+
+        java.util.ArrayList<String> lines = new java.util.ArrayList<>(frame.lines);
+        java.util.ArrayList<Boolean> terminated = new java.util.ArrayList<>();
+        for (int i = 0; i < frame.lines.size(); ++i)
+            terminated.add(true);
         if (!frame.trailingNewline && (!frame.lines.isEmpty() || frame.currentLine.length() > 0)) {
-            String currentLine = stripZeroMarker(frame.currentLine.toString(), zeroMarker);
-            if (!currentLine.isEmpty())
-                result.append(indent).append(currentLine);
+            lines.add(frame.currentLine.toString());
+            terminated.add(false);
+        }
+
+        int first = 0;
+        while (first < lines.size() && isTrimmedEmpty(lines.get(first)))
+            ++first;
+
+        int pastLast = lines.size();
+        while (pastLast > first && isTrimmedEmpty(lines.get(pastLast - 1)))
+            --pastLast;
+
+        if (first == pastLast)
+            return "";
+
+        int minSharedIndent = 0;
+        boolean sawNonEmpty = false;
+        for (int index = first; index < pastLast; ++index) {
+            if (isTrimmedEmpty(lines.get(index)))
+                continue;
+            int width = sharedIndentWidth(lines.get(index));
+            if (!sawNonEmpty || width < minSharedIndent)
+                minSharedIndent = width;
+            sawNonEmpty = true;
+        }
+
+        String indent = indentColumns > 0 ? " ".repeat(indentColumns) : "";
+        int firstLineIndent = Math.max(indentColumns - frame.firstLineBaseColumn, 0);
+        StringBuilder result = new StringBuilder();
+
+        for (int index = first; index < pastLast; ++index) {
+            String currentLine = stripSharedIndent(lines.get(index), minSharedIndent);
+            if (!currentLine.isEmpty()) {
+                if (index == first && firstLineIndent > 0)
+                    result.append(" ".repeat(firstLineIndent));
+                else if (index != first)
+                    result.append(indent);
+                result.append(currentLine);
+            }
+            if (terminated.get(index))
+                result.append('\n');
         }
         return result.toString();
     }

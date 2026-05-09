@@ -23,10 +23,39 @@ static bool startsWith(std::string_view text, std::string_view prefix)
     return text.size() >= prefix.size() && text.substr(0, prefix.size()) == prefix;
 }
 
+static std::string stripDocCommentMarkers(std::string_view raw)
+{
+    std::string text = trim(raw);
+    if (text.size() >= 3 && text[0] == '/' && text[1] == '/' && text[2] == '/')
+    {
+        text = text.substr(3);
+        if (!text.empty() && text[0] == ' ')
+            text = text.substr(1);
+        return text;
+    }
+
+    if (text.size() >= 3 && text[0] == '/' && text[1] == '*' && text[2] == '*')
+    {
+        text = text.substr(3);
+        if (text.size() >= 2 && text[text.size() - 2] == '*' && text.back() == '/')
+            text.resize(text.size() - 2);
+
+        const size_t first = text.find_first_not_of(" \t\r\n");
+        const size_t last = text.find_last_not_of(" \t\r\n");
+        return first == std::string::npos ? std::string{} : text.substr(first, last - first + 1);
+    }
+
+    return {};
+}
+
 static bool advanceToNextTemplateStart(const std::string &src,
                                        size_t &pos,
-                                       std::vector<Diagnostic> *diagnostics)
+                                       std::vector<Diagnostic> *diagnostics,
+                                       std::string *pendingDoc)
 {
+    if (pendingDoc)
+        pendingDoc->clear();
+
     while (pos < src.size())
     {
         while (pos < src.size() && std::isspace(static_cast<unsigned char>(src[pos])))
@@ -43,12 +72,20 @@ static bool advanceToNextTemplateStart(const std::string &src,
 
         if (lineText.size() >= 3 && lineText[0] == '/' && lineText[1] == '/' && lineText[2] == '/')
         {
+            if (pendingDoc)
+            {
+                if (!pendingDoc->empty())
+                    pendingDoc->append("\n");
+                pendingDoc->append(stripDocCommentMarkers(lineText));
+            }
             pos = (lineEnd < src.size()) ? lineEnd + 1 : lineEnd;
             continue;
         }
 
         if (lineText.size() >= 2 && lineText[0] == '/' && lineText[1] == '/')
         {
+            if (pendingDoc)
+                pendingDoc->clear();
             pos = (lineEnd < src.size()) ? lineEnd + 1 : lineEnd;
             continue;
         }
@@ -56,12 +93,21 @@ static bool advanceToNextTemplateStart(const std::string &src,
         if (lineText.size() >= 3 && lineText[0] == '/' && lineText[1] == '*' && lineText[2] == '*')
         {
             size_t closePos = src.find("*/", pos + 3);
+            if (pendingDoc)
+            {
+                if (!pendingDoc->empty())
+                    pendingDoc->append("\n");
+                const size_t rawEnd = closePos != std::string::npos ? closePos + 2 : src.size();
+                pendingDoc->append(stripDocCommentMarkers(std::string_view(src.data() + pos, rawEnd - pos)));
+            }
             pos = (closePos != std::string::npos) ? closePos + 2 : src.size();
             continue;
         }
 
         if (lineText.size() >= 2 && lineText[0] == '/' && lineText[1] == '*')
         {
+            if (pendingDoc)
+                pendingDoc->clear();
             size_t closePos = src.find("*/", pos + 2);
             pos = (closePos != std::string::npos) ? closePos + 2 : src.size();
             continue;
@@ -69,6 +115,9 @@ static bool advanceToNextTemplateStart(const std::string &src,
 
         if (startsWith(lineText, "template "))
             return true;
+
+        if (pendingDoc)
+            pendingDoc->clear();
 
         if (diagnostics)
         {
@@ -281,7 +330,8 @@ bool parseTemplateSource(const std::string &src,
 {
     templates.clear();
     size_t pos = 0;
-    while (advanceToNextTemplateStart(src, pos, &diagnostics))
+    std::string pendingDoc;
+    while (advanceToNextTemplateStart(src, pos, &diagnostics, &pendingDoc))
     {
         compiler::TemplateFunction function;
         size_t bodyStartLine = 0;
@@ -292,6 +342,9 @@ bool parseTemplateSource(const std::string &src,
         if (!compiler::parseOneTemplate(src, pos, function, &bodyStartLine, &bodyText,
                                         nullptr, &diagnostics, &headerRange, &headerText))
             return false;
+
+        if (function.doc.empty())
+            function.doc = pendingDoc;
 
         ParsedTemplateSource parsed;
         parsed.name = std::move(function.name);

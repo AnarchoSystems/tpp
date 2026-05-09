@@ -155,7 +155,10 @@ namespace tpp::compiler
         std::vector<ASTNode> parseInline(const std::vector<LineSeg> &segs,
                                          size_t startPos = 0,
                                          int lineIndex = 0,
-                                         Range *outEndRange = nullptr);
+                                         Range *outEndRange = nullptr,
+                                         bool continueIntoFollowingLines = false);
+
+        void parseSwitchCases(SwitchNode &switchNode, int indentAmount);
 
         Range makeRange(int lineIndex, const LineSeg &seg) const
         {

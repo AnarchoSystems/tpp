@@ -1,0 +1,21 @@
+{
+    "types": [
+        "typedefs.tpp"
+    ],
+    "templates": [
+        "template.tpp"
+    ],
+    "previews": [
+        {
+            "template": "main",
+            "input": {
+                "prefix": "foo",
+                "middle": "bar",
+                "item": {
+                    "String": "baz"
+                }
+            },
+            "name": "default"
+        }
+    ]
+}

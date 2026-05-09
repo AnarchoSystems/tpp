@@ -3,7 +3,7 @@ foo @elem.value@ bar
 END
 
 template main(list: list<Item>)
-@for elem in list | sep="\n"@
+@for elem in list@
     @render_elem(elem)@
 @end for@
 END

@@ -89,8 +89,7 @@ template cpp_inline_loop_options(f: ForData)
 tpp::Writer::NativeLoopOptions{
     @if f.precededByLit@std::optional<std::string_view>{@f.precededByLit@}@else@std::nullopt@end if@,
     @if f.sepLit@std::optional<std::string_view>{@f.sepLit@}@else@std::nullopt@end if@,
-    @if f.followedByLit@std::optional<std::string_view>{@f.followedByLit@}@else@std::nullopt@end if@,
-    false
+    @if f.followedByLit@std::optional<std::string_view>{@f.followedByLit@}@else@std::nullopt@end if@
 }
 END
 
@@ -98,8 +97,7 @@ template cpp_block_loop_options(f: ForData)
 tpp::Writer::NativeLoopOptions{
     @if f.precededByLit@std::optional<std::string_view>{@f.precededByLit@}@else@std::nullopt@end if@,
     @if f.sepLit@std::optional<std::string_view>{@f.sepLit@}@else@std::nullopt@end if@,
-    @if f.followedByLit@std::optional<std::string_view>{@f.followedByLit@}@else@std::nullopt@end if@,
-    @if f.sepLit@true@else@false@end if@
+    @if f.followedByLit@std::optional<std::string_view>{@f.followedByLit@}@else@std::nullopt@end if@
 }
 END
 
@@ -115,13 +113,19 @@ template emit_instr(instr: RenderInstruction)
 @end case@
 @case AlignCell@
 @end case@
-@case PushIndent(amount)@
-if (!_sb.pushIndent(@amount@))
+@case BeginCapturedBlock(p)@
+@if p.blockIndentInParentBlock@
+if (!_sb.beginCapturedBlock(@p.blockIndentInParentBlock@)) {
+@else@
+if (!_sb.beginCapturedBlock()) {
+@end if@
     throw std::runtime_error("tpp render error: " + _sb.error());
+}
 @end case@
-@case PopIndent@
-if (!_sb.popIndent())
+@case EmitCapturedBlock@
+if (!_sb.emitCapturedBlock()) {
     throw std::runtime_error("tpp render error: " + _sb.error());
+}
 @end case@
 @case For(f)@
 @emit_for(f)@
@@ -177,7 +181,22 @@ END
 template emit_for_block(f: ForData)
 @if f.body@
 const auto& _coll@f.scopeId@ = (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@);
-if (!@f.sb@.emitBlockForEach(
+@if f.bodyBlockIndentInParentBlock@
+if (!@f.sb@.emitCapturedBlockForEach(
+        _coll@f.scopeId@,
+    @f.bodyBlockIndentInParentBlock@,
+    @cpp_block_loop_options(f)@,
+        [&](const auto& @f.varName@, int _tppEnumerator@f.scopeId@) {
+            @if f.enumeratorName@
+            [[maybe_unused]] int @f.enumeratorName@ = _tppEnumerator@f.scopeId@;
+            @end if@
+            @for instr in f.body@
+            @emit_instr(instr)@
+            @end for@
+        }))
+    throw std::runtime_error("tpp render error: " + @f.sb@.error());
+@else@
+if (!@f.sb@.emitCapturedBlockForEach(
         _coll@f.scopeId@,
     @cpp_block_loop_options(f)@,
         [&](const auto& @f.varName@, int _tppEnumerator@f.scopeId@) {
@@ -189,6 +208,7 @@ if (!@f.sb@.emitBlockForEach(
             @end for@
         }))
     throw std::runtime_error("tpp render error: " + @f.sb@.error());
+@end if@
 @end if@
 END
 

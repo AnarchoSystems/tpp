@@ -264,30 +264,30 @@ namespace tpp::compiler
         return value;
     }
 
-    static tpp::Instruction makePushIndentInstruction(int indentColumns)
+    static tpp::Instruction makeBeginCapturedBlockInstruction(std::optional<int> blockIndentInParentBlock)
     {
-        tpp::PushIndentInstr pushIndent;
-        pushIndent.amount = indentColumns;
-        return tpp::Instruction{tpp::Instruction::Value{std::in_place_index<7>, std::move(pushIndent)}};
+        tpp::BeginCapturedBlockInstr beginCapturedBlockInstr;
+        beginCapturedBlockInstr.blockIndentInParentBlock = std::move(blockIndentInParentBlock);
+        return tpp::Instruction{tpp::Instruction::Value{std::in_place_index<7>, std::move(beginCapturedBlockInstr)}};
     }
 
-    static tpp::Instruction makePopIndentInstruction()
+    static tpp::Instruction makeEmitCapturedBlockInstruction()
     {
         return tpp::Instruction{tpp::Instruction::Value{std::in_place_index<8>}};
     }
 
-    static std::vector<tpp::Instruction> wrapIndentedBody(std::vector<tpp::Instruction> body,
-                                                          int indentColumns)
+    static std::vector<tpp::Instruction> wrapCapturedBlock(std::vector<tpp::Instruction> body,
+                                                           std::optional<int> blockIndentInParentBlock)
     {
         std::vector<tpp::Instruction> wrapped;
         wrapped.reserve(body.size() + 2);
 
-        wrapped.push_back(makePushIndentInstruction(indentColumns));
+        wrapped.push_back(makeBeginCapturedBlockInstruction(std::move(blockIndentInParentBlock)));
 
         for (auto &instr : body)
             wrapped.push_back(std::move(instr));
 
-        wrapped.push_back(makePopIndentInstruction());
+        wrapped.push_back(makeEmitCapturedBlockInstruction());
         return wrapped;
     }
 
@@ -527,12 +527,14 @@ namespace tpp::compiler
                         std::vector<tpp::Instruction> forBody;
                         if (forInstr->body)
                             forBody = std::move(*forInstr->body);
-                        forInstr->body = std::make_unique<std::vector<tpp::Instruction>>(wrapIndentedBody(std::move(forBody), arg->amount));
+                        const std::optional<int> blockIndentInParentBlock = arg->amount > 0 ? std::make_optional(arg->amount) : std::nullopt;
+                        forInstr->body = std::make_unique<std::vector<tpp::Instruction>>(wrapCapturedBlock(std::move(forBody), blockIndentInParentBlock));
                         out.push_back(std::move(body.front()));
                     }
                     else
                     {
-                        auto wrapped = wrapIndentedBody(std::move(body), arg->amount);
+                        const std::optional<int> blockIndentInParentBlock = arg->amount > 0 ? std::make_optional(arg->amount) : std::nullopt;
+                        auto wrapped = wrapCapturedBlock(std::move(body), blockIndentInParentBlock);
                         out.insert(out.end(),
                                    std::make_move_iterator(wrapped.begin()),
                                    std::make_move_iterator(wrapped.end()));

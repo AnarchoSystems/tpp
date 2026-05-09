@@ -547,7 +547,7 @@ A line that mixes literal text or expressions with directives is an **inline lin
 
 When a block body is rendered, the **zero marker** — the leading whitespace of the first non-empty line in the body — is stripped from every body line. The body is then re-indented to the insertion column of the enclosing directive:
 
-The compiler represents that structurally by wrapping block bodies in `PushIndent` / `PopIndent` instructions. The interpreter and the generated backends all consume that same instruction shape, so block-vs-inline whitespace behavior stays aligned across runtime rendering and compiled output.
+The compiler represents that structurally by wrapping block bodies in `BeginCapturedBlock` / `EmitCapturedBlock` instructions. `BeginCapturedBlock.blockIndentInParentBlock` is optional: block lines usually record the block's source-derived indentation baseline relative to the parent block, while inline-continued bodies use `null` so the runtime column is taken as-is. The interpreter and the generated backends all consume that same instruction shape, so block-vs-inline whitespace behavior stays aligned across runtime rendering and compiled output.
 
 ![](res/NoIndent.png)
 

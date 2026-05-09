@@ -105,6 +105,7 @@ add_executable(tpp_acceptance_test
     src/IRStabilityTest.cc
     src/LspClient.cc
     src/LspTest.cc
+    src/Tpp2CppCliTest.cc
     src/WriterTest.cc
 )
 
@@ -117,6 +118,7 @@ add_dependencies(tpp_acceptance_test tpp render-tpp tpp-lsp)
 
 target_compile_definitions(tpp_acceptance_test PUBLIC
     TPP_EXE="$<TARGET_FILE:tpp>"
+    TPP2CPP_EXE="$<TARGET_FILE:tpp2cpp>"
     RENDER_TPP_EXE="$<TARGET_FILE:render-tpp>"
     TPP_LSP_EXE="$<TARGET_FILE:tpp-lsp>")
 

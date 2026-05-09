@@ -693,10 +693,160 @@ namespace tpp::compiler
         return {ASTNode{std::move(indentNode)}};
     }
 
+    static bool hasRange(const Range &range)
+    {
+        return range.start.line != 0 || range.start.character != 0 ||
+               range.end.line != 0 || range.end.character != 0;
+    }
+
+    static std::vector<ASTNode> continueInlineBody(std::vector<ASTNode> inlineBody,
+                                                   std::vector<ASTNode> blockBody,
+                                                   int indentAmount)
+    {
+        if (!inlineBody.empty() && !blockBody.empty())
+            inlineBody.push_back(TextNode{"\n"});
+        for (auto &node : blockBody)
+            inlineBody.push_back(std::move(node));
+        return wrapIndentedAstBody(std::move(inlineBody), indentAmount);
+    }
+
+    void ASTBuilder::parseSwitchCases(SwitchNode &switchNode, int indentAmount)
+    {
+        auto continueOpenCase = [&](CaseNode &caseNode) {
+            if (hasRange(caseNode.endRange))
+                return;
+
+            Range caseEndRange{};
+            auto blockBody = parseBlock(&caseEndRange);
+            caseNode.body = continueInlineBody(std::move(caseNode.body), std::move(blockBody), indentAmount);
+            caseNode.endRange = caseEndRange;
+        };
+
+        if (switchNode.defaultCase && !hasRange(switchNode.defaultCase->endRange))
+            continueOpenCase(*switchNode.defaultCase);
+        else if (!switchNode.cases.empty() && !hasRange(switchNode.cases.back().endRange))
+            continueOpenCase(switchNode.cases.back());
+
+        while (pos < lines.size())
+        {
+            bool done = false;
+            bool advancedLine = false;
+
+            for (size_t segIndex = 0; segIndex < lines[pos].segments.size(); ++segIndex)
+            {
+                auto &s2 = lines[pos].segments[segIndex];
+                if (!s2.isDirective)
+                    continue;
+
+                if (std::holds_alternative<EndSwitchDirective>(s2.info))
+                {
+                    switchNode.endRange = makeRange((int)pos, s2);
+                    ++pos;
+                    done = true;
+                    break;
+                }
+
+                const bool hasTrailingInlineSegments = segIndex + 1 < lines[pos].segments.size();
+                auto parseInlineCaseBody = [&](CaseNode &caseNode) {
+                    Range caseEndRange{};
+                    auto body = parseInline(lines[pos].segments, segIndex + 1, (int)pos, &caseEndRange, true);
+                    ++pos;
+
+                    if (hasRange(caseEndRange))
+                    {
+                        body.push_back(TextNode{"\n"});
+                        caseNode.body = wrapIndentedAstBody(std::move(body), indentAmount);
+                    }
+                    else
+                    {
+                        auto blockBody = parseBlock(&caseEndRange);
+                        caseNode.body = continueInlineBody(std::move(body), std::move(blockBody), indentAmount);
+                    }
+                    caseNode.endRange = caseEndRange;
+                };
+
+                if (auto *cd = std::get_if<CaseDirective>(&s2.info))
+                {
+                    CaseNode cn;
+                    cn.tag = cd->tag;
+                    cn.bindingName = cd->binding;
+                    cn.sourceRange = makeRange((int)pos, s2);
+
+                    if (hasTrailingInlineSegments)
+                    {
+                        parseInlineCaseBody(cn);
+                    }
+                    else
+                    {
+                        ++pos;
+                        Range caseEndRange{};
+                        cn.body = wrapIndentedAstBody(parseBlock(&caseEndRange), indentAmount);
+                        cn.endRange = caseEndRange;
+                    }
+
+                    switchNode.cases.push_back(std::move(cn));
+                    advancedLine = true;
+                    break;
+                }
+
+                if (std::holds_alternative<DefaultDirective>(s2.info))
+                {
+                    CaseNode cn;
+                    cn.sourceRange = makeRange((int)pos, s2);
+
+                    if (hasTrailingInlineSegments)
+                    {
+                        parseInlineCaseBody(cn);
+                    }
+                    else
+                    {
+                        ++pos;
+                        Range caseEndRange{};
+                        cn.body = wrapIndentedAstBody(parseBlock(&caseEndRange), indentAmount);
+                        cn.endRange = caseEndRange;
+                    }
+
+                    switchNode.defaultCase = std::move(cn);
+                    advancedLine = true;
+                    break;
+                }
+
+                if (auto *rd = std::get_if<RenderDirective>(&s2.info))
+                {
+                    CaseNode cn;
+                    cn.tag = rd->exprText;
+                    cn.isSyntheticRenderCase = true;
+                    cn.sourceRange = makeRange((int)pos, s2);
+                    auto callNode = std::make_shared<FunctionCallNode>();
+                    callNode->functionName = rd->func;
+                    cn.body.push_back(std::move(callNode));
+                    cn.body = wrapIndentedAstBody(std::move(cn.body), indentAmount);
+                    switchNode.cases.push_back(std::move(cn));
+                    ++pos;
+                    advancedLine = true;
+                    break;
+                }
+
+                if (lines[pos].isStructuralLine)
+                {
+                    ++pos;
+                    advancedLine = true;
+                    break;
+                }
+            }
+
+            if (done)
+                break;
+            if (!advancedLine)
+                ++pos;
+        }
+    }
+
     std::vector<ASTNode> ASTBuilder::parseInline(const std::vector<LineSeg> &segs,
                                                   size_t startPos,
                                                   int lineIndex,
-                                                  Range *outEndRange)
+                                                  Range *outEndRange,
+                                                  bool continueIntoFollowingLines)
     {
         std::vector<ASTNode> nodes;
         size_t pos = startPos;
@@ -747,7 +897,27 @@ namespace tpp::compiler
                     forNode->sourceRange = makeRange(lineIndex, s);
                     ++pos;
                     forNode->body = recurse();
-                    forNode->endRange = lastTerminatorRange;
+
+                    if (continueIntoFollowingLines && !hasRange(lastTerminatorRange))
+                    {
+                        std::vector<ASTNode> combinedBody = std::move(forNode->body);
+                        this->pos = static_cast<size_t>(lineIndex) + 1;
+
+                        Range forEndRange{};
+                        auto blockBody = parseBlock(&forEndRange);
+                        if (!combinedBody.empty() && !blockBody.empty())
+                            combinedBody.push_back(TextNode{"\n"});
+                        for (auto &node : blockBody)
+                            combinedBody.push_back(std::move(node));
+
+                        forNode->body = wrapIndentedAstBody(std::move(combinedBody), 0);
+                        forNode->endRange = forEndRange;
+                    }
+                    else
+                    {
+                        forNode->endRange = lastTerminatorRange;
+                    }
+
                     lastTerminatorRange = {};
                     sub.push_back(std::move(forNode));
                 }
@@ -791,17 +961,56 @@ namespace tpp::compiler
                     ifNode->negated = d->negated;
                     ifNode->condText = d->condText;
                     ifNode->sourceRange = makeRange(lineIndex, s);
+                    bool sawInlineElse = false;
                     ++pos;
                     ifNode->thenBody = recurse();
                     if (pos < segs.size() && segs[pos].isDirective &&
                         std::holds_alternative<ElseDirective>(segs[pos].info))
                     {
+                        sawInlineElse = true;
                         ifNode->elseRange = makeRange(lineIndex, segs[pos]);
                         ++pos;
                         lastTerminatorRange = {};
                         ifNode->elseBody = recurse();
                     }
-                    ifNode->endRange = lastTerminatorRange;
+
+                    if (continueIntoFollowingLines && !hasRange(lastTerminatorRange))
+                    {
+                        this->pos = static_cast<size_t>(lineIndex) + 1;
+
+                        Range ifEndRange{};
+                        if (sawInlineElse)
+                        {
+                            auto blockElseBody = parseBlock(&ifEndRange);
+                            ifNode->elseBody = continueInlineBody(std::move(ifNode->elseBody), std::move(blockElseBody), 0);
+                        }
+                        else
+                        {
+                            auto blockThenBody = parseBlock(&ifEndRange);
+                            ifNode->thenBody = continueInlineBody(std::move(ifNode->thenBody), std::move(blockThenBody), 0);
+
+                            if (this->pos < lines.size() && lines[this->pos].isStructuralLine)
+                            {
+                                for (auto &s2 : lines[this->pos].segments)
+                                {
+                                    if (s2.isDirective && std::holds_alternative<ElseDirective>(s2.info))
+                                    {
+                                        ifNode->elseRange = makeRange((int)this->pos, s2);
+                                        ++this->pos;
+                                        ifNode->elseBody = wrapIndentedAstBody(parseBlock(&ifEndRange), 0);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        ifNode->endRange = ifEndRange;
+                    }
+                    else
+                    {
+                        ifNode->endRange = lastTerminatorRange;
+                    }
+
                     lastTerminatorRange = {};
                     sub.push_back(std::move(ifNode));
                 }
@@ -870,6 +1079,13 @@ namespace tpp::compiler
                             ++pos;
                         }
                     }
+
+                    if (continueIntoFollowingLines && !hasRange(switchNode->endRange))
+                    {
+                        this->pos = static_cast<size_t>(lineIndex) + 1;
+                        parseSwitchCases(*switchNode, 0);
+                    }
+
                     sub.push_back(std::move(switchNode));
                 }
                 else if (std::holds_alternative<EndCaseDirective>(s.info))
@@ -1007,114 +1223,7 @@ namespace tpp::compiler
                         switchNode->policy = d->policy;
                         switchNode->sourceRange = makeRange((int)pos, seg);
                         ++pos;
-                        while (pos < lines.size())
-                        {
-                            bool done = false;
-                            bool advancedLine = false;
-
-                            for (size_t segIndex = 0; segIndex < lines[pos].segments.size(); ++segIndex)
-                            {
-                                auto &s2 = lines[pos].segments[segIndex];
-                                if (!s2.isDirective)
-                                    continue;
-
-                                if (std::holds_alternative<EndSwitchDirective>(s2.info))
-                                {
-                                    switchNode->endRange = makeRange((int)pos, s2);
-                                    ++pos;
-                                    done = true;
-                                    break;
-                                }
-
-                                const bool hasTrailingInlineSegments = segIndex + 1 < lines[pos].segments.size();
-
-                                if (auto *cd = std::get_if<CaseDirective>(&s2.info))
-                                {
-                                    CaseNode cn;
-                                    cn.tag = cd->tag;
-                                    cn.bindingName = cd->binding;
-                                    cn.sourceRange = makeRange((int)pos, s2);
-
-                                    if (hasTrailingInlineSegments)
-                                    {
-                                        Range caseEndRange{};
-                                        cn.body = parseInline(lines[pos].segments, segIndex + 1, (int)pos, &caseEndRange);
-                                        cn.endRange = caseEndRange;
-                                        cn.body.push_back(TextNode{"\n"});
-                                        cn.body = wrapIndentedAstBody(std::move(cn.body), tl.indent);
-                                        switchNode->cases.push_back(std::move(cn));
-                                        ++pos;
-                                        advancedLine = true;
-                                    }
-                                    else
-                                    {
-                                        ++pos;
-                                        Range caseEndRange{};
-                                        cn.body = wrapIndentedAstBody(parseBlock(&caseEndRange), tl.indent);
-                                        cn.endRange = caseEndRange;
-                                        switchNode->cases.push_back(std::move(cn));
-                                        advancedLine = true;
-                                    }
-                                    break;
-                                }
-
-                                if (std::holds_alternative<DefaultDirective>(s2.info))
-                                {
-                                    CaseNode cn;
-                                    cn.sourceRange = makeRange((int)pos, s2);
-
-                                    if (hasTrailingInlineSegments)
-                                    {
-                                        Range caseEndRange{};
-                                        cn.body = parseInline(lines[pos].segments, segIndex + 1, (int)pos, &caseEndRange);
-                                        cn.endRange = caseEndRange;
-                                        cn.body.push_back(TextNode{"\n"});
-                                        cn.body = wrapIndentedAstBody(std::move(cn.body), tl.indent);
-                                        switchNode->defaultCase = std::move(cn);
-                                        ++pos;
-                                        advancedLine = true;
-                                    }
-                                    else
-                                    {
-                                        ++pos;
-                                        Range caseEndRange{};
-                                        cn.body = wrapIndentedAstBody(parseBlock(&caseEndRange), tl.indent);
-                                        cn.endRange = caseEndRange;
-                                        switchNode->defaultCase = std::move(cn);
-                                        advancedLine = true;
-                                    }
-                                    break;
-                                }
-
-                                if (auto *rd = std::get_if<RenderDirective>(&s2.info))
-                                {
-                                    CaseNode cn;
-                                    cn.tag = rd->exprText;
-                                    cn.isSyntheticRenderCase = true;
-                                    cn.sourceRange = makeRange((int)pos, s2);
-                                    auto callNode = std::make_shared<FunctionCallNode>();
-                                    callNode->functionName = rd->func;
-                                    cn.body.push_back(std::move(callNode));
-                                    cn.body = wrapIndentedAstBody(std::move(cn.body), tl.indent);
-                                    switchNode->cases.push_back(std::move(cn));
-                                    ++pos;
-                                    advancedLine = true;
-                                    break;
-                                }
-
-                                if (lines[pos].isStructuralLine)
-                                {
-                                    ++pos;
-                                    advancedLine = true;
-                                    break;
-                                }
-                            }
-
-                            if (done)
-                                break;
-                            if (!advancedLine)
-                                ++pos;
-                        }
+                        parseSwitchCases(*switchNode, tl.indent);
                         nodes.push_back(std::move(switchNode));
                     }
                     else if (std::holds_alternative<EndSwitchDirective>(seg.info))
@@ -1174,10 +1283,15 @@ namespace tpp::compiler
                 }
                 if (hasInline)
                 {
-                    auto inlineNodes = parseInline(tl.segments, 0, (int)pos);
+                    const size_t linePos = pos;
+                    auto inlineNodes = parseInline(tl.segments, 0, (int)pos, nullptr, true);
                     for (auto &n : inlineNodes)
                         nodes.push_back(std::move(n));
-                    nodes.push_back(TextNode{"\n"});
+                    if (pos == linePos)
+                    {
+                        nodes.push_back(TextNode{"\n"});
+                        ++pos;
+                    }
                 }
                 else
                 {
@@ -1207,7 +1321,8 @@ namespace tpp::compiler
                     }
                     nodes.push_back(TextNode{"\n"});
                 }
-                ++pos;
+                if (!hasInline)
+                    ++pos;
             }
         }
         return nodes;

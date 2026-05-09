@@ -22,7 +22,6 @@ namespace tpp
             std::optional<std::string_view> precededBy;
             std::optional<std::string_view> sep;
             std::optional<std::string_view> followedBy;
-            bool stripSingleTrailingNewline = false;
         };
 
         struct CaptureResult
@@ -101,28 +100,34 @@ namespace tpp
             return true;
         }
 
-        bool pushIndent(int indentColumns)
+        bool beginCapturedBlock()
         {
-            indentStack_.push_back(indentColumns);
+            return beginCapturedBlock(0);
+        }
+
+        bool beginCapturedBlock(int blockIndentInParentBlock)
+        {
+            const int outputColumn = std::max(static_cast<int>(activeFrame().currentColumn()), blockIndentInParentBlock);
+            capturedBlockColumnStack_.push_back(outputColumn);
             beginCapture();
             return true;
         }
 
-        bool popIndent()
+        bool emitCapturedBlock()
         {
-            if (indentStack_.empty())
+            if (capturedBlockColumnStack_.empty())
             {
-                error_ = "popIndent: scope stack underflow";
+                error_ = "emitCapturedBlock: scope stack underflow";
                 return false;
             }
 
-            const int indentColumns = indentStack_.back();
-            indentStack_.pop_back();
-            return emitIndentedFrame(endCaptureFrame(), indentColumns);
+            const int outputColumn = capturedBlockColumnStack_.back();
+            capturedBlockColumnStack_.pop_back();
+            return emitIndentedFrame(endCaptureFrame(), outputColumn);
         }
 
         template <typename Body>
-        bool emitBlock(int indentColumns, Body &&body)
+        bool emitCapturedBlockAtColumn(int outputColumn, Body &&body)
         {
             beginCapture();
             try
@@ -141,7 +146,7 @@ namespace tpp
                 return false;
             }
 
-            return emitIndentedFrame(endCaptureFrame(), indentColumns);
+            return emitIndentedFrame(endCaptureFrame(), outputColumn);
         }
 
         template <typename Collection, typename Body>
@@ -187,10 +192,26 @@ namespace tpp
         }
 
         template <typename Collection, typename Body>
-        bool emitBlockForEach(const Collection &collection,
-                              const NativeLoopOptions &options,
-                              Body &&body)
+        bool emitCapturedBlockForEach(const Collection &collection,
+                                      const NativeLoopOptions &options,
+                                      Body &&body)
         {
+            if (!beginCapturedBlock())
+                return false;
+
+            struct CapturedBlockGuard
+            {
+                Writer &writer;
+                bool active = true;
+                ~CapturedBlockGuard()
+                {
+                    if (!active)
+                        return;
+                    writer.endCaptureFrame();
+                    writer.capturedBlockColumnStack_.pop_back();
+                }
+            } capturedBlockGuard{*this};
+
             beginForEach(collection.size());
             struct Guard
             {
@@ -223,9 +244,6 @@ namespace tpp
                 }
 
                 CaptureResult iterResult = endCaptureResult();
-                bool strippedNewline = false;
-                if (iterResult.topLevelIndented && options.stripSingleTrailingNewline)
-                    strippedNewline = stripSingleTrailingNewline(iterResult.text);
 
                 if (!emitOptionalText(options.precededBy))
                     return false;
@@ -244,19 +262,20 @@ namespace tpp
                     {
                         return false;
                     }
-                    if (strippedNewline && !emit("\n"))
-                        return false;
                 }
             }
 
+            if (!emitCapturedBlock())
+                return false;
+            capturedBlockGuard.active = false;
             return !hasError();
         }
 
         template <typename Collection, typename Body>
-        bool emitBlockForEach(const Collection &collection,
-                              int indentColumns,
-                              const NativeLoopOptions &options,
-                              Body &&body)
+        bool emitCapturedBlockForEach(const Collection &collection,
+                                      int blockIndentInParentBlock,
+                                      const NativeLoopOptions &options,
+                                      Body &&body)
         {
             beginForEach(collection.size());
             struct Guard
@@ -291,10 +310,7 @@ namespace tpp
                 }
 
                 OutputFrame iterFrame = endCaptureFrame();
-                std::string iterResult = renderIndentedFrame(iterFrame, indentColumns);
-                bool strippedNewline = false;
-                if (options.stripSingleTrailingNewline)
-                    strippedNewline = stripSingleTrailingNewline(iterResult);
+                std::string iterResult = renderIndentedFrame(iterFrame, blockIndentInParentBlock);
 
                 if (!emitOptionalText(options.precededBy))
                     return false;
@@ -313,8 +329,6 @@ namespace tpp
                     {
                         return false;
                     }
-                    if (strippedNewline && !emit("\n"))
-                        return false;
                 }
             }
 
@@ -434,7 +448,10 @@ namespace tpp
 
         void beginCapture()
         {
-            outputStack_.emplace_back();
+            OutputFrame frame;
+            if (!outputStack_.empty())
+                frame.firstLineBaseColumn = activeFrame().currentColumn();
+            outputStack_.push_back(std::move(frame));
         }
 
         std::string endCapture()
@@ -471,16 +488,6 @@ namespace tpp
         bool hasError() const
         {
             return !error_.empty();
-        }
-
-        static bool stripSingleTrailingNewline(std::string &text)
-        {
-            if (text.empty() || text.back() != '\n')
-                return false;
-            if (std::count(text.begin(), text.end(), '\n') != 1)
-                return false;
-            text.pop_back();
-            return true;
         }
 
         static bool containsLineBreak(const std::string &text)
@@ -539,6 +546,7 @@ namespace tpp
         {
             std::vector<std::string> lines;
             std::string currentLine;
+            size_t firstLineBaseColumn = 0;
             bool trailingNewline = false;
             bool sawAnyOutput = false;
             bool topLevelIndentedOnly = false;
@@ -568,7 +576,11 @@ namespace tpp
 
             size_t currentColumn() const
             {
-                return trailingNewline ? 0U : currentLine.size();
+                if (trailingNewline)
+                    return 0U;
+
+                const size_t baseColumn = lines.empty() ? firstLineBaseColumn : 0U;
+                return baseColumn + currentLine.size();
             }
 
             void notePlainOutput(std::string_view text)
@@ -653,33 +665,24 @@ namespace tpp
             return text.substr(start, end - start + 1);
         }
 
-        static std::string findZeroMarker(const OutputFrame &frame)
+        static size_t sharedIndentWidth(const std::string &line)
         {
-            std::string zeroMarker;
-            bool found = false;
-            forEachLogicalLine(frame, [&](const std::string &line, bool) {
-                if (found || trim(line).empty())
-                    return;
-
-                size_t width = 0;
-                while (width < line.size() && (line[width] == ' ' || line[width] == '\t'))
-                    ++width;
-
-                zeroMarker = line.substr(0, width);
-                found = true;
-            });
-            return zeroMarker;
+            size_t width = 0;
+            while (width < line.size() && (line[width] == ' ' || line[width] == '\t'))
+                ++width;
+            return width;
         }
 
-        static std::string stripZeroMarker(std::string_view line, const std::string &zeroMarker)
+        static std::string stripSharedIndent(std::string_view line, size_t indentWidth)
         {
-            if (!zeroMarker.empty() &&
-                line.size() >= zeroMarker.size() &&
-                line.compare(0, zeroMarker.size(), zeroMarker) == 0)
+            size_t width = 0;
+            while (width < line.size() && width < indentWidth &&
+                   (line[width] == ' ' || line[width] == '\t'))
             {
-                line.remove_prefix(zeroMarker.size());
+                ++width;
             }
 
+            line.remove_prefix(width);
             return std::string(line);
         }
 
@@ -688,20 +691,56 @@ namespace tpp
             if (frame.empty())
                 return "";
 
-            const std::string zeroMarker = findZeroMarker(frame);
+            std::vector<std::pair<std::string, bool>> logicalLines;
+            forEachLogicalLine(frame, [&](const std::string &line, bool terminated) {
+                logicalLines.emplace_back(line, terminated);
+            });
+
+            size_t first = 0;
+            while (first < logicalLines.size() && trim(logicalLines[first].first).empty())
+                ++first;
+
+            size_t pastLast = logicalLines.size();
+            while (pastLast > first && trim(logicalLines[pastLast - 1].first).empty())
+                --pastLast;
+
+            if (first == pastLast)
+                return "";
+
+            size_t minSharedIndent = 0;
+            bool sawNonEmpty = false;
+            for (size_t index = first; index < pastLast; ++index)
+            {
+                if (trim(logicalLines[index].first).empty())
+                    continue;
+
+                const size_t width = sharedIndentWidth(logicalLines[index].first);
+                if (!sawNonEmpty || width < minSharedIndent)
+                    minSharedIndent = width;
+                sawNonEmpty = true;
+            }
+
             const std::string indent(static_cast<size_t>(indentColumns), ' ');
+            const size_t firstLineIndent = indentColumns > static_cast<int>(frame.firstLineBaseColumn)
+                ? static_cast<size_t>(indentColumns) - frame.firstLineBaseColumn
+                : 0U;
             std::string result;
 
-            forEachLogicalLine(frame, [&](const std::string &line, bool terminated) {
-                const std::string currentLine = stripZeroMarker(line, zeroMarker);
+            for (size_t index = first; index < pastLast; ++index)
+            {
+                const auto &[line, terminated] = logicalLines[index];
+                const std::string currentLine = stripSharedIndent(line, minSharedIndent);
                 if (!currentLine.empty())
                 {
-                    result += indent;
+                    if (index == first)
+                        result.append(firstLineIndent, ' ');
+                    else
+                        result += indent;
                     result += currentLine;
                 }
                 if (terminated)
                     result += '\n';
-            });
+            }
 
             return result;
         }
@@ -924,7 +963,7 @@ namespace tpp
 
         std::map<std::string, TppPolicy> namedPolicies_;
         std::vector<OutputFrame> outputStack_;
-        std::vector<int> indentStack_;
+        std::vector<int> capturedBlockColumnStack_;
         std::string activePolicy_;
         std::vector<std::string> policyScopeStack_;
         std::vector<ForState> forStack_;

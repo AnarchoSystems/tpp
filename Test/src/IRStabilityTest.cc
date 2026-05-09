@@ -151,7 +151,7 @@ TEST(IRStability, GeneratedImplementationDoesNotContainTppVM)
 TEST(IRStability, GeneratedImplementationUsesNativeVmHelpers)
 {
     checkPatternInSomeImplFile(".emitForEach(");
-    checkPatternInSomeImplFile(".emitBlockForEach(");
+    checkPatternInSomeImplFile(".emitCapturedBlockForEach(");
     checkPatternInSomeImplFile(".emitAlignedForEach(");
     checkPatternInSomeImplFile(".emitValue(");
 }

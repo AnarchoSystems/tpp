@@ -76,35 +76,47 @@ TEST(WriterTest, PolicyScopeUnderflow)
     EXPECT_TRUE(writer.hasError());
 }
 
-TEST(WriterTest, IndentScopeUnderflow)
+TEST(WriterTest, CapturedBlockScopeUnderflow)
 {
     Writer writer;
 
-    EXPECT_FALSE(writer.popIndent());
+    EXPECT_FALSE(writer.emitCapturedBlock());
     EXPECT_TRUE(writer.hasError());
 }
 
-TEST(WriterTest, EmitBlock)
+TEST(WriterTest, EmitCapturedBlockAtColumn)
 {
     Writer writer;
 
-    EXPECT_TRUE(writer.emitBlock(4, [&]() {
+    EXPECT_TRUE(writer.emitCapturedBlockAtColumn(4, [&]() {
         EXPECT_TRUE(writer.emit("  alpha\n  beta\n"));
     }));
 
     EXPECT_EQ(writer.takeOutput(), "    alpha\n    beta\n");
 }
 
-TEST(WriterTest, PushPopIndent)
+TEST(WriterTest, BeginAndEmitCapturedBlock)
 {
     Writer writer;
 
     EXPECT_TRUE(writer.emit("header\n"));
-    EXPECT_TRUE(writer.pushIndent(4));
+    EXPECT_TRUE(writer.beginCapturedBlock(4));
     EXPECT_TRUE(writer.emit("  alpha\n  beta\n"));
-    EXPECT_TRUE(writer.popIndent());
+    EXPECT_TRUE(writer.emitCapturedBlock());
 
     EXPECT_EQ(writer.takeOutput(), "header\n    alpha\n    beta\n");
+}
+
+TEST(WriterTest, BeginCapturedBlockFallsBackToRuntimeColumn)
+{
+    Writer writer;
+
+    EXPECT_TRUE(writer.emit("prefix: "));
+    EXPECT_TRUE(writer.beginCapturedBlock(4));
+    EXPECT_TRUE(writer.emit("  alpha\n  beta\n"));
+    EXPECT_TRUE(writer.emitCapturedBlock());
+
+    EXPECT_EQ(writer.takeOutput(), "prefix: alpha\n        beta\n");
 }
 
 TEST(WriterTest, EmitForEach)
@@ -124,18 +136,17 @@ TEST(WriterTest, EmitForEach)
     EXPECT_EQ(writer.takeOutput(), "alpha, beta, gamma.");
 }
 
-TEST(WriterTest, EmitBlockForEach)
+TEST(WriterTest, EmitCapturedBlockForEach)
 {
     Writer writer;
     std::vector<std::string> items = {"alpha", "beta"};
     Writer::NativeLoopOptions options;
     options.sep = std::string_view{"\n"};
-    options.stripSingleTrailingNewline = true;
+    options.followedBy = std::string_view{"\n"};
 
-    EXPECT_TRUE(writer.emitBlockForEach(items, 4, options, [&](const auto &item, int) {
+    EXPECT_TRUE(writer.emitCapturedBlockForEach(items, 4, options, [&](const auto &item, int) {
         EXPECT_TRUE(writer.emit("  "));
         EXPECT_TRUE(writer.emitValue(item));
-        EXPECT_TRUE(writer.emit("\n"));
     }));
 
     EXPECT_EQ(writer.takeOutput(), "    alpha\n    beta\n");

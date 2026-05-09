@@ -23,23 +23,25 @@ namespace tpp
         return tk.value.index() == 5; // Optional variant
     }
 
-    struct BodyIndentInfo
+    struct CapturedBlockInfo
     {
-        std::optional<int> indentAmount;
+        bool wrapped = false;
+        std::optional<int> blockIndentInParentBlock;
         size_t firstIndex = 0;
         size_t pastLastIndex = 0;
     };
 
-    static BodyIndentInfo analyze_indented_body(const std::vector<Instruction> &body)
+    static CapturedBlockInfo analyze_captured_block(const std::vector<Instruction> &body)
     {
-        BodyIndentInfo info;
+        CapturedBlockInfo info;
         info.pastLastIndex = body.size();
 
         if (body.size() >= 2 &&
-            std::holds_alternative<PushIndentInstr>(body.front().value) &&
-            std::holds_alternative<Instruction_PopIndent>(body.back().value))
+            std::holds_alternative<BeginCapturedBlockInstr>(body.front().value) &&
+            std::holds_alternative<Instruction_EmitCapturedBlock>(body.back().value))
         {
-            info.indentAmount = std::get<PushIndentInstr>(body.front().value).amount;
+            info.wrapped = true;
+            info.blockIndentInParentBlock = std::get<BeginCapturedBlockInstr>(body.front().value).blockIndentInParentBlock;
             info.firstIndex = 1;
             info.pastLastIndex = body.size() - 1;
         }
@@ -52,8 +54,8 @@ namespace tpp
         std::vector<std::vector<const Instruction *>> cells;
         cells.emplace_back();
 
-        const auto indentInfo = analyze_indented_body(body);
-        for (size_t index = indentInfo.firstIndex; index < indentInfo.pastLastIndex; ++index)
+        const auto capturedBlockInfo = analyze_captured_block(body);
+        for (size_t index = capturedBlockInfo.firstIndex; index < capturedBlockInfo.pastLastIndex; ++index)
         {
             const auto &instr = body[index];
             if (std::holds_alternative<Instruction_AlignCell>(instr.value))
@@ -233,9 +235,16 @@ namespace tpp
 
         bool exec_body(const std::vector<Instruction> &body)
         {
-            for (const auto &instr : body)
+            return exec_body_range(body, 0, body.size());
+        }
+
+        bool exec_body_range(const std::vector<Instruction> &body,
+                             size_t firstIndex,
+                             size_t pastLastIndex)
+        {
+            for (size_t index = firstIndex; index < pastLastIndex; ++index)
             {
-                if (!exec_instruction(instr))
+                if (!exec_instruction(body[index]))
                     return false;
             }
             return true;
@@ -278,13 +287,15 @@ namespace tpp
                 {
                     return exec_call(arg);
                 }
-                else if constexpr (std::is_same_v<T, PushIndentInstr>)
+                else if constexpr (std::is_same_v<T, BeginCapturedBlockInstr>)
                 {
-                    return writer_.pushIndent(arg.amount);
+                    if (arg.blockIndentInParentBlock.has_value())
+                        return writer_.beginCapturedBlock(*arg.blockIndentInParentBlock);
+                    return writer_.beginCapturedBlock();
                 }
-                else if constexpr (std::is_same_v<T, Instruction_PopIndent>)
+                else if constexpr (std::is_same_v<T, Instruction_EmitCapturedBlock>)
                 {
-                    return writer_.popIndent();
+                    return writer_.emitCapturedBlock();
                 }
             }, instr.value);
         }
@@ -315,6 +326,40 @@ namespace tpp
         bool exec_for_normal(const ForInstr &instr, const nlohmann::json &collection)
         {
             const auto &items = collection;
+            const auto capturedBlockInfo = analyze_captured_block(*instr.body);
+
+            if (capturedBlockInfo.wrapped)
+            {
+                Writer::NativeLoopOptions options;
+                options.precededBy = instr.precededBy;
+                options.sep = instr.sep;
+                options.followedBy = instr.followedBy;
+
+                if (capturedBlockInfo.blockIndentInParentBlock.has_value())
+                {
+                    return writer_.emitCapturedBlockForEach(items, *capturedBlockInfo.blockIndentInParentBlock, options, [&](const auto &item, int enumerator) {
+                        std::map<std::string, nlohmann::json> bindings;
+                        bindings.emplace(instr.varName, item);
+                        if (instr.enumeratorName.has_value())
+                            bindings.emplace(*instr.enumeratorName, enumerator);
+
+                        scopes_.push_back(std::move(bindings));
+                        exec_body_range(*instr.body, capturedBlockInfo.firstIndex, capturedBlockInfo.pastLastIndex);
+                        scopes_.pop_back();
+                    });
+                }
+
+                return writer_.emitCapturedBlockForEach(items, options, [&](const auto &item, int enumerator) {
+                    std::map<std::string, nlohmann::json> bindings;
+                    bindings.emplace(instr.varName, item);
+                    if (instr.enumeratorName.has_value())
+                        bindings.emplace(*instr.enumeratorName, enumerator);
+
+                    scopes_.push_back(std::move(bindings));
+                    exec_body_range(*instr.body, capturedBlockInfo.firstIndex, capturedBlockInfo.pastLastIndex);
+                    scopes_.pop_back();
+                });
+            }
 
             for (size_t index = 0; index < items.size(); ++index)
             {
@@ -331,10 +376,6 @@ namespace tpp
                 if (!ok)
                     return false;
 
-                bool strippedNl = false;
-                if (iterResult.topLevelIndented && instr.sep.has_value() && !instr.sep->empty())
-                    strippedNl = Writer::stripSingleTrailingNewline(iterResult.text);
-
                 if (instr.precededBy.has_value())
                     writer_.emit(*instr.precededBy);
 
@@ -349,8 +390,6 @@ namespace tpp
                 {
                     if (instr.followedBy.has_value() && !items.empty())
                         writer_.emit(*instr.followedBy);
-                    if (strippedNl)
-                        writer_.emit("\n");
                 }
             }
 

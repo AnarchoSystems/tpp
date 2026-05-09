@@ -15,6 +15,7 @@ struct PolicyRef;
 struct RenderExprInfo;
 struct EmitData;
 struct EmitExprData;
+struct BeginCapturedBlockData;
 struct AlignCellInfo;
 struct ForData;
 struct CaseData;
@@ -83,6 +84,14 @@ struct EmitExprData
         return "struct EmitExprData\n{\n    expr : RenderExprInfo;\n    sb : string;\n    staticPolicyLit : optional<string>;\n    staticPolicyId : optional<string>;\n    useRuntimePolicy : bool;\n}";
     }
 };
+struct BeginCapturedBlockData
+{
+    std::optional<int> blockIndentInParentBlock;
+    static std::string tpp_typedefs() noexcept
+    {
+        return "struct BeginCapturedBlockData\n{\n    blockIndentInParentBlock : optional<int>;\n}";
+    }
+};
 struct AlignCellInfo
 {
     int cellIndex;
@@ -106,6 +115,7 @@ struct ForData
     std::optional<std::string> followedByLit;
     std::optional<std::string> precededByLit;
     bool capturesBody;
+    std::optional<int> bodyBlockIndentInParentBlock;
     std::string sb;
     std::optional<std::string> alignSpec;
     std::unique_ptr<std::vector<AlignCellInfo>> cells;
@@ -114,7 +124,7 @@ struct ForData
     bool singleAlignChar;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct ForData\n{\n    scopeId : int;\n    collPath : string;\n    collIsRecursive : bool;\n    collIsOptional : bool;\n    elemType : RenderTypeKind;\n    varName : string;\n    enumeratorName : optional<string>;\n    body : optional<list<RenderInstruction>>;\n    sepLit : optional<string>;\n    followedByLit : optional<string>;\n    precededByLit : optional<string>;\n    capturesBody : bool;\n    sb : string;\n    alignSpec : optional<string>;\n    cells : optional<list<AlignCellInfo>>;\n    numCols : int;\n    alignSpecChars : list<string>;\n    singleAlignChar : bool;\n}";
+        return "struct ForData\n{\n    scopeId : int;\n    collPath : string;\n    collIsRecursive : bool;\n    collIsOptional : bool;\n    elemType : RenderTypeKind;\n    varName : string;\n    enumeratorName : optional<string>;\n    body : optional<list<RenderInstruction>>;\n    sepLit : optional<string>;\n    followedByLit : optional<string>;\n    precededByLit : optional<string>;\n    capturesBody : bool;\n    bodyBlockIndentInParentBlock : optional<int>;\n    sb : string;\n    alignSpec : optional<string>;\n    cells : optional<list<AlignCellInfo>>;\n    numCols : int;\n    alignSpecChars : list<string>;\n    singleAlignChar : bool;\n}";
     }
 };
 struct CaseData
@@ -285,18 +295,18 @@ struct RenderInstruction_AlignCell
     friend void to_json(nlohmann::json& j, const RenderInstruction_AlignCell&) { j = nlohmann::json::object(); }
     friend void from_json(const nlohmann::json&, RenderInstruction_AlignCell&) {}
 };
-struct RenderInstruction_PopIndent
+struct RenderInstruction_EmitCapturedBlock
 {
-    friend void to_json(nlohmann::json& j, const RenderInstruction_PopIndent&) { j = nlohmann::json::object(); }
-    friend void from_json(const nlohmann::json&, RenderInstruction_PopIndent&) {}
+    friend void to_json(nlohmann::json& j, const RenderInstruction_EmitCapturedBlock&) { j = nlohmann::json::object(); }
+    friend void from_json(const nlohmann::json&, RenderInstruction_EmitCapturedBlock&) {}
 };
 struct RenderInstruction
 {
-    using Value = std::variant<EmitData, EmitExprData, RenderInstruction_AlignCell, int, RenderInstruction_PopIndent, std::unique_ptr<ForData>, std::unique_ptr<IfData>, std::unique_ptr<SwitchData>, CallData>;
+    using Value = std::variant<EmitData, EmitExprData, RenderInstruction_AlignCell, BeginCapturedBlockData, RenderInstruction_EmitCapturedBlock, std::unique_ptr<ForData>, std::unique_ptr<IfData>, std::unique_ptr<SwitchData>, CallData>;
     Value value;
     static std::string tpp_typedefs() noexcept
     {
-        return "enum RenderInstruction\n{\n    Emit(EmitData),\n    EmitExpr(EmitExprData),\n    AlignCell,\n    PushIndent(int),\n    PopIndent,\n    For(ForData),\n    If(IfData),\n    Switch(SwitchData),\n    Call(CallData)\n}";
+        return "enum RenderInstruction\n{\n    Emit(EmitData),\n    EmitExpr(EmitExprData),\n    AlignCell,\n    BeginCapturedBlock(BeginCapturedBlockData),\n    EmitCapturedBlock,\n    For(ForData),\n    If(IfData),\n    Switch(SwitchData),\n    Call(CallData)\n}";
     }
 };
 
@@ -312,6 +322,8 @@ inline void from_json(const nlohmann::json& j, EmitData& v);
 inline void to_json(nlohmann::json& j, const EmitData& v);
 inline void from_json(const nlohmann::json& j, EmitExprData& v);
 inline void to_json(nlohmann::json& j, const EmitExprData& v);
+inline void from_json(const nlohmann::json& j, BeginCapturedBlockData& v);
+inline void to_json(nlohmann::json& j, const BeginCapturedBlockData& v);
 inline void from_json(const nlohmann::json& j, AlignCellInfo& v);
 inline void to_json(nlohmann::json& j, const AlignCellInfo& v);
 inline void from_json(const nlohmann::json& j, ForData& v);
@@ -344,8 +356,10 @@ inline void to_json(nlohmann::json& j, const RenderFunctionsInput& v);
 inline void from_json(const nlohmann::json& j, PolicyRef& v)
 {
     if (j.contains("Named")) v.value.emplace<0>(j["Named"].get<std::string>());
-    else     if (j.contains("Pure")) v.value.emplace<1>();
-    else     if (j.contains("Runtime")) v.value.emplace<2>();
+
+    else if (j.contains("Pure")) v.value.emplace<1>();
+
+    else if (j.contains("Runtime")) v.value.emplace<2>();
 }
 inline void to_json(nlohmann::json& j, const PolicyRef& v)
 {
@@ -358,11 +372,16 @@ inline void to_json(nlohmann::json& j, const PolicyRef& v)
 inline void from_json(const nlohmann::json& j, RenderTypeKind& v)
 {
     if (j.contains("Str")) v.value.emplace<0>();
-    else     if (j.contains("Int")) v.value.emplace<1>();
-    else     if (j.contains("Bool")) v.value.emplace<2>();
-    else     if (j.contains("Named")) v.value.emplace<3>(j["Named"].get<std::string>());
-    else     if (j.contains("List")) v.value.emplace<4>(std::make_unique<RenderTypeKind>(j["List"].get<RenderTypeKind>()));
-    else     if (j.contains("Optional")) v.value.emplace<5>(std::make_unique<RenderTypeKind>(j["Optional"].get<RenderTypeKind>()));
+
+    else if (j.contains("Int")) v.value.emplace<1>();
+
+    else if (j.contains("Bool")) v.value.emplace<2>();
+
+    else if (j.contains("Named")) v.value.emplace<3>(j["Named"].get<std::string>());
+
+    else if (j.contains("List")) v.value.emplace<4>(std::make_unique<RenderTypeKind>(j["List"].get<RenderTypeKind>()));
+
+    else if (j.contains("Optional")) v.value.emplace<5>(std::make_unique<RenderTypeKind>(j["Optional"].get<RenderTypeKind>()));
 }
 inline void to_json(nlohmann::json& j, const RenderTypeKind& v)
 {
@@ -375,18 +394,26 @@ inline void to_json(nlohmann::json& j, const RenderTypeKind& v)
 inline void from_json(const nlohmann::json& j, RenderInstruction& v)
 {
     if (j.contains("Emit")) v.value.emplace<0>(j["Emit"].get<EmitData>());
-    else     if (j.contains("EmitExpr")) v.value.emplace<1>(j["EmitExpr"].get<EmitExprData>());
-    else     if (j.contains("AlignCell")) v.value.emplace<2>();
-    else     if (j.contains("PushIndent")) v.value.emplace<3>(j["PushIndent"].get<int>());
-    else     if (j.contains("PopIndent")) v.value.emplace<4>();
-    else     if (j.contains("For")) v.value.emplace<5>(std::make_unique<ForData>(j["For"].get<ForData>()));
-    else     if (j.contains("If")) v.value.emplace<6>(std::make_unique<IfData>(j["If"].get<IfData>()));
-    else     if (j.contains("Switch")) v.value.emplace<7>(std::make_unique<SwitchData>(j["Switch"].get<SwitchData>()));
-    else     if (j.contains("Call")) v.value.emplace<8>(j["Call"].get<CallData>());
+
+    else if (j.contains("EmitExpr")) v.value.emplace<1>(j["EmitExpr"].get<EmitExprData>());
+
+    else if (j.contains("AlignCell")) v.value.emplace<2>();
+
+    else if (j.contains("BeginCapturedBlock")) v.value.emplace<3>(j["BeginCapturedBlock"].get<BeginCapturedBlockData>());
+
+    else if (j.contains("EmitCapturedBlock")) v.value.emplace<4>();
+
+    else if (j.contains("For")) v.value.emplace<5>(std::make_unique<ForData>(j["For"].get<ForData>()));
+
+    else if (j.contains("If")) v.value.emplace<6>(std::make_unique<IfData>(j["If"].get<IfData>()));
+
+    else if (j.contains("Switch")) v.value.emplace<7>(std::make_unique<SwitchData>(j["Switch"].get<SwitchData>()));
+
+    else if (j.contains("Call")) v.value.emplace<8>(j["Call"].get<CallData>());
 }
 inline void to_json(nlohmann::json& j, const RenderInstruction& v)
 {
-    const char* _tags[] = {"Emit", "EmitExpr", "AlignCell", "PushIndent", "PopIndent", "For", "If", "Switch", "Call"};
+    const char* _tags[] = {"Emit", "EmitExpr", "AlignCell", "BeginCapturedBlock", "EmitCapturedBlock", "For", "If", "Switch", "Call"};
     std::visit([&](const auto& arg) {
         j = nlohmann::json::object();
         j[_tags[v.value.index()]] = _tpp_j(arg);
@@ -435,6 +462,15 @@ inline void to_json(nlohmann::json& j, const EmitExprData& v)
     if (v.staticPolicyId.has_value()) j["staticPolicyId"] = *v.staticPolicyId;
     j["useRuntimePolicy"] = v.useRuntimePolicy;
 }
+inline void from_json(const nlohmann::json& j, BeginCapturedBlockData& v)
+{
+    if (j.contains("blockIndentInParentBlock") && !j.at("blockIndentInParentBlock").is_null()) v.blockIndentInParentBlock = j.at("blockIndentInParentBlock").get<int>();
+}
+inline void to_json(nlohmann::json& j, const BeginCapturedBlockData& v)
+{
+    j = nlohmann::json{};
+    if (v.blockIndentInParentBlock.has_value()) j["blockIndentInParentBlock"] = *v.blockIndentInParentBlock;
+}
 inline void from_json(const nlohmann::json& j, AlignCellInfo& v)
 {
     v.cellIndex = j.at("cellIndex").get<int>();
@@ -460,6 +496,7 @@ inline void from_json(const nlohmann::json& j, ForData& v)
     if (j.contains("followedByLit") && !j.at("followedByLit").is_null()) v.followedByLit = j.at("followedByLit").get<std::string>();
     if (j.contains("precededByLit") && !j.at("precededByLit").is_null()) v.precededByLit = j.at("precededByLit").get<std::string>();
     v.capturesBody = j.at("capturesBody").get<bool>();
+    if (j.contains("bodyBlockIndentInParentBlock") && !j.at("bodyBlockIndentInParentBlock").is_null()) v.bodyBlockIndentInParentBlock = j.at("bodyBlockIndentInParentBlock").get<int>();
     v.sb = j.at("sb").get<std::string>();
     if (j.contains("alignSpec") && !j.at("alignSpec").is_null()) v.alignSpec = j.at("alignSpec").get<std::string>();
     if (j.contains("cells") && !j.at("cells").is_null()) v.cells = std::make_unique<std::vector<AlignCellInfo>>(j.at("cells").get<std::vector<AlignCellInfo>>());
@@ -482,6 +519,7 @@ inline void to_json(nlohmann::json& j, const ForData& v)
     if (v.followedByLit.has_value()) j["followedByLit"] = *v.followedByLit;
     if (v.precededByLit.has_value()) j["precededByLit"] = *v.precededByLit;
     j["capturesBody"] = v.capturesBody;
+    if (v.bodyBlockIndentInParentBlock.has_value()) j["bodyBlockIndentInParentBlock"] = *v.bodyBlockIndentInParentBlock;
     j["sb"] = v.sb;
     if (v.alignSpec.has_value()) j["alignSpec"] = *v.alignSpec;
     if (v.cells) j["cells"] = *v.cells;

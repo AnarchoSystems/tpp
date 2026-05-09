@@ -178,11 +178,15 @@ template emit_instr(instr: RenderInstruction)
 @end case@
 @case AlignCell@
 @end case@
-@case PushIndent(amount)@
-_sb.pushIndent(@amount@)
+@case BeginCapturedBlock(p)@
+@if p.blockIndentInParentBlock@
+_sb.beginCapturedBlock(@p.blockIndentInParentBlock@)
+@else@
+_sb.beginCapturedBlock()
+@end if@
 @end case@
-@case PopIndent@
-_sb.popIndent()
+@case EmitCapturedBlock@
+_sb.emitCapturedBlock()
 @end case@
 @case For(f)@
 @emit_for(f)@
@@ -242,6 +246,11 @@ END
 
 template emit_for_block(f: ForData)
 @if f.body@
+@if f.bodyBlockIndentInParentBlock@
+@f.sb@.beginCapturedBlock(@f.bodyBlockIndentInParentBlock@)
+@else@
+@f.sb@.beginCapturedBlock()
+@end if@
 for _i@f.scopeId@ in 0..<@swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.count {
     let @f.varName@ = @swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@[_i@f.scopeId@]
     @if f.enumeratorName@
@@ -253,15 +262,7 @@ for _i@f.scopeId@ in 0..<@swift_value_path(f.collPath, f.collIsRecursive, f.coll
     @end for@
     if @f.sb@.hasError { fatalError("tpp render error: \(@f.sb@.error)") }
     let _iter@f.scopeId@ = @f.sb@.endCaptureResult()
-    var _iterText@f.scopeId@ = _iter@f.scopeId@.text
-    @if f.sepLit@
-    var _stripped@f.scopeId@ = false
-    if _iter@f.scopeId@.topLevelIndented, let _trimmed@f.scopeId@ = TppWriter.stripSingleTrailingNewline(_iterText@f.scopeId@) {
-        _iterText@f.scopeId@ = _trimmed@f.scopeId@
-        _stripped@f.scopeId@ = true
-    }
-    @else@
-    @end if@
+    let _iterText@f.scopeId@ = _iter@f.scopeId@.text
     @if f.precededByLit@
     @f.sb@.emit(@f.precededByLit@)
     @end if@
@@ -273,7 +274,6 @@ for _i@f.scopeId@ in 0..<@swift_value_path(f.collPath, f.collIsRecursive, f.coll
         @if f.followedByLit@
         if !@swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.isEmpty { @f.sb@.emit(@f.followedByLit@) }
         @end if@
-        if _stripped@f.scopeId@ { @f.sb@.emit("\n") }
     }
     @else@
     @if f.followedByLit@
@@ -281,6 +281,7 @@ for _i@f.scopeId@ in 0..<@swift_value_path(f.collPath, f.collIsRecursive, f.coll
     @end if@
     @end if@
 }
+@f.sb@.emitCapturedBlock()
 @end if@
 END
 
@@ -549,6 +550,7 @@ final class TppWriter {
     final class OutputFrame {
         var lines: [String] = []
         var currentLine = ""
+        var firstLineBaseColumn = 0
         var trailingNewline = false
         var sawAnyOutput = false
         var topLevelIndentedOnly = false
@@ -571,7 +573,9 @@ final class TppWriter {
         }
 
         var currentColumn: Int {
-            trailingNewline ? 0 : currentLine.count
+            if trailingNewline { return 0 }
+            let baseColumn = lines.isEmpty ? firstLineBaseColumn : 0
+            return baseColumn + currentLine.count
         }
 
         func notePlainOutput(_ text: String) {
@@ -593,7 +597,7 @@ final class TppWriter {
     }
 
     private var outputStack: [OutputFrame] = [OutputFrame()]
-    private var indentStack: [Int] = []
+    private var capturedBlockColumnStack: [Int] = []
     private(set) var error = ""
 
     var hasError: Bool { !error.isEmpty }
@@ -610,19 +614,28 @@ final class TppWriter {
         emitWithMultilineIndent(try policy.apply(value))
     }
 
-    func pushIndent(_ indentColumns: Int) {
-        indentStack.append(indentColumns)
+    func beginCapturedBlock() {
+        beginCapturedBlock(0)
+    }
+
+    func beginCapturedBlock(_ blockIndentInParentBlock: Int) {
+        let outputColumn = max(activeFrame().currentColumn, blockIndentInParentBlock)
+        capturedBlockColumnStack.append(outputColumn)
         beginCapture()
     }
 
-    func popIndent() {
-        guard !indentStack.isEmpty else { fatalError("popIndent: scope stack underflow") }
-        let indentColumns = indentStack.removeLast()
-        _ = emitIndentedFrame(endCaptureFrame(), indentColumns)
+    func emitCapturedBlock() {
+        guard !capturedBlockColumnStack.isEmpty else { fatalError("emitCapturedBlock: scope stack underflow") }
+        let outputColumn = capturedBlockColumnStack.removeLast()
+        _ = emitIndentedFrame(endCaptureFrame(), outputColumn)
     }
 
     func beginCapture() {
-        outputStack.append(OutputFrame())
+        let frame = OutputFrame()
+        if !outputStack.isEmpty {
+            frame.firstLineBaseColumn = activeFrame().currentColumn
+        }
+        outputStack.append(frame)
     }
 
     func endCapture() -> String {
@@ -636,12 +649,6 @@ final class TppWriter {
 
     func takeOutput() -> String {
         outputStack.first.map(Self.serializeFrame) ?? ""
-    }
-
-    static func stripSingleTrailingNewline(_ text: String) -> String? {
-        guard text.last == "\n" else { return nil }
-        guard text.filter({ $0 == "\n" }).count == 1 else { return nil }
-        return String(text.dropLast())
     }
 
     static func containsLineBreak(_ text: String) -> Bool {
@@ -690,29 +697,77 @@ final class TppWriter {
         return ""
     }
 
-    private static func stripZeroMarker(_ line: String, _ zeroMarker: String) -> String {
-        guard !zeroMarker.isEmpty, line.hasPrefix(zeroMarker) else { return line }
-        return String(line.dropFirst(zeroMarker.count))
+    private static func sharedIndentWidth(_ line: String) -> Int {
+        var width = 0
+        while width < line.count {
+            let index = line.index(line.startIndex, offsetBy: width)
+            let ch = line[index]
+            if ch != " " && ch != "\t" { break }
+            width += 1
+        }
+        return width
+    }
+
+    private static func stripSharedIndent(_ line: String, _ indentWidth: Int) -> String {
+        var width = 0
+        while width < line.count && width < indentWidth {
+            let index = line.index(line.startIndex, offsetBy: width)
+            let ch = line[index]
+            if ch != " " && ch != "\t" { break }
+            width += 1
+        }
+        return String(line.dropFirst(width))
     }
 
     private static func renderIndentedFrame(_ frame: OutputFrame, _ indentColumns: Int) -> String {
         guard !frame.isEmpty else { return "" }
-        let zeroMarker = findZeroMarker(frame)
+
+        var logicalLines = frame.lines.map { ($0, true) }
+        if !frame.trailingNewline && (!frame.lines.isEmpty || !frame.currentLine.isEmpty) {
+            logicalLines.append((frame.currentLine, false))
+        }
+
+        var first = 0
+        while first < logicalLines.count && isTrimmedEmpty(logicalLines[first].0) {
+            first += 1
+        }
+
+        var pastLast = logicalLines.count
+        while pastLast > first && isTrimmedEmpty(logicalLines[pastLast - 1].0) {
+            pastLast -= 1
+        }
+
+        if first == pastLast { return "" }
+
+        var minSharedIndent = 0
+        var sawNonEmpty = false
+        for index in first..<pastLast {
+            let line = logicalLines[index].0
+            if isTrimmedEmpty(line) { continue }
+            let width = sharedIndentWidth(line)
+            if !sawNonEmpty || width < minSharedIndent {
+                minSharedIndent = width
+            }
+            sawNonEmpty = true
+        }
+
         let indent = indentColumns > 0 ? String(repeating: " ", count: indentColumns) : ""
+        let firstLineIndent = max(indentColumns - frame.firstLineBaseColumn, 0)
         var result = ""
-        for line in frame.lines {
-            let currentLine = stripZeroMarker(line, zeroMarker)
+
+        for index in first..<pastLast {
+            let (line, terminated) = logicalLines[index]
+            let currentLine = stripSharedIndent(line, minSharedIndent)
             if !currentLine.isEmpty {
-                result += indent
+                if index == first && firstLineIndent > 0 {
+                    result += String(repeating: " ", count: firstLineIndent)
+                } else if index != first {
+                    result += indent
+                }
                 result += currentLine
             }
-            result += "\n"
-        }
-        if !frame.trailingNewline && (!frame.lines.isEmpty || !frame.currentLine.isEmpty) {
-            let currentLine = stripZeroMarker(frame.currentLine, zeroMarker)
-            if !currentLine.isEmpty {
-                result += indent
-                result += currentLine
+            if terminated {
+                result += "\n"
             }
         }
         return result

@@ -5,6 +5,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <sstream>
 
 // usage: tpp2cpp <command> [options]
 // commands:
@@ -87,6 +88,9 @@ static codegen::RenderFunctionsInput buildFunctionsContext(
     const std::string &namespaceName);
 
 static std::string toCppStringLiteral(const std::string &s);
+static std::string injectDocComments(const std::string &output, const std::map<std::string, std::string> &docComments);
+static std::map<std::string, std::string> buildTypeDocComments(const tpp::IR &ir);
+static std::map<std::string, std::string> buildFunctionDocComments(const tpp::IR &ir);
 
 static const tpp::IR &mainIR()
 {
@@ -107,9 +111,10 @@ void tpp2cpp::run()
             std::cerr << "defs.tpp: error: Failed to render " << fnName << ": " << error << std::endl;
             exit(EXIT_FAILURE);
         }
-        std::cout << output << std::endl;
+        return output;
     };
 
+    std::string output;
     switch (mode)
     {
     case Mode::None:
@@ -117,18 +122,22 @@ void tpp2cpp::run()
         exit(EXIT_FAILURE);
         break;
     case Mode::Types:
-        renderFunction("render_cpp_types", to_render_cpp_type_input(input, includes, namespaceName));
+        output = renderFunction("render_cpp_types", to_render_cpp_type_input(input, includes, namespaceName));
+        output = injectDocComments(output, buildTypeDocComments(input));
         break;
     case Mode::Functions:
-        renderFunction("render_cpp_functions", to_render_cpp_functions_input(input, includes, namespaceName));
+        output = renderFunction("render_cpp_functions", to_render_cpp_functions_input(input, includes, namespaceName));
+        output = injectDocComments(output, buildFunctionDocComments(input));
         break;
     case Mode::Implementation:
     {
         auto ctx = buildFunctionsContext(input, "", includes, namespaceName);
-        renderFunction("render_cpp_native_implementation", nlohmann::json(ctx));
+        output = renderFunction("render_cpp_native_implementation", nlohmann::json(ctx));
         break;
     }
     }
+
+    std::cout << output << std::endl;
 }
 
 static std::string toCppStringLiteral(const std::string &s)
@@ -143,6 +152,122 @@ static std::string toCppStringLiteral(const std::string &s)
         else result += c;
     }
     return result + "\"";
+}
+
+static std::string makeStructDocMarker(const std::string &name)
+{
+    return "__TPP_DOC__STRUCT__" + name + "__";
+}
+
+static std::string makeEnumDocMarker(const std::string &name)
+{
+    return "__TPP_DOC__ENUM__" + name + "__";
+}
+
+static std::string makeFieldDocMarker(const std::string &structName, const std::string &fieldName)
+{
+    return "__TPP_DOC__FIELD__" + structName + "__" + fieldName + "__";
+}
+
+static std::string makeVariantDocMarker(const std::string &enumName, const std::string &variantTag)
+{
+    return "__TPP_DOC__VARIANT__" + enumName + "__" + variantTag + "__";
+}
+
+static std::string makeFunctionDocMarker(size_t index)
+{
+    return "__TPP_DOC__FUNCTION__" + std::to_string(index) + "__";
+}
+
+static std::string formatDocComment(const std::string &doc, const std::string &indent)
+{
+    if (doc.empty())
+        return {};
+
+    std::ostringstream formatted;
+    formatted << indent << "/**\n";
+
+    size_t start = 0;
+    while (start <= doc.size())
+    {
+        size_t end = doc.find('\n', start);
+        std::string line = end == std::string::npos ? doc.substr(start) : doc.substr(start, end - start);
+        if (!line.empty() && line.back() == '\r')
+            line.pop_back();
+        formatted << indent << line << "\n";
+        if (end == std::string::npos)
+            break;
+        start = end + 1;
+    }
+
+    formatted << indent << " */\n";
+    return formatted.str();
+}
+
+static std::string injectDocComments(const std::string &output, const std::map<std::string, std::string> &docComments)
+{
+    std::ostringstream rewritten;
+    size_t lineStart = 0;
+
+    while (lineStart < output.size())
+    {
+        size_t lineEnd = output.find('\n', lineStart);
+        const bool hasTrailingNewline = lineEnd != std::string::npos;
+        if (!hasTrailingNewline)
+            lineEnd = output.size();
+
+        const std::string line = output.substr(lineStart, lineEnd - lineStart);
+        const size_t indentEnd = line.find_first_not_of(" \t");
+        const std::string indent = indentEnd == std::string::npos ? line : line.substr(0, indentEnd);
+        const std::string marker = indentEnd == std::string::npos ? std::string{} : line.substr(indentEnd);
+
+        auto docIt = docComments.find(marker);
+        if (docIt != docComments.end())
+        {
+            rewritten << formatDocComment(docIt->second, indent);
+        }
+        else
+        {
+            rewritten << line;
+            if (hasTrailingNewline)
+                rewritten << '\n';
+        }
+
+        if (!hasTrailingNewline)
+            break;
+
+        lineStart = lineEnd + 1;
+    }
+
+    return rewritten.str();
+}
+
+static std::map<std::string, std::string> buildTypeDocComments(const tpp::IR &ir)
+{
+    std::map<std::string, std::string> docComments;
+    for (const auto &structDef : ir.structs)
+    {
+        docComments.emplace(makeStructDocMarker(structDef.name), structDef.doc);
+        for (const auto &field : structDef.fields)
+            docComments.emplace(makeFieldDocMarker(structDef.name, field.name), field.doc);
+    }
+
+    for (const auto &enumDef : ir.enums)
+    {
+        docComments.emplace(makeEnumDocMarker(enumDef.name), enumDef.doc);
+        for (const auto &variant : enumDef.variants)
+            docComments.emplace(makeVariantDocMarker(enumDef.name, variant.tag), variant.doc);
+    }
+
+    return docComments;
+}
+
+static std::map<std::string, std::string> buildFunctionDocComments(const tpp::IR &ir)
+{
+    std::map<std::string, std::string> docComments;
+    for (size_t index = 0; index < ir.functions.size(); ++index)
+        docComments.emplace(makeFunctionDocMarker(index), ir.functions[index].doc);
+    return docComments;
 }
 
 static bool hasRecursiveVariant(const tpp::EnumDef &enumDef)

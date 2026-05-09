@@ -17,7 +17,7 @@ struct ExprPathSegment;
 struct ExprInfo;
 struct EmitInstr;
 struct EmitExprInstr;
-struct PushIndentInstr;
+struct BeginCapturedBlockInstr;
 struct ForInstr;
 struct CaseBinding;
 struct CaseInstr;
@@ -58,6 +58,9 @@ struct SourceRange
         return "struct SourceRange\n{\n    start : SourcePosition;\n    end : SourcePosition;\n}";
     }
 };
+/**
+One named field access in an expression path.
+ */
 struct ExprPathSegment
 {
     std::string field;
@@ -66,6 +69,9 @@ struct ExprPathSegment
         return "// ── Instruction types (backend-neutral) ─────────────────────────────────────\n\n/// One named field access in an expression path.\nstruct ExprPathSegment\n{\n    field : string;\n}";
     }
 };
+/**
+Expression with resolved type.
+ */
 struct ExprInfo
 {
     std::string bindingName;
@@ -78,6 +84,9 @@ struct ExprInfo
         return "/// Expression with resolved type.\nstruct ExprInfo\n{\n    bindingName : string;\n    segments : list<ExprPathSegment>;\n    type : TypeKind;\n    isRecursive : bool;\n    isOptional : bool;\n}";
     }
 };
+/**
+Emit literal text.
+ */
 struct EmitInstr
 {
     std::string text;
@@ -86,6 +95,9 @@ struct EmitInstr
         return "/// Emit literal text.\nstruct EmitInstr\n{\n    text : string;\n}";
     }
 };
+/**
+Emit an interpolated expression value.
+ */
 struct EmitExprInstr
 {
     ExprInfo expr;
@@ -95,14 +107,27 @@ struct EmitExprInstr
         return "/// Emit an interpolated expression value.\nstruct EmitExprInstr\n{\n    expr : ExprInfo;\n    policy : string;\n}";
     }
 };
-struct PushIndentInstr
+/**
+Begin capturing a block for deferred output.
+
+When the matching `EmitCapturedBlock` instruction closes the scope, the
+runtime re-indents the captured block before emitting it. When present,
+`blockIndentInParentBlock` records the block's source-derived indentation
+baseline relative to the parent block. When absent, placement comes
+entirely from the live insertion column at the point where the block is
+emitted.
+ */
+struct BeginCapturedBlockInstr
 {
-    int amount;
+    std::optional<int> blockIndentInParentBlock;
     static std::string tpp_typedefs() noexcept
     {
-        return "/// Start a block-indented output scope.\nstruct PushIndentInstr\n{\n    amount : int;\n}";
+        return "/// Begin capturing a block for deferred output.\n///\n/// When the matching `EmitCapturedBlock` instruction closes the scope, the\n/// runtime re-indents the captured block before emitting it. When present,\n/// `blockIndentInParentBlock` records the block's source-derived indentation\n/// baseline relative to the parent block. When absent, placement comes\n/// entirely from the live insertion column at the point where the block is\n/// emitted.\nstruct BeginCapturedBlockInstr\n{\n    blockIndentInParentBlock : optional<int>;\n}";
     }
 };
+/**
+For loop over a collection.
+ */
 struct ForInstr
 {
     std::string varName;
@@ -128,6 +153,9 @@ struct CaseBinding
         return "struct CaseBinding\n{\n    name : string;\n    isRecursive : bool;\n}";
     }
 };
+/**
+One case branch in a switch.
+ */
 struct CaseInstr
 {
     std::string tag;
@@ -141,6 +169,9 @@ struct CaseInstr
         return "/// One case branch in a switch.\nstruct CaseInstr\n{\n    tag : string;\n    bindingName : optional<CaseBinding>;\n    payloadType : optional<TypeKind>;\n    payloadIsRecursive : bool;\n    body : list<Instruction>;\n    variantIndex : int;\n}";
     }
 };
+/**
+Conditional.
+ */
 struct IfInstr
 {
     ExprInfo condExpr;
@@ -152,6 +183,9 @@ struct IfInstr
         return "/// Conditional.\nstruct IfInstr\n{\n    condExpr : ExprInfo;\n    negated : bool;\n    thenBody : list<Instruction>;\n    elseBody : list<Instruction>;\n}";
     }
 };
+/**
+Switch on a variant expression.
+ */
 struct SwitchInstr
 {
     ExprInfo expr;
@@ -162,6 +196,9 @@ struct SwitchInstr
         return "/// Switch on a variant expression.\nstruct SwitchInstr\n{\n    expr : ExprInfo;\n    cases : list<CaseInstr>;\n    policy : string;\n}";
     }
 };
+/**
+Direct function call.
+ */
 struct CallInstr
 {
     std::string functionName;
@@ -342,18 +379,18 @@ struct Instruction_AlignCell
     friend void to_json(nlohmann::json& j, const Instruction_AlignCell&) { j = nlohmann::json::object(); }
     friend void from_json(const nlohmann::json&, Instruction_AlignCell&) {}
 };
-struct Instruction_PopIndent
+struct Instruction_EmitCapturedBlock
 {
-    friend void to_json(nlohmann::json& j, const Instruction_PopIndent&) { j = nlohmann::json::object(); }
-    friend void from_json(const nlohmann::json&, Instruction_PopIndent&) {}
+    friend void to_json(nlohmann::json& j, const Instruction_EmitCapturedBlock&) { j = nlohmann::json::object(); }
+    friend void from_json(const nlohmann::json&, Instruction_EmitCapturedBlock&) {}
 };
 struct Instruction
 {
-    using Value = std::variant<EmitInstr, EmitExprInstr, Instruction_AlignCell, std::unique_ptr<ForInstr>, std::unique_ptr<IfInstr>, std::unique_ptr<SwitchInstr>, CallInstr, PushIndentInstr, Instruction_PopIndent>;
+    using Value = std::variant<EmitInstr, EmitExprInstr, Instruction_AlignCell, std::unique_ptr<ForInstr>, std::unique_ptr<IfInstr>, std::unique_ptr<SwitchInstr>, CallInstr, BeginCapturedBlockInstr, Instruction_EmitCapturedBlock>;
     Value value;
     static std::string tpp_typedefs() noexcept
     {
-        return "enum Instruction\n{\n    Emit(EmitInstr),\n    EmitExpr(EmitExprInstr),\n    AlignCell,\n    For(ForInstr),\n    If(IfInstr),\n    Switch(SwitchInstr),\n    Call(CallInstr),\n    PushIndent(PushIndentInstr),\n    PopIndent\n}";
+        return "enum Instruction\n{\n    Emit(EmitInstr),\n    EmitExpr(EmitExprInstr),\n    AlignCell,\n    For(ForInstr),\n    If(IfInstr),\n    Switch(SwitchInstr),\n    Call(CallInstr),\n    BeginCapturedBlock(BeginCapturedBlockInstr),\n    EmitCapturedBlock\n}";
     }
 };
 
@@ -373,8 +410,8 @@ inline void from_json(const nlohmann::json& j, EmitInstr& v);
 inline void to_json(nlohmann::json& j, const EmitInstr& v);
 inline void from_json(const nlohmann::json& j, EmitExprInstr& v);
 inline void to_json(nlohmann::json& j, const EmitExprInstr& v);
-inline void from_json(const nlohmann::json& j, PushIndentInstr& v);
-inline void to_json(nlohmann::json& j, const PushIndentInstr& v);
+inline void from_json(const nlohmann::json& j, BeginCapturedBlockInstr& v);
+inline void to_json(nlohmann::json& j, const BeginCapturedBlockInstr& v);
 inline void from_json(const nlohmann::json& j, ForInstr& v);
 inline void to_json(nlohmann::json& j, const ForInstr& v);
 inline void from_json(const nlohmann::json& j, CaseBinding& v);
@@ -417,11 +454,16 @@ inline void to_json(nlohmann::json& j, const IR& v);
 inline void from_json(const nlohmann::json& j, TypeKind& v)
 {
     if (j.contains("Str")) v.value.emplace<0>();
-    else     if (j.contains("Int")) v.value.emplace<1>();
-    else     if (j.contains("Bool")) v.value.emplace<2>();
-    else     if (j.contains("Named")) v.value.emplace<3>(j["Named"].get<std::string>());
-    else     if (j.contains("List")) v.value.emplace<4>(std::make_unique<TypeKind>(j["List"].get<TypeKind>()));
-    else     if (j.contains("Optional")) v.value.emplace<5>(std::make_unique<TypeKind>(j["Optional"].get<TypeKind>()));
+
+    else if (j.contains("Int")) v.value.emplace<1>();
+
+    else if (j.contains("Bool")) v.value.emplace<2>();
+
+    else if (j.contains("Named")) v.value.emplace<3>(j["Named"].get<std::string>());
+
+    else if (j.contains("List")) v.value.emplace<4>(std::make_unique<TypeKind>(j["List"].get<TypeKind>()));
+
+    else if (j.contains("Optional")) v.value.emplace<5>(std::make_unique<TypeKind>(j["Optional"].get<TypeKind>()));
 }
 inline void to_json(nlohmann::json& j, const TypeKind& v)
 {
@@ -434,18 +476,26 @@ inline void to_json(nlohmann::json& j, const TypeKind& v)
 inline void from_json(const nlohmann::json& j, Instruction& v)
 {
     if (j.contains("Emit")) v.value.emplace<0>(j["Emit"].get<EmitInstr>());
-    else     if (j.contains("EmitExpr")) v.value.emplace<1>(j["EmitExpr"].get<EmitExprInstr>());
-    else     if (j.contains("AlignCell")) v.value.emplace<2>();
-    else     if (j.contains("For")) v.value.emplace<3>(std::make_unique<ForInstr>(j["For"].get<ForInstr>()));
-    else     if (j.contains("If")) v.value.emplace<4>(std::make_unique<IfInstr>(j["If"].get<IfInstr>()));
-    else     if (j.contains("Switch")) v.value.emplace<5>(std::make_unique<SwitchInstr>(j["Switch"].get<SwitchInstr>()));
-    else     if (j.contains("Call")) v.value.emplace<6>(j["Call"].get<CallInstr>());
-    else     if (j.contains("PushIndent")) v.value.emplace<7>(j["PushIndent"].get<PushIndentInstr>());
-    else     if (j.contains("PopIndent")) v.value.emplace<8>();
+
+    else if (j.contains("EmitExpr")) v.value.emplace<1>(j["EmitExpr"].get<EmitExprInstr>());
+
+    else if (j.contains("AlignCell")) v.value.emplace<2>();
+
+    else if (j.contains("For")) v.value.emplace<3>(std::make_unique<ForInstr>(j["For"].get<ForInstr>()));
+
+    else if (j.contains("If")) v.value.emplace<4>(std::make_unique<IfInstr>(j["If"].get<IfInstr>()));
+
+    else if (j.contains("Switch")) v.value.emplace<5>(std::make_unique<SwitchInstr>(j["Switch"].get<SwitchInstr>()));
+
+    else if (j.contains("Call")) v.value.emplace<6>(j["Call"].get<CallInstr>());
+
+    else if (j.contains("BeginCapturedBlock")) v.value.emplace<7>(j["BeginCapturedBlock"].get<BeginCapturedBlockInstr>());
+
+    else if (j.contains("EmitCapturedBlock")) v.value.emplace<8>();
 }
 inline void to_json(nlohmann::json& j, const Instruction& v)
 {
-    const char* _tags[] = {"Emit", "EmitExpr", "AlignCell", "For", "If", "Switch", "Call", "PushIndent", "PopIndent"};
+    const char* _tags[] = {"Emit", "EmitExpr", "AlignCell", "For", "If", "Switch", "Call", "BeginCapturedBlock", "EmitCapturedBlock"};
     std::visit([&](const auto& arg) {
         j = nlohmann::json::object();
         j[_tags[v.value.index()]] = _tpp_j(arg);
@@ -519,14 +569,14 @@ inline void to_json(nlohmann::json& j, const EmitExprInstr& v)
     j["expr"] = v.expr;
     j["policy"] = v.policy;
 }
-inline void from_json(const nlohmann::json& j, PushIndentInstr& v)
+inline void from_json(const nlohmann::json& j, BeginCapturedBlockInstr& v)
 {
-    v.amount = j.at("amount").get<int>();
+    if (j.contains("blockIndentInParentBlock") && !j.at("blockIndentInParentBlock").is_null()) v.blockIndentInParentBlock = j.at("blockIndentInParentBlock").get<int>();
 }
-inline void to_json(nlohmann::json& j, const PushIndentInstr& v)
+inline void to_json(nlohmann::json& j, const BeginCapturedBlockInstr& v)
 {
     j = nlohmann::json{};
-    j["amount"] = v.amount;
+    if (v.blockIndentInParentBlock.has_value()) j["blockIndentInParentBlock"] = *v.blockIndentInParentBlock;
 }
 inline void from_json(const nlohmann::json& j, ForInstr& v)
 {

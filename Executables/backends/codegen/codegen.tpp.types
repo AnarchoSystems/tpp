@@ -39,6 +39,11 @@ struct EmitExprData
     useRuntimePolicy : bool;
 }
 
+struct BeginCapturedBlockData
+{
+    blockIndentInParentBlock : optional<int>;
+}
+
 struct AlignCellInfo
 {
     cellIndex : int;
@@ -59,6 +64,7 @@ struct ForData
     followedByLit : optional<string>;
     precededByLit : optional<string>;
     capturesBody : bool;
+    bodyBlockIndentInParentBlock : optional<int>;
     sb : string;
     alignSpec : optional<string>;
     cells : optional<list<AlignCellInfo>>;
@@ -127,8 +133,8 @@ enum RenderInstruction
     Emit(EmitData),
     EmitExpr(EmitExprData),
     AlignCell,
-    PushIndent(int),
-    PopIndent,
+    BeginCapturedBlock(BeginCapturedBlockData),
+    EmitCapturedBlock,
     For(ForData),
     If(IfData),
     Switch(SwitchData),
