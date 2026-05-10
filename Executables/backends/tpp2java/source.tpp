@@ -320,7 +320,7 @@ template java_optional_to_str(path: string, inner: RenderTypeKind)
 END
 
 template java_expr_to_str(expr: RenderExprInfo)
-@switch expr.type@@case Str@@expr.path@@end case@@case Int@Integer.toString(@expr.path@)@end case@@case Bool@Boolean.toString(@expr.path@)@end case@@case Named(n)@String.valueOf(@expr.path@)@end case@@case List(e)@String.valueOf(@expr.path@)@end case@@case Optional(inner)@@java_optional_to_str(expr.path, inner)@@end case@@end switch@
+@switch expr.type@@case Str@@expr.ref.path@@end case@@case Int@Integer.toString(@expr.ref.path@)@end case@@case Bool@Boolean.toString(@expr.ref.path@)@end case@@case Named(n)@String.valueOf(@expr.ref.path@)@end case@@case List(e)@String.valueOf(@expr.ref.path@)@end case@@case Optional(inner)@@java_optional_to_str(expr.ref.path, inner)@@end case@@end switch@
 END
 
 // ── Leaf instruction templates ───────────────────────────────────────────────
@@ -414,8 +414,8 @@ END
 
 template emit_for_inline(f: ForData)
 @if f.body@
-for (int _i@f.scopeId@ = 0; _i@f.scopeId@ < @f.collPath@.size(); _i@f.scopeId@++) {
-    @java_type(f.elemType)@ @f.varName@ = @f.collPath@.get(_i@f.scopeId@);
+for (int _i@f.scopeId@ = 0; _i@f.scopeId@ < @f.collection.path@.size(); _i@f.scopeId@++) {
+    @java_type(f.elemType)@ @f.varName@ = @f.collection.path@.get(_i@f.scopeId@);
     @if f.enumeratorName@
     int @f.enumeratorName@ = _i@f.scopeId@;
     @end if@
@@ -427,18 +427,18 @@ for (int _i@f.scopeId@ = 0; _i@f.scopeId@ < @f.collPath@.size(); _i@f.scopeId@++
     @emit_instr(instr)@
     @end for@
     @if f.sepLit@
-    if (_i@f.scopeId@ + 1 < @f.collPath@.size()) {
+    if (_i@f.scopeId@ + 1 < @f.collection.path@.size()) {
         if (!_sb.emit(@f.sepLit@))
             throw new RuntimeException("tpp render error: " + _sb.error());
     }
     @if f.followedByLit@
-    else if (!@f.collPath@.isEmpty() && !_sb.emit(@f.followedByLit@)) {
+    else if (!@f.collection.path@.isEmpty() && !_sb.emit(@f.followedByLit@)) {
         throw new RuntimeException("tpp render error: " + _sb.error());
     }
     @end if@
     @else@
     @if f.followedByLit@
-    if (_i@f.scopeId@ + 1 >= @f.collPath@.size() && !@f.collPath@.isEmpty() && !_sb.emit(@f.followedByLit@))
+    if (_i@f.scopeId@ + 1 >= @f.collection.path@.size() && !@f.collection.path@.isEmpty() && !_sb.emit(@f.followedByLit@))
         throw new RuntimeException("tpp render error: " + _sb.error());
     @end if@
     @end if@
@@ -454,8 +454,8 @@ if (!_sb.beginCapturedBlock(@f.bodyBlockIndentInParentBlock@))
 if (!_sb.beginCapturedBlock())
 @end if@
     throw new RuntimeException("tpp render error: " + _sb.error());
-for (int _i@f.scopeId@ = 0; _i@f.scopeId@ < @f.collPath@.size(); _i@f.scopeId@++) {
-    @java_type(f.elemType)@ @f.varName@ = @f.collPath@.get(_i@f.scopeId@);
+for (int _i@f.scopeId@ = 0; _i@f.scopeId@ < @f.collection.path@.size(); _i@f.scopeId@++) {
+    @java_type(f.elemType)@ @f.varName@ = @f.collection.path@.get(_i@f.scopeId@);
     @if f.enumeratorName@
     int @f.enumeratorName@ = _i@f.scopeId@;
     @end if@
@@ -476,18 +476,18 @@ for (int _i@f.scopeId@ = 0; _i@f.scopeId@ < @f.collPath@.size(); _i@f.scopeId@++
     if (!_sb.emit(_iterText@f.scopeId@))
         throw new RuntimeException("tpp render error: " + _sb.error());
     @if f.sepLit@
-    if (_i@f.scopeId@ + 1 < @f.collPath@.size()) {
+    if (_i@f.scopeId@ + 1 < @f.collection.path@.size()) {
         if (!_sb.emit(@f.sepLit@))
             throw new RuntimeException("tpp render error: " + _sb.error());
     } else {
         @if f.followedByLit@
-        if (!@f.collPath@.isEmpty() && !_sb.emit(@f.followedByLit@))
+        if (!@f.collection.path@.isEmpty() && !_sb.emit(@f.followedByLit@))
             throw new RuntimeException("tpp render error: " + _sb.error());
         @end if@
     }
     @else@
     @if f.followedByLit@
-    if (_i@f.scopeId@ + 1 >= @f.collPath@.size() && !@f.collPath@.isEmpty() && !_sb.emit(@f.followedByLit@))
+    if (_i@f.scopeId@ + 1 >= @f.collection.path@.size() && !@f.collection.path@.isEmpty() && !_sb.emit(@f.followedByLit@))
         throw new RuntimeException("tpp render error: " + _sb.error());
     @end if@
     @end if@
@@ -517,8 +517,8 @@ END
 template emit_aligned_for(f: ForData)
 @if f.cells@
 java.util.List<String[]> _rows@f.scopeId@ = new java.util.ArrayList<>();
-for (int _i@f.scopeId@ = 0; _i@f.scopeId@ < @f.collPath@.size(); _i@f.scopeId@++) {
-    @java_type(f.elemType)@ @f.varName@ = @f.collPath@.get(_i@f.scopeId@);
+for (int _i@f.scopeId@ = 0; _i@f.scopeId@ < @f.collection.path@.size(); _i@f.scopeId@++) {
+    @java_type(f.elemType)@ @f.varName@ = @f.collection.path@.get(_i@f.scopeId@);
     @if f.enumeratorName@
     int @f.enumeratorName@ = _i@f.scopeId@;
     @end if@
@@ -532,15 +532,13 @@ int[] _cw@f.scopeId@ = new int[@f.numCols@];
 for (String[] _r : _rows@f.scopeId@) for (int _c = 0; _c < _r.length; _c++) _cw@f.scopeId@[_c] = Math.max(_cw@f.scopeId@[_c], _r[_c].length());
 char[] _spec@f.scopeId@ = new char[@f.numCols@];
 java.util.Arrays.fill(_spec@f.scopeId@, 'l');
-@if f.singleAlignChar@
-@for ch in f.alignSpecChars@
-java.util.Arrays.fill(_spec@f.scopeId@, '@ch@');
-@end for@
-@else@
-@for ch in f.alignSpecChars | enumerator=ci@
-_spec@f.scopeId@[@ci@] = '@ch@';
-@end for@
-@end if@
+char[] _chars@f.scopeId@ = new char[]{@for ch in f.alignSpecChars | sep=", "@'@ch@'@end for@};
+if (_chars@f.scopeId@.length == 1) {
+    java.util.Arrays.fill(_spec@f.scopeId@, _chars@f.scopeId@[0]);
+} else {
+    for (int _ci = 0; _ci < _chars@f.scopeId@.length && _ci < _spec@f.scopeId@.length; _ci++)
+        _spec@f.scopeId@[_ci] = _chars@f.scopeId@[_ci];
+}
 for (int _i@f.scopeId@ = 0; _i@f.scopeId@ < _rows@f.scopeId@.size(); _i@f.scopeId@++) {
     String[] _r = _rows@f.scopeId@.get(_i@f.scopeId@);
     StringBuilder _line@f.scopeId@ = new StringBuilder();
@@ -610,15 +608,12 @@ END
 // ── Switch / Case ────────────────────────────────────────────────────────────
 
 template emit_switch(s: SwitchData)
+switch (@s.expr.path@._tag) {
 @for c in s.cases@
-@if c.isFirst@
-if (@s.exprPath@._tag.equals(@c.tagLit@)) {
-@else@
-} else if (@s.exprPath@._tag.equals(@c.tagLit@)) {
-@end if@
+case @c.tagLit@:
     @if c.bindingName@
     @if c.payloadType@
-    @java_type(c.payloadType)@ @c.bindingName@ = @s.exprPath@.get@c.tag@();
+    @java_type(c.payloadType)@ @c.bindingName@ = @s.expr.path@.get@c.tag@();
     @end if@
     @end if@
     @if c.body@
@@ -626,6 +621,7 @@ if (@s.exprPath@._tag.equals(@c.tagLit@)) {
     @emit_instr(instr)@
     @end for@
     @end if@
+    break;
 @end for@
 }
 END

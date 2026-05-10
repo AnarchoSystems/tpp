@@ -12,6 +12,7 @@ template<typename _TppT>
 inline nlohmann::json _tpp_j(const std::unique_ptr<_TppT>& v) { return v ? nlohmann::json(*v) : nlohmann::json(); }
 
 struct PolicyRef;
+struct RenderValueRef;
 struct RenderExprInfo;
 struct EmitData;
 struct EmitExprData;
@@ -21,7 +22,6 @@ struct ForData;
 struct CaseData;
 struct IfData;
 struct SwitchData;
-struct CallArgInfo;
 struct CallData;
 struct PolicyReplacementInfo;
 struct PolicyRequireInfo;
@@ -57,15 +57,23 @@ struct PolicyRef
         return "enum PolicyRef\n{\n    Named(string),\n    Pure,\n    Runtime\n}";
     }
 };
-struct RenderExprInfo
+struct RenderValueRef
 {
     std::string path;
-    std::unique_ptr<RenderTypeKind> type;
     bool isRecursive;
     bool isOptional;
     static std::string tpp_typedefs() noexcept
     {
-        return "// ═══════════════════════════════════════════════════════════════════════════════\n// Instruction IR types — for rendering function generation\n// ═══════════════════════════════════════════════════════════════════════════════\n\nstruct RenderExprInfo\n{\n    path : string;\n    type : RenderTypeKind;\n    isRecursive : bool;\n    isOptional : bool;\n}";
+        return "struct RenderValueRef\n{\n    path : string;\n    isRecursive : bool;\n    isOptional : bool;\n}";
+    }
+};
+struct RenderExprInfo
+{
+    RenderValueRef ref;
+    std::unique_ptr<RenderTypeKind> type;
+    static std::string tpp_typedefs() noexcept
+    {
+        return "// ═══════════════════════════════════════════════════════════════════════════════\n// Instruction IR types — for rendering function generation\n// ═══════════════════════════════════════════════════════════════════════════════\n\nstruct RenderExprInfo\n{\n    ref : RenderValueRef;\n    type : RenderTypeKind;\n}";
     }
 };
 struct EmitData
@@ -79,12 +87,11 @@ struct EmitData
 struct EmitExprData
 {
     RenderExprInfo expr;
-    std::optional<std::string> staticPolicyLit;
     std::optional<std::string> staticPolicyId;
     bool useRuntimePolicy;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct EmitExprData\n{\n    expr : RenderExprInfo;\n    staticPolicyLit : optional<string>;\n    staticPolicyId : optional<string>;\n    useRuntimePolicy : bool;\n}";
+        return "struct EmitExprData\n{\n    expr : RenderExprInfo;\n    staticPolicyId : optional<string>;\n    useRuntimePolicy : bool;\n}";
     }
 };
 struct BeginCapturedBlockData
@@ -107,9 +114,7 @@ struct AlignCellInfo
 struct ForData
 {
     int scopeId;
-    std::string collPath;
-    bool collIsRecursive;
-    bool collIsOptional;
+    RenderValueRef collection;
     std::unique_ptr<RenderTypeKind> elemType;
     std::string varName;
     std::optional<std::string> enumeratorName;
@@ -119,14 +124,12 @@ struct ForData
     std::optional<std::string> precededByLit;
     bool capturesBody;
     std::optional<int> bodyBlockIndentInParentBlock;
-    std::optional<std::string> alignSpec;
     std::unique_ptr<std::vector<AlignCellInfo>> cells;
     int numCols;
     std::vector<std::string> alignSpecChars;
-    bool singleAlignChar;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct ForData\n{\n    scopeId : int;\n    collPath : string;\n    collIsRecursive : bool;\n    collIsOptional : bool;\n    elemType : RenderTypeKind;\n    varName : string;\n    enumeratorName : optional<string>;\n    body : optional<list<RenderInstruction>>;\n    sepLit : optional<string>;\n    followedByLit : optional<string>;\n    precededByLit : optional<string>;\n    capturesBody : bool;\n    bodyBlockIndentInParentBlock : optional<int>;\n    alignSpec : optional<string>;\n    cells : optional<list<AlignCellInfo>>;\n    numCols : int;\n    alignSpecChars : list<string>;\n    singleAlignChar : bool;\n}";
+        return "struct ForData\n{\n    scopeId : int;\n    collection : RenderValueRef;\n    elemType : RenderTypeKind;\n    varName : string;\n    enumeratorName : optional<string>;\n    body : optional<list<RenderInstruction>>;\n    sepLit : optional<string>;\n    followedByLit : optional<string>;\n    precededByLit : optional<string>;\n    capturesBody : bool;\n    bodyBlockIndentInParentBlock : optional<int>;\n    cells : optional<list<AlignCellInfo>>;\n    numCols : int;\n    alignSpecChars : list<string>;\n}";
     }
 };
 struct CaseData
@@ -136,12 +139,11 @@ struct CaseData
     std::optional<std::string> bindingName;
     std::unique_ptr<RenderTypeKind> payloadType;
     std::unique_ptr<std::vector<RenderInstruction>> body;
-    bool isFirst;
     int variantIndex;
     bool isRecursivePayload;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct CaseData\n{\n    tag : string;\n    tagLit : string;\n    bindingName : optional<string>;\n    payloadType : optional<RenderTypeKind>;\n    body : optional<list<RenderInstruction>>;\n    isFirst : bool;\n    variantIndex : int;\n    isRecursivePayload : bool;\n}";
+        return "struct CaseData\n{\n    tag : string;\n    tagLit : string;\n    bindingName : optional<string>;\n    payloadType : optional<RenderTypeKind>;\n    body : optional<list<RenderInstruction>>;\n    variantIndex : int;\n    isRecursivePayload : bool;\n}";
     }
 };
 struct IfData
@@ -158,35 +160,22 @@ struct IfData
 };
 struct SwitchData
 {
-    std::string exprPath;
-    bool exprIsRecursive;
-    bool exprIsOptional;
-    std::string enumTypeName;
+    RenderValueRef expr;
     std::unique_ptr<std::vector<CaseData>> cases;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct SwitchData\n{\n    exprPath : string;\n    exprIsRecursive : bool;\n    exprIsOptional : bool;\n    enumTypeName : string;\n    cases : list<CaseData>;\n}";
-    }
-};
-struct CallArgInfo
-{
-    std::string path;
-    bool isRecursive;
-    bool isOptional;
-    static std::string tpp_typedefs() noexcept
-    {
-        return "struct CallArgInfo\n{\n    path : string;\n    isRecursive : bool;\n    isOptional : bool;\n}";
+        return "struct SwitchData\n{\n    expr : RenderValueRef;\n    cases : list<CaseData>;\n}";
     }
 };
 struct CallData
 {
     std::string functionName;
-    std::vector<CallArgInfo> args;
+    std::vector<RenderValueRef> args;
     std::optional<PolicyRef> policyArg;
     bool needsTry;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct CallData\n{\n    functionName : string;\n    args : list<CallArgInfo>;\n    policyArg : optional<PolicyRef>;\n    needsTry : bool;\n}";
+        return "struct CallData\n{\n    functionName : string;\n    args : list<RenderValueRef>;\n    policyArg : optional<PolicyRef>;\n    needsTry : bool;\n}";
     }
 };
 struct PolicyReplacementInfo
@@ -307,11 +296,11 @@ struct RenderFunctionsInput
     std::optional<std::vector<PolicyInfo>> policies;
     std::string functionPrefix;
     std::optional<std::string> namespaceName;
-    std::string staticModifier;
+    bool needsStatic;
     std::optional<std::vector<std::string>> includes;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct RenderFunctionsInput\n{\n    functions : list<RenderFunctionDef>;\n    policies : optional<list<PolicyInfo>>;\n    functionPrefix : string;\n    namespaceName : optional<string>;\n    staticModifier : string;\n    includes : optional<list<string>>;\n}";
+        return "struct RenderFunctionsInput\n{\n    functions : list<RenderFunctionDef>;\n    policies : optional<list<PolicyInfo>>;\n    functionPrefix : string;\n    namespaceName : optional<string>;\n    needsStatic : bool;\n    includes : optional<list<string>>;\n}";
     }
 };
 struct RenderTypeKind_Str
@@ -364,6 +353,8 @@ inline void from_json(const nlohmann::json& j, RenderTypeKind& v);
 inline void to_json(nlohmann::json& j, const RenderTypeKind& v);
 inline void from_json(const nlohmann::json& j, RenderInstruction& v);
 inline void to_json(nlohmann::json& j, const RenderInstruction& v);
+inline void from_json(const nlohmann::json& j, RenderValueRef& v);
+inline void to_json(nlohmann::json& j, const RenderValueRef& v);
 inline void from_json(const nlohmann::json& j, RenderExprInfo& v);
 inline void to_json(nlohmann::json& j, const RenderExprInfo& v);
 inline void from_json(const nlohmann::json& j, EmitData& v);
@@ -382,8 +373,6 @@ inline void from_json(const nlohmann::json& j, IfData& v);
 inline void to_json(nlohmann::json& j, const IfData& v);
 inline void from_json(const nlohmann::json& j, SwitchData& v);
 inline void to_json(nlohmann::json& j, const SwitchData& v);
-inline void from_json(const nlohmann::json& j, CallArgInfo& v);
-inline void to_json(nlohmann::json& j, const CallArgInfo& v);
 inline void from_json(const nlohmann::json& j, CallData& v);
 inline void to_json(nlohmann::json& j, const CallData& v);
 inline void from_json(const nlohmann::json& j, PolicyReplacementInfo& v);
@@ -477,20 +466,29 @@ inline void to_json(nlohmann::json& j, const RenderInstruction& v)
         j[_tags[v.value.index()]] = _tpp_j(arg);
     }, v.value);
 }
-inline void from_json(const nlohmann::json& j, RenderExprInfo& v)
+inline void from_json(const nlohmann::json& j, RenderValueRef& v)
 {
     v.path = j.at("path").get<std::string>();
-    v.type = std::make_unique<RenderTypeKind>(j.at("type").get<RenderTypeKind>());
     v.isRecursive = j.at("isRecursive").get<bool>();
     v.isOptional = j.at("isOptional").get<bool>();
+}
+inline void to_json(nlohmann::json& j, const RenderValueRef& v)
+{
+    j = nlohmann::json{};
+    j["path"] = v.path;
+    j["isRecursive"] = v.isRecursive;
+    j["isOptional"] = v.isOptional;
+}
+inline void from_json(const nlohmann::json& j, RenderExprInfo& v)
+{
+    v.ref = j.at("ref").get<RenderValueRef>();
+    v.type = std::make_unique<RenderTypeKind>(j.at("type").get<RenderTypeKind>());
 }
 inline void to_json(nlohmann::json& j, const RenderExprInfo& v)
 {
     j = nlohmann::json{};
-    j["path"] = v.path;
+    j["ref"] = v.ref;
     j["type"] = *v.type;
-    j["isRecursive"] = v.isRecursive;
-    j["isOptional"] = v.isOptional;
 }
 inline void from_json(const nlohmann::json& j, EmitData& v)
 {
@@ -504,7 +502,6 @@ inline void to_json(nlohmann::json& j, const EmitData& v)
 inline void from_json(const nlohmann::json& j, EmitExprData& v)
 {
     v.expr = j.at("expr").get<RenderExprInfo>();
-    if (j.contains("staticPolicyLit") && !j.at("staticPolicyLit").is_null()) v.staticPolicyLit = j.at("staticPolicyLit").get<std::string>();
     if (j.contains("staticPolicyId") && !j.at("staticPolicyId").is_null()) v.staticPolicyId = j.at("staticPolicyId").get<std::string>();
     v.useRuntimePolicy = j.at("useRuntimePolicy").get<bool>();
 }
@@ -512,7 +509,6 @@ inline void to_json(nlohmann::json& j, const EmitExprData& v)
 {
     j = nlohmann::json{};
     j["expr"] = v.expr;
-    if (v.staticPolicyLit.has_value()) j["staticPolicyLit"] = *v.staticPolicyLit;
     if (v.staticPolicyId.has_value()) j["staticPolicyId"] = *v.staticPolicyId;
     j["useRuntimePolicy"] = v.useRuntimePolicy;
 }
@@ -539,9 +535,7 @@ inline void to_json(nlohmann::json& j, const AlignCellInfo& v)
 inline void from_json(const nlohmann::json& j, ForData& v)
 {
     v.scopeId = j.at("scopeId").get<int>();
-    v.collPath = j.at("collPath").get<std::string>();
-    v.collIsRecursive = j.at("collIsRecursive").get<bool>();
-    v.collIsOptional = j.at("collIsOptional").get<bool>();
+    v.collection = j.at("collection").get<RenderValueRef>();
     v.elemType = std::make_unique<RenderTypeKind>(j.at("elemType").get<RenderTypeKind>());
     v.varName = j.at("varName").get<std::string>();
     if (j.contains("enumeratorName") && !j.at("enumeratorName").is_null()) v.enumeratorName = j.at("enumeratorName").get<std::string>();
@@ -551,19 +545,15 @@ inline void from_json(const nlohmann::json& j, ForData& v)
     if (j.contains("precededByLit") && !j.at("precededByLit").is_null()) v.precededByLit = j.at("precededByLit").get<std::string>();
     v.capturesBody = j.at("capturesBody").get<bool>();
     if (j.contains("bodyBlockIndentInParentBlock") && !j.at("bodyBlockIndentInParentBlock").is_null()) v.bodyBlockIndentInParentBlock = j.at("bodyBlockIndentInParentBlock").get<int>();
-    if (j.contains("alignSpec") && !j.at("alignSpec").is_null()) v.alignSpec = j.at("alignSpec").get<std::string>();
     if (j.contains("cells") && !j.at("cells").is_null()) v.cells = std::make_unique<std::vector<AlignCellInfo>>(j.at("cells").get<std::vector<AlignCellInfo>>());
     v.numCols = j.at("numCols").get<int>();
     v.alignSpecChars = j.at("alignSpecChars").get<std::vector<std::string>>();
-    v.singleAlignChar = j.at("singleAlignChar").get<bool>();
 }
 inline void to_json(nlohmann::json& j, const ForData& v)
 {
     j = nlohmann::json{};
     j["scopeId"] = v.scopeId;
-    j["collPath"] = v.collPath;
-    j["collIsRecursive"] = v.collIsRecursive;
-    j["collIsOptional"] = v.collIsOptional;
+    j["collection"] = v.collection;
     j["elemType"] = *v.elemType;
     j["varName"] = v.varName;
     if (v.enumeratorName.has_value()) j["enumeratorName"] = *v.enumeratorName;
@@ -573,11 +563,9 @@ inline void to_json(nlohmann::json& j, const ForData& v)
     if (v.precededByLit.has_value()) j["precededByLit"] = *v.precededByLit;
     j["capturesBody"] = v.capturesBody;
     if (v.bodyBlockIndentInParentBlock.has_value()) j["bodyBlockIndentInParentBlock"] = *v.bodyBlockIndentInParentBlock;
-    if (v.alignSpec.has_value()) j["alignSpec"] = *v.alignSpec;
     if (v.cells) j["cells"] = *v.cells;
     j["numCols"] = v.numCols;
     j["alignSpecChars"] = v.alignSpecChars;
-    j["singleAlignChar"] = v.singleAlignChar;
 }
 inline void from_json(const nlohmann::json& j, CaseData& v)
 {
@@ -586,7 +574,6 @@ inline void from_json(const nlohmann::json& j, CaseData& v)
     if (j.contains("bindingName") && !j.at("bindingName").is_null()) v.bindingName = j.at("bindingName").get<std::string>();
     if (j.contains("payloadType") && !j.at("payloadType").is_null()) v.payloadType = std::make_unique<RenderTypeKind>(j.at("payloadType").get<RenderTypeKind>());
     if (j.contains("body") && !j.at("body").is_null()) v.body = std::make_unique<std::vector<RenderInstruction>>(j.at("body").get<std::vector<RenderInstruction>>());
-    v.isFirst = j.at("isFirst").get<bool>();
     v.variantIndex = j.at("variantIndex").get<int>();
     v.isRecursivePayload = j.at("isRecursivePayload").get<bool>();
 }
@@ -598,7 +585,6 @@ inline void to_json(nlohmann::json& j, const CaseData& v)
     if (v.bindingName.has_value()) j["bindingName"] = *v.bindingName;
     if (v.payloadType) j["payloadType"] = *v.payloadType;
     if (v.body) j["body"] = *v.body;
-    j["isFirst"] = v.isFirst;
     j["variantIndex"] = v.variantIndex;
     j["isRecursivePayload"] = v.isRecursivePayload;
 }
@@ -621,38 +607,19 @@ inline void to_json(nlohmann::json& j, const IfData& v)
 }
 inline void from_json(const nlohmann::json& j, SwitchData& v)
 {
-    v.exprPath = j.at("exprPath").get<std::string>();
-    v.exprIsRecursive = j.at("exprIsRecursive").get<bool>();
-    v.exprIsOptional = j.at("exprIsOptional").get<bool>();
-    v.enumTypeName = j.at("enumTypeName").get<std::string>();
+    v.expr = j.at("expr").get<RenderValueRef>();
     v.cases = std::make_unique<std::vector<CaseData>>(j.at("cases").get<std::vector<CaseData>>());
 }
 inline void to_json(nlohmann::json& j, const SwitchData& v)
 {
     j = nlohmann::json{};
-    j["exprPath"] = v.exprPath;
-    j["exprIsRecursive"] = v.exprIsRecursive;
-    j["exprIsOptional"] = v.exprIsOptional;
-    j["enumTypeName"] = v.enumTypeName;
+    j["expr"] = v.expr;
     j["cases"] = *v.cases;
-}
-inline void from_json(const nlohmann::json& j, CallArgInfo& v)
-{
-    v.path = j.at("path").get<std::string>();
-    v.isRecursive = j.at("isRecursive").get<bool>();
-    v.isOptional = j.at("isOptional").get<bool>();
-}
-inline void to_json(nlohmann::json& j, const CallArgInfo& v)
-{
-    j = nlohmann::json{};
-    j["path"] = v.path;
-    j["isRecursive"] = v.isRecursive;
-    j["isOptional"] = v.isOptional;
 }
 inline void from_json(const nlohmann::json& j, CallData& v)
 {
     v.functionName = j.at("functionName").get<std::string>();
-    v.args = j.at("args").get<std::vector<CallArgInfo>>();
+    v.args = j.at("args").get<std::vector<RenderValueRef>>();
     if (j.contains("policyArg") && !j.at("policyArg").is_null()) v.policyArg = j.at("policyArg").get<PolicyRef>();
     v.needsTry = j.at("needsTry").get<bool>();
 }
@@ -817,7 +784,7 @@ inline void from_json(const nlohmann::json& j, RenderFunctionsInput& v)
     if (j.contains("policies") && !j.at("policies").is_null()) v.policies = j.at("policies").get<std::vector<PolicyInfo>>();
     v.functionPrefix = j.at("functionPrefix").get<std::string>();
     if (j.contains("namespaceName") && !j.at("namespaceName").is_null()) v.namespaceName = j.at("namespaceName").get<std::string>();
-    v.staticModifier = j.at("staticModifier").get<std::string>();
+    v.needsStatic = j.at("needsStatic").get<bool>();
     if (j.contains("includes") && !j.at("includes").is_null()) v.includes = j.at("includes").get<std::vector<std::string>>();
 }
 inline void to_json(nlohmann::json& j, const RenderFunctionsInput& v)
@@ -827,7 +794,7 @@ inline void to_json(nlohmann::json& j, const RenderFunctionsInput& v)
     if (v.policies.has_value()) j["policies"] = *v.policies;
     j["functionPrefix"] = v.functionPrefix;
     if (v.namespaceName.has_value()) j["namespaceName"] = *v.namespaceName;
-    j["staticModifier"] = v.staticModifier;
+    j["needsStatic"] = v.needsStatic;
     if (v.includes.has_value()) j["includes"] = *v.includes;
 }
 } // namespace codegen

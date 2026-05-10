@@ -137,8 +137,8 @@ namespace tpp
             {
                 TppPolicy::RequireStep requireStep;
                 requireStep.pattern = std::regex(step.regex);
-                if (!step.replace.empty())
-                    requireStep.replace = precompile_replace(step.replace);
+                if (step.compiledReplace.has_value())
+                    requireStep.replace = *step.compiledReplace;
                 policy.require.push_back(std::move(requireStep));
             }
             for (const auto &replacement : def.replacements)

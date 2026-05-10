@@ -4,7 +4,6 @@
 #include "defs.h"
 #include <fstream>
 #include <iostream>
-#include <sstream>
 
 // usage: tpp2cpp <command> [options]
 // commands:
@@ -85,7 +84,6 @@ static codegen::RenderFunctionsInput buildFunctionsContext(
     const std::string &namespaceName);
 
 static std::string toCppStringLiteral(const std::string &s);
-static std::string formatDocComment(const std::string &doc, const std::string &indent);
 static void qualifyNamedTypeJson(nlohmann::json &typeJson);
 
 static const tpp::IR &mainIR()
@@ -148,34 +146,9 @@ static std::string toCppStringLiteral(const std::string &s)
     return result + "\"";
 }
 
-static std::string formatDocComment(const std::string &doc, const std::string &indent)
-{
-    if (doc.empty())
-        return {};
-
-    std::ostringstream formatted;
-    formatted << indent << "/**\n";
-
-    size_t start = 0;
-    while (start <= doc.size())
-    {
-        size_t end = doc.find('\n', start);
-        std::string line = end == std::string::npos ? doc.substr(start) : doc.substr(start, end - start);
-        if (!line.empty() && line.back() == '\r')
-            line.pop_back();
-        formatted << indent << line << "\n";
-        if (end == std::string::npos)
-            break;
-        start = end + 1;
-    }
-
-    formatted << indent << " */\n";
-    return formatted.str();
-}
-
 static void setFormattedDocComment(nlohmann::json &target, const std::string &doc, const std::string &indent)
 {
-    const std::string formatted = formatDocComment(doc, indent);
+    const std::string formatted = codegen::formatBlockDocComment(doc, indent);
     if (!formatted.empty())
         target["docComment"] = formatted;
 }

@@ -61,6 +61,11 @@ namespace tpp::compiler
         return std::holds_alternative<std::shared_ptr<OptionalType>>(type);
     }
 
+    static bool isBoolTypeRef(const TypeRef &type)
+    {
+        return std::holds_alternative<BoolType>(type);
+    }
+
     static TypeRef unwrapOptionalTypeRef(const TypeRef &type)
     {
         if (auto optionalType = std::get_if<std::shared_ptr<OptionalType>>(&type))
@@ -201,6 +206,16 @@ namespace tpp::compiler
     static tpp::ExprInfo lowerPublicExpr(const Expression &e, const TypeEnv &env)
     {
         return lowerPublicExpr(resolvePublicExpr(e, env));
+    }
+
+    static tpp::IfConditionKind lowerPublicConditionKind(const TypeRef &type)
+    {
+        tpp::IfConditionKind conditionKind;
+        if (isBoolTypeRef(type))
+            conditionKind.value.emplace<0>();
+        else
+            conditionKind.value.emplace<1>();
+        return conditionKind;
     }
 
     static TypeRef normalizeCallArgumentType(const TypeRef &type)
@@ -360,11 +375,12 @@ namespace tpp::compiler
         switchInstr->policy = policy;
 
         auto cases = std::make_unique<std::vector<tpp::CaseInstr>>();
-        for (const auto &variant : enumDef.variants)
+        for (size_t variantIndex = 0; variantIndex < enumDef.variants.size(); ++variantIndex)
         {
+            const auto &variant = enumDef.variants[variantIndex];
             tpp::CaseInstr caseInstr;
             caseInstr.tag = variant.tag;
-            caseInstr.variantIndex = 0;
+            caseInstr.variantIndex = static_cast<int>(variantIndex);
 
             std::vector<ResolvedCallArgument> callArguments;
             if (wholeEnumArgument.has_value())
@@ -414,6 +430,7 @@ namespace tpp::compiler
             std::string itemName = "_render_via_item" + std::to_string(syntheticCounter++);
             forInstr->varName = itemName;
             forInstr->collection = lowerPublicExpr(collectionExpr);
+            forInstr->elementType = std::make_unique<tpp::TypeKind>(tpp::to_public_type(renderElemType));
 
             std::vector<tpp::Instruction> body;
             if (renderEnum && !wholeEnumOverload)
@@ -561,6 +578,7 @@ namespace tpp::compiler
                     forInstr->varName = arg->varName;
                     forInstr->enumeratorName = lowerOptionalString(arg->enumeratorName);
                     forInstr->collection = lowerPublicExpr(arg->collectionExpr, env);
+                    forInstr->elementType = std::make_unique<tpp::TypeKind>(tpp::to_public_type(elementType));
                     forInstr->body = std::make_unique<std::vector<tpp::Instruction>>(std::move(body));
                     forInstr->sep = lowerOptionalString(arg->sep);
                     forInstr->followedBy = lowerOptionalString(arg->followedBy);
@@ -573,6 +591,7 @@ namespace tpp::compiler
                 {
                     auto ifInstr = std::make_unique<tpp::IfInstr>();
                     ifInstr->condExpr = lowerPublicExpr(arg->condExpr, env);
+                    ifInstr->conditionKind = lowerPublicConditionKind(resolveExprType(arg->condExpr, env));
                     ifInstr->negated = arg->negated;
                     auto thenBody = lowerPublicNodes(arg->thenBody, env, functions, syntheticCounter);
                     auto elseBody = lowerPublicNodes(arg->elseBody, env, functions, syntheticCounter);
@@ -595,12 +614,13 @@ namespace tpp::compiler
 
                     if (enumDef)
                     {
-                        for (const auto &variant : enumDef->variants)
+                        for (size_t variantIndex = 0; variantIndex < enumDef->variants.size(); ++variantIndex)
                         {
+                            const auto &variant = enumDef->variants[variantIndex];
                             tpp::CaseInstr caseInstr;
                             caseInstr.tag = variant.tag;
                             caseInstr.payloadIsRecursive = variant.recursive && variant.payload.has_value();
-                            caseInstr.variantIndex = 0;
+                            caseInstr.variantIndex = static_cast<int>(variantIndex);
                             if (variant.payload.has_value())
                                 caseInstr.payloadType = std::make_unique<tpp::TypeKind>(tpp::to_public_type(*variant.payload));
 

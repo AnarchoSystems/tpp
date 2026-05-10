@@ -17,7 +17,6 @@
 #include "swift_defs_functions.h"
 #include <iostream>
 #include <map>
-#include <sstream>
 
 static std::string formatSwiftDocComment(const std::string &doc, const std::string &indent);
 
@@ -45,115 +44,14 @@ static codegen::RenderFunctionsInput buildFunctionsContext(
     return result;
 }
 
-static std::vector<std::string> splitDocLines(const std::string &doc)
-{
-    std::vector<std::string> lines;
-    if (doc.empty())
-        return lines;
-
-    size_t start = 0;
-    while (start <= doc.size())
-    {
-        size_t end = doc.find('\n', start);
-        std::string line = end == std::string::npos ? doc.substr(start) : doc.substr(start, end - start);
-        if (!line.empty() && line.back() == '\r')
-            line.pop_back();
-        lines.push_back(std::move(line));
-        if (end == std::string::npos)
-            break;
-        start = end + 1;
-    }
-
-    return lines;
-}
-
 static std::string formatSwiftDocComment(const std::string &doc, const std::string &indent)
 {
-    auto lines = splitDocLines(doc);
-    if (lines.empty())
-        return {};
-
-    std::ostringstream formatted;
-    for (const auto &line : lines)
-    {
-        formatted << indent << "///";
-        if (!line.empty())
-            formatted << ' ' << line;
-        formatted << "\n";
-    }
-    return formatted.str();
-}
-
-static void setDocComment(nlohmann::json &target, const std::string &doc, const std::string &indent)
-{
-    const std::string formatted = formatSwiftDocComment(doc, indent);
-    if (!formatted.empty())
-        target["docComment"] = formatted;
-}
-
-static nlohmann::json toSwiftFieldContext(const tpp::FieldDef &field, const std::string &docIndent)
-{
-    nlohmann::json fieldJson;
-    fieldJson["name"] = field.name;
-    fieldJson["type"] = codegen::typeKindToContext(*field.type);
-    fieldJson["recursive"] = field.recursive;
-    setDocComment(fieldJson, field.doc, docIndent);
-    return fieldJson;
-}
-
-static nlohmann::json toSwiftStructContext(
-    const tpp::StructDef &structDef,
-    const std::string &typeDocIndent,
-    const std::string &fieldDocIndent)
-{
-    nlohmann::json structJson;
-    structJson["name"] = structDef.name;
-    structJson["fields"] = nlohmann::json::array();
-    for (const auto &field : structDef.fields)
-        structJson["fields"].push_back(toSwiftFieldContext(field, fieldDocIndent));
-    setDocComment(structJson, structDef.doc, typeDocIndent);
-    return structJson;
-}
-
-static nlohmann::json toSwiftVariantContext(const tpp::VariantDef &variant, const std::string &docIndent)
-{
-    nlohmann::json variantJson;
-    variantJson["tag"] = variant.tag;
-    if (variant.payload)
-        variantJson["payload"] = codegen::typeKindToContext(*variant.payload);
-    setDocComment(variantJson, variant.doc, docIndent);
-    return variantJson;
-}
-
-static nlohmann::json toSwiftEnumContext(
-    const tpp::EnumDef &enumDef,
-    const std::string &typeDocIndent,
-    const std::string &variantDocIndent)
-{
-    nlohmann::json enumJson;
-    enumJson["name"] = enumDef.name;
-    enumJson["variants"] = nlohmann::json::array();
-    for (const auto &variant : enumDef.variants)
-        enumJson["variants"].push_back(toSwiftVariantContext(variant, variantDocIndent));
-    setDocComment(enumJson, enumDef.doc, typeDocIndent);
-    return enumJson;
+    return codegen::formatLineDocComment(doc, indent, "///");
 }
 
 static nlohmann::json buildSwiftSourceInput(const tpp::IR &ir, bool nested)
 {
-    nlohmann::json inputJson;
-    inputJson["enums"] = nlohmann::json::array();
-    inputJson["structs"] = nlohmann::json::array();
-
-    const std::string typeDocIndent = nested ? "    " : "";
-    const std::string memberDocIndent = nested ? "        " : "    ";
-
-    for (const auto &enumDef : ir.enums)
-        inputJson["enums"].push_back(toSwiftEnumContext(enumDef, typeDocIndent, memberDocIndent));
-    for (const auto &structDef : ir.structs)
-        inputJson["structs"].push_back(toSwiftStructContext(structDef, typeDocIndent, memberDocIndent));
-
-    return inputJson;
+    return codegen::buildSourceInput(ir, nested, formatSwiftDocComment);
 }
 
 enum class Mode

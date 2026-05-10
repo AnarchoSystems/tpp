@@ -11,6 +11,7 @@ inline nlohmann::json _tpp_j(const _TppT& v) { return nlohmann::json(v); }
 template<typename _TppT>
 inline nlohmann::json _tpp_j(const std::unique_ptr<_TppT>& v) { return v ? nlohmann::json(*v) : nlohmann::json(); }
 
+struct IfConditionKind;
 struct SourcePosition;
 struct SourceRange;
 struct ExprPathSegment;
@@ -40,6 +41,25 @@ struct IR;
 struct TypeKind;
 struct Instruction;
 
+struct IfConditionKind_Bool
+{
+    friend void to_json(nlohmann::json& j, const IfConditionKind_Bool&) { j = nlohmann::json::object(); }
+    friend void from_json(const nlohmann::json&, IfConditionKind_Bool&) {}
+};
+struct IfConditionKind_Presence
+{
+    friend void to_json(nlohmann::json& j, const IfConditionKind_Presence&) { j = nlohmann::json::object(); }
+    friend void from_json(const nlohmann::json&, IfConditionKind_Presence&) {}
+};
+struct IfConditionKind
+{
+    using Value = std::variant<IfConditionKind_Bool, IfConditionKind_Presence>;
+    Value value;
+    static std::string tpp_typedefs() noexcept
+    {
+        return "enum IfConditionKind\n{\n    Bool,\n    Presence\n}";
+    }
+};
 struct SourcePosition
 {
     int line;
@@ -133,6 +153,7 @@ struct ForInstr
     std::string varName;
     std::optional<std::string> enumeratorName;
     ExprInfo collection;
+    std::unique_ptr<TypeKind> elementType;
     std::unique_ptr<std::vector<Instruction>> body;
     std::optional<std::string> sep;
     std::optional<std::string> followedBy;
@@ -141,7 +162,7 @@ struct ForInstr
     std::optional<std::string> alignSpec;
     static std::string tpp_typedefs() noexcept
     {
-        return "/// For loop over a collection.\nstruct ForInstr\n{\n    varName : string;\n    enumeratorName : optional<string>;\n    collection : ExprInfo;\n    body : list<Instruction>;\n    sep : optional<string>;\n    followedBy : optional<string>;\n    precededBy : optional<string>;\n    policy : string;\n    alignSpec : optional<string>;\n}";
+        return "/// For loop over a collection.\nstruct ForInstr\n{\n    varName : string;\n    enumeratorName : optional<string>;\n    collection : ExprInfo;\n    elementType : TypeKind;\n    body : list<Instruction>;\n    sep : optional<string>;\n    followedBy : optional<string>;\n    precededBy : optional<string>;\n    policy : string;\n    alignSpec : optional<string>;\n}";
     }
 };
 struct CaseBinding
@@ -175,12 +196,13 @@ Conditional.
 struct IfInstr
 {
     ExprInfo condExpr;
+    IfConditionKind conditionKind;
     bool negated;
     std::unique_ptr<std::vector<Instruction>> thenBody;
     std::unique_ptr<std::vector<Instruction>> elseBody;
     static std::string tpp_typedefs() noexcept
     {
-        return "/// Conditional.\nstruct IfInstr\n{\n    condExpr : ExprInfo;\n    negated : bool;\n    thenBody : list<Instruction>;\n    elseBody : list<Instruction>;\n}";
+        return "/// Conditional.\nstruct IfInstr\n{\n    condExpr : ExprInfo;\n    conditionKind : IfConditionKind;\n    negated : bool;\n    thenBody : list<Instruction>;\n    elseBody : list<Instruction>;\n}";
     }
 };
 /**
@@ -292,9 +314,10 @@ struct PolicyRequire
 {
     std::string regex;
     std::string replace;
+    std::optional<std::string> compiledReplace;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct PolicyRequire\n{\n    regex : string;\n    replace : string;\n}";
+        return "struct PolicyRequire\n{\n    regex : string;\n    replace : string;\n    compiledReplace : optional<string>;\n}";
     }
 };
 struct PolicyOutputFilter
@@ -326,6 +349,7 @@ struct PolicyRejectIf
 struct PolicyDef
 {
     std::string tag;
+    std::string identifier;
     std::optional<PolicyLength> length;
     std::optional<PolicyRejectIf> rejectIf;
     std::vector<PolicyRequire> require;
@@ -333,7 +357,7 @@ struct PolicyDef
     std::vector<PolicyOutputFilter> outputFilter;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct PolicyDef\n{\n    tag : string;\n    length : optional<PolicyLength>;\n    rejectIf : optional<PolicyRejectIf>;\n    require : list<PolicyRequire>;\n    replacements : list<PolicyReplacement>;\n    outputFilter : list<PolicyOutputFilter>;\n}";
+        return "struct PolicyDef\n{\n    tag : string;\n    identifier : string;\n    length : optional<PolicyLength>;\n    rejectIf : optional<PolicyRejectIf>;\n    require : list<PolicyRequire>;\n    replacements : list<PolicyReplacement>;\n    outputFilter : list<PolicyOutputFilter>;\n}";
     }
 };
 struct IR
@@ -394,6 +418,8 @@ struct Instruction
     }
 };
 
+inline void from_json(const nlohmann::json& j, IfConditionKind& v);
+inline void to_json(nlohmann::json& j, const IfConditionKind& v);
 inline void from_json(const nlohmann::json& j, TypeKind& v);
 inline void to_json(nlohmann::json& j, const TypeKind& v);
 inline void from_json(const nlohmann::json& j, Instruction& v);
@@ -451,6 +477,20 @@ inline void to_json(nlohmann::json& j, const PolicyDef& v);
 inline void from_json(const nlohmann::json& j, IR& v);
 inline void to_json(nlohmann::json& j, const IR& v);
 
+inline void from_json(const nlohmann::json& j, IfConditionKind& v)
+{
+    if (j.contains("Bool")) v.value.emplace<0>();
+
+    else if (j.contains("Presence")) v.value.emplace<1>();
+}
+inline void to_json(nlohmann::json& j, const IfConditionKind& v)
+{
+    const char* _tags[] = {"Bool", "Presence"};
+    std::visit([&](const auto& arg) {
+        j = nlohmann::json::object();
+        j[_tags[v.value.index()]] = _tpp_j(arg);
+    }, v.value);
+}
 inline void from_json(const nlohmann::json& j, TypeKind& v)
 {
     if (j.contains("Str")) v.value.emplace<0>();
@@ -583,6 +623,7 @@ inline void from_json(const nlohmann::json& j, ForInstr& v)
     v.varName = j.at("varName").get<std::string>();
     if (j.contains("enumeratorName") && !j.at("enumeratorName").is_null()) v.enumeratorName = j.at("enumeratorName").get<std::string>();
     v.collection = j.at("collection").get<ExprInfo>();
+    v.elementType = std::make_unique<TypeKind>(j.at("elementType").get<TypeKind>());
     v.body = std::make_unique<std::vector<Instruction>>(j.at("body").get<std::vector<Instruction>>());
     if (j.contains("sep") && !j.at("sep").is_null()) v.sep = j.at("sep").get<std::string>();
     if (j.contains("followedBy") && !j.at("followedBy").is_null()) v.followedBy = j.at("followedBy").get<std::string>();
@@ -596,6 +637,7 @@ inline void to_json(nlohmann::json& j, const ForInstr& v)
     j["varName"] = v.varName;
     if (v.enumeratorName.has_value()) j["enumeratorName"] = *v.enumeratorName;
     j["collection"] = v.collection;
+    j["elementType"] = *v.elementType;
     j["body"] = *v.body;
     if (v.sep.has_value()) j["sep"] = *v.sep;
     if (v.followedBy.has_value()) j["followedBy"] = *v.followedBy;
@@ -636,6 +678,7 @@ inline void to_json(nlohmann::json& j, const CaseInstr& v)
 inline void from_json(const nlohmann::json& j, IfInstr& v)
 {
     v.condExpr = j.at("condExpr").get<ExprInfo>();
+    v.conditionKind = j.at("conditionKind").get<IfConditionKind>();
     v.negated = j.at("negated").get<bool>();
     v.thenBody = std::make_unique<std::vector<Instruction>>(j.at("thenBody").get<std::vector<Instruction>>());
     v.elseBody = std::make_unique<std::vector<Instruction>>(j.at("elseBody").get<std::vector<Instruction>>());
@@ -644,6 +687,7 @@ inline void to_json(nlohmann::json& j, const IfInstr& v)
 {
     j = nlohmann::json{};
     j["condExpr"] = v.condExpr;
+    j["conditionKind"] = v.conditionKind;
     j["negated"] = v.negated;
     j["thenBody"] = *v.thenBody;
     j["elseBody"] = *v.elseBody;
@@ -787,12 +831,14 @@ inline void from_json(const nlohmann::json& j, PolicyRequire& v)
 {
     v.regex = j.at("regex").get<std::string>();
     v.replace = j.at("replace").get<std::string>();
+    if (j.contains("compiledReplace") && !j.at("compiledReplace").is_null()) v.compiledReplace = j.at("compiledReplace").get<std::string>();
 }
 inline void to_json(nlohmann::json& j, const PolicyRequire& v)
 {
     j = nlohmann::json{};
     j["regex"] = v.regex;
     j["replace"] = v.replace;
+    if (v.compiledReplace.has_value()) j["compiledReplace"] = *v.compiledReplace;
 }
 inline void from_json(const nlohmann::json& j, PolicyOutputFilter& v)
 {
@@ -828,6 +874,7 @@ inline void to_json(nlohmann::json& j, const PolicyRejectIf& v)
 inline void from_json(const nlohmann::json& j, PolicyDef& v)
 {
     v.tag = j.at("tag").get<std::string>();
+    v.identifier = j.at("identifier").get<std::string>();
     if (j.contains("length") && !j.at("length").is_null()) v.length = j.at("length").get<PolicyLength>();
     if (j.contains("rejectIf") && !j.at("rejectIf").is_null()) v.rejectIf = j.at("rejectIf").get<PolicyRejectIf>();
     v.require = j.at("require").get<std::vector<PolicyRequire>>();
@@ -838,6 +885,7 @@ inline void to_json(nlohmann::json& j, const PolicyDef& v)
 {
     j = nlohmann::json{};
     j["tag"] = v.tag;
+    j["identifier"] = v.identifier;
     if (v.length.has_value()) j["length"] = *v.length;
     if (v.rejectIf.has_value()) j["rejectIf"] = *v.rejectIf;
     j["require"] = v.require;

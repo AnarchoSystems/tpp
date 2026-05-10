@@ -33,6 +33,12 @@ enum TypeKind
     Optional(TypeKind)
 }
 
+enum IfConditionKind
+{
+    Bool,
+    Presence
+}
+
 // ── Instruction types (backend-neutral) ─────────────────────────────────────
 
 /// One named field access in an expression path.
@@ -83,6 +89,7 @@ struct ForInstr
     varName : string;
     enumeratorName : optional<string>;
     collection : ExprInfo;
+    elementType : TypeKind;
     body : list<Instruction>;
     sep : optional<string>;
     followedBy : optional<string>;
@@ -112,6 +119,7 @@ struct CaseInstr
 struct IfInstr
 {
     condExpr : ExprInfo;
+    conditionKind : IfConditionKind;
     negated : bool;
     thenBody : list<Instruction>;
     elseBody : list<Instruction>;
@@ -214,6 +222,7 @@ struct PolicyRequire
 {
     regex : string;
     replace : string;
+    compiledReplace : optional<string>;
 }
 
 struct PolicyOutputFilter
@@ -236,6 +245,7 @@ struct PolicyRejectIf
 struct PolicyDef
 {
     tag : string;
+    identifier : string;
     length : optional<PolicyLength>;
     rejectIf : optional<PolicyRejectIf>;
     require : list<PolicyRequire>;

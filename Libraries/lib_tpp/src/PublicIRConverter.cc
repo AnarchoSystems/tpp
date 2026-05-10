@@ -1,7 +1,23 @@
 #include "tpp/PublicIRConverter.h"
 
+#include <cctype>
+
 namespace tpp
 {
+
+namespace
+{
+
+std::string policy_identifier(const std::string &tag)
+{
+    std::string identifier;
+    identifier.reserve(tag.size());
+    for (unsigned char c : tag)
+        identifier += std::isalnum(c) ? static_cast<char>(c) : '_';
+    return identifier;
+}
+
+} // namespace
 
 std::optional<SourceRange> to_public_range(const Range &range, bool include)
 {
@@ -121,6 +137,7 @@ PolicyDef to_public_policy(const compiler::Policy &policy)
 {
     PolicyDef out;
     out.tag = policy.tag;
+    out.identifier = policy_identifier(policy.tag);
     if (policy.length.has_value())
     {
         PolicyLength length;
@@ -140,6 +157,8 @@ PolicyDef to_public_policy(const compiler::Policy &policy)
         PolicyRequire requireDef;
         requireDef.regex = require.regex;
         requireDef.replace = require.replace;
+        if (!require.compiled_replace.empty())
+            requireDef.compiledReplace = require.compiled_replace;
         out.require.push_back(std::move(requireDef));
     }
     for (const auto &replacement : policy.replacements)

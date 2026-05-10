@@ -15,6 +15,7 @@
 #include <iostream>
 #include <iterator>
 #include <map>
+#include <sstream>
 
 namespace codegen {
 
@@ -193,36 +194,170 @@ inline std::string stringLiteral(const std::string &s)
     return result + "\"";
 }
 
+inline std::vector<std::string> splitDocLines(const std::string &doc)
+{
+    std::vector<std::string> lines;
+    if (doc.empty())
+        return lines;
+
+    size_t start = 0;
+    while (start <= doc.size())
+    {
+        size_t end = doc.find('\n', start);
+        std::string line = end == std::string::npos ? doc.substr(start) : doc.substr(start, end - start);
+        if (!line.empty() && line.back() == '\r')
+            line.pop_back();
+        lines.push_back(std::move(line));
+        if (end == std::string::npos)
+            break;
+        start = end + 1;
+    }
+
+    return lines;
+}
+
+inline std::string formatBlockDocComment(
+    const std::string &doc,
+    const std::string &indent,
+    const std::string &linePrefix = "")
+{
+    auto lines = splitDocLines(doc);
+    if (lines.empty())
+        return {};
+
+    std::ostringstream formatted;
+    formatted << indent << "/**\n";
+    for (const auto &line : lines)
+    {
+        formatted << indent;
+        if (!linePrefix.empty())
+        {
+            formatted << linePrefix;
+            if (!line.empty())
+                formatted << ' ';
+        }
+        formatted << line << "\n";
+    }
+    formatted << indent << " */\n";
+    return formatted.str();
+}
+
+inline std::string formatLineDocComment(
+    const std::string &doc,
+    const std::string &indent,
+    const std::string &linePrefix)
+{
+    auto lines = splitDocLines(doc);
+    if (lines.empty())
+        return {};
+
+    std::ostringstream formatted;
+    for (const auto &line : lines)
+    {
+        formatted << indent << linePrefix;
+        if (!line.empty())
+            formatted << ' ' << line;
+        formatted << "\n";
+    }
+    return formatted.str();
+}
+
+template <typename FormatDocComment>
+inline void setDocComment(
+    nlohmann::json &target,
+    const std::string &doc,
+    const std::string &indent,
+    FormatDocComment &&formatDocComment)
+{
+    const std::string formatted = formatDocComment(doc, indent);
+    if (!formatted.empty())
+        target["docComment"] = formatted;
+}
+
+template <typename FormatDocComment>
+inline nlohmann::json sourceFieldContext(
+    const tpp::FieldDef &field,
+    const std::string &docIndent,
+    FormatDocComment &&formatDocComment)
+{
+    nlohmann::json fieldJson;
+    fieldJson["name"] = field.name;
+    fieldJson["type"] = typeKindToContext(*field.type);
+    fieldJson["recursive"] = field.recursive;
+    setDocComment(fieldJson, field.doc, docIndent, formatDocComment);
+    return fieldJson;
+}
+
+template <typename FormatDocComment>
+inline nlohmann::json sourceStructContext(
+    const tpp::StructDef &structDef,
+    const std::string &typeDocIndent,
+    const std::string &fieldDocIndent,
+    FormatDocComment &&formatDocComment)
+{
+    nlohmann::json structJson;
+    structJson["name"] = structDef.name;
+    structJson["fields"] = nlohmann::json::array();
+    for (const auto &field : structDef.fields)
+        structJson["fields"].push_back(sourceFieldContext(field, fieldDocIndent, formatDocComment));
+    setDocComment(structJson, structDef.doc, typeDocIndent, formatDocComment);
+    return structJson;
+}
+
+template <typename FormatDocComment>
+inline nlohmann::json sourceVariantContext(
+    const tpp::VariantDef &variant,
+    const std::string &docIndent,
+    FormatDocComment &&formatDocComment)
+{
+    nlohmann::json variantJson;
+    variantJson["tag"] = variant.tag;
+    if (variant.payload)
+        variantJson["payload"] = typeKindToContext(*variant.payload);
+    setDocComment(variantJson, variant.doc, docIndent, formatDocComment);
+    return variantJson;
+}
+
+template <typename FormatDocComment>
+inline nlohmann::json sourceEnumContext(
+    const tpp::EnumDef &enumDef,
+    const std::string &typeDocIndent,
+    const std::string &variantDocIndent,
+    FormatDocComment &&formatDocComment)
+{
+    nlohmann::json enumJson;
+    enumJson["name"] = enumDef.name;
+    enumJson["variants"] = nlohmann::json::array();
+    for (const auto &variant : enumDef.variants)
+        enumJson["variants"].push_back(sourceVariantContext(variant, variantDocIndent, formatDocComment));
+    setDocComment(enumJson, enumDef.doc, typeDocIndent, formatDocComment);
+    return enumJson;
+}
+
+template <typename FormatDocComment>
+inline nlohmann::json buildSourceInput(
+    const tpp::IR &ir,
+    bool nested,
+    FormatDocComment &&formatDocComment)
+{
+    nlohmann::json inputJson;
+    inputJson["enums"] = nlohmann::json::array();
+    inputJson["structs"] = nlohmann::json::array();
+
+    const std::string typeDocIndent = nested ? "    " : "";
+    const std::string memberDocIndent = nested ? "        " : "    ";
+
+    for (const auto &enumDef : ir.enums)
+        inputJson["enums"].push_back(sourceEnumContext(enumDef, typeDocIndent, memberDocIndent, formatDocComment));
+    for (const auto &structDef : ir.structs)
+        inputJson["structs"].push_back(sourceStructContext(structDef, typeDocIndent, memberDocIndent, formatDocComment));
+
+    return inputJson;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Shared instruction IR → template context conversion
 // ═══════════════════════════════════════════════════════════════════════════════
-
-/// Deep-clone a TypeKind via JSON round-trip (TypeKind is non-copyable due to unique_ptr).
-inline tpp::TypeKind cloneTypeKind(const tpp::TypeKind &t)
-{
-    nlohmann::json j;
-    to_json(j, t);
-    tpp::TypeKind result;
-    from_json(j, result);
-    return result;
-}
-
-/// Compare two TypeKind values for equality via JSON serialization.
-inline bool typeKindEqual(const tpp::TypeKind &a, const tpp::TypeKind &b)
-{
-    nlohmann::json ja, jb;
-    to_json(ja, a);
-    to_json(jb, b);
-    return ja == jb;
-}
-
-/// Extract element type from a collection's List TypeKind.
-inline tpp::TypeKind getElemType(const tpp::TypeKind &t)
-{
-    if (t.value.index() == 4) // List
-        return cloneTypeKind(*std::get<4>(t.value));
-    return cloneTypeKind(t);
-}
 
 struct CapturedBlockInfo
 {
@@ -275,8 +410,15 @@ inline std::vector<std::vector<const tpp::Instruction*>> splitCells(
     return cells;
 }
 
-/// Sanitize a policy tag into a valid identifier (replace non-alnum with _).
-inline std::string sanitizeIdentifier(const std::string &tag);
+inline const tpp::PolicyDef *findPolicyDefByTag(const tpp::IR &ir, const std::string &tag)
+{
+    for (const auto &policy : ir.policies)
+    {
+        if (policy.tag == tag)
+            return &policy;
+    }
+    return nullptr;
+}
 
 /// Build a PolicyRef from the active policy state.
 inline std::optional<PolicyRef> makePolicyRef(
@@ -285,8 +427,11 @@ inline std::optional<PolicyRef> makePolicyRef(
     if (ir.policies.empty()) return std::nullopt;
     if (!activePolicy.empty() && activePolicy != "none")
     {
+        const auto *policy = findPolicyDefByTag(ir, activePolicy);
+        if (!policy)
+            return std::nullopt;
         PolicyRef ref;
-        ref.value.emplace<0>(sanitizeIdentifier(activePolicy));
+        ref.value.emplace<0>(policy->identifier);
         return ref;
     }
     if (activePolicy == "none")
@@ -315,11 +460,25 @@ struct ConvertConfig
 
 inline RenderExprInfo exprInfoToContext(const tpp::ExprInfo &expr)
 {
+    RenderValueRef valueRef;
+    valueRef.path = expr.bindingName;
+    for (const auto &segment : expr.segments)
+        valueRef.path += "." + segment.field;
+    valueRef.isRecursive = expr.isRecursive;
+    valueRef.isOptional = expr.isOptional;
+
     RenderExprInfo result;
+    result.ref = std::move(valueRef);
+    result.type = std::make_unique<RenderTypeKind>(typeKindToContext(*expr.type));
+    return result;
+}
+
+inline RenderValueRef exprValueRefToContext(const tpp::ExprInfo &expr)
+{
+    RenderValueRef result;
     result.path = expr.bindingName;
     for (const auto &segment : expr.segments)
         result.path += "." + segment.field;
-    result.type = std::make_unique<RenderTypeKind>(typeKindToContext(*expr.type));
     result.isRecursive = expr.isRecursive;
     result.isOptional = expr.isOptional;
     return result;
@@ -455,8 +614,8 @@ inline RenderInstruction convertInstruction(
             }
             else if (!effPol.empty())
             {
-                data.staticPolicyLit = stringLiteral(effPol);
-                data.staticPolicyId = sanitizeIdentifier(effPol);
+                if (const auto *policy = findPolicyDefByTag(ir, effPol))
+                    data.staticPolicyId = policy->identifier;
             }
             else if (!ir.policies.empty())
             {
@@ -486,16 +645,13 @@ inline RenderInstruction convertInstruction(
         {
             int s = scope++;
             std::string pol = arg->policy.empty() ? activePolicy : arg->policy;
-            auto elemType = getElemType(*arg->collection.type);
             const bool preserveCapturedBlock = cfg.preserveCapturedBlockInstructions;
             const auto bodyIndent = analyzeCapturedBlock(*arg->body);
 
             auto forData = std::make_unique<ForData>();
             forData->scopeId = s;
-            forData->collPath = exprInfoPath(arg->collection);
-            forData->collIsRecursive = arg->collection.isRecursive;
-            forData->collIsOptional = arg->collection.isOptional;
-            forData->elemType = std::make_unique<RenderTypeKind>(typeKindToContext(elemType));
+            forData->collection = exprValueRefToContext(arg->collection);
+            forData->elemType = std::make_unique<RenderTypeKind>(typeKindToContext(*arg->elementType));
             forData->varName = arg->varName;
             forData->enumeratorName = arg->enumeratorName;
             if (arg->sep.has_value())
@@ -506,8 +662,6 @@ inline RenderInstruction convertInstruction(
                 forData->precededByLit = stringLiteral(*arg->precededBy);
             forData->capturesBody = bodyIndent.wrapped;
             forData->bodyBlockIndentInParentBlock = bodyIndent.blockIndentInParentBlock;
-            forData->alignSpec = arg->alignSpec;
-            forData->singleAlignChar = arg->alignSpec.has_value() && arg->alignSpec->size() == 1;
 
             if (arg->alignSpec.has_value())
             {
@@ -554,7 +708,7 @@ inline RenderInstruction convertInstruction(
 
             auto ifData = std::make_unique<IfData>();
             ifData->condPath = exprInfoPath(arg->condExpr);
-            ifData->condIsBool = arg->condExpr.type->value.index() == 2;
+            ifData->condIsBool = arg->conditionKind.value.index() == 0;
             ifData->isNegated = arg->negated;
 
             auto thenVec = std::make_unique<std::vector<RenderInstruction>>();
@@ -583,23 +737,7 @@ inline RenderInstruction convertInstruction(
             const bool preserveCapturedBlock = cfg.preserveCapturedBlockInstructions;
             std::string pol = arg->policy.empty() ? activePolicy : arg->policy;
 
-            // Unwrap OptionalType to find the underlying NamedType for enum lookup
-            const tpp::TypeKind *switchType = arg->expr.type.get();
-            if (switchType->value.index() == 5)
-            {
-                switchType = std::get<5>(switchType->value).get();
-            }
-
-            const tpp::EnumDef *enumDef = nullptr;
-            if (switchType->value.index() == 3)
-            {
-                const auto &typeName = std::get<3>(switchType->value);
-                for (const auto &e : ir.enums)
-                    if (e.name == typeName) { enumDef = &e; break; }
-            }
-
             auto casesVec = std::make_unique<std::vector<CaseData>>();
-            bool first = true;
             for (const auto &c : *arg->cases)
             {
                 const auto caseIndent = analyzeCapturedBlock(*c.body);
@@ -610,19 +748,6 @@ inline RenderInstruction convertInstruction(
                 for (size_t index = caseFirstIndex; index < casePastLastIndex; ++index)
                     caseBody->push_back(convertInstruction((*c.body)[index], pol, scope, ir, cfg));
 
-                int variantIndex = -1;
-                if (enumDef)
-                {
-                    for (int vi = 0; vi < (int)enumDef->variants.size(); ++vi)
-                    {
-                        if (enumDef->variants[vi].tag == c.tag)
-                        {
-                            variantIndex = vi;
-                            break;
-                        }
-                    }
-                }
-
                 CaseData caseData;
                 caseData.tag = c.tag;
                 caseData.tagLit = stringLiteral(c.tag);
@@ -631,32 +756,16 @@ inline RenderInstruction convertInstruction(
                     : std::nullopt;
                 if (!caseBody->empty())
                     caseData.body = std::move(caseBody);
-                caseData.isFirst = first;
-                caseData.variantIndex = variantIndex;
+                caseData.variantIndex = c.variantIndex;
                 caseData.isRecursivePayload = c.payloadIsRecursive;
                 if (c.payloadType)
                     caseData.payloadType = std::make_unique<RenderTypeKind>(typeKindToContext(*c.payloadType));
-                else if (caseData.bindingName.has_value() && enumDef)
-                {
-                    // Derive payload type from enum when IR omits it (e.g. optional-wrapped switch)
-                    for (const auto &ev : enumDef->variants)
-                        if (ev.tag == c.tag && ev.payload)
-                        { caseData.payloadType = std::make_unique<RenderTypeKind>(typeKindToContext(*ev.payload)); break; }
-                }
 
                 casesVec->push_back(std::move(caseData));
-                first = false;
             }
 
-            std::string enumTypeName;
-            if (switchType->value.index() == 3)
-                enumTypeName = std::get<3>(switchType->value);
-
             auto switchData = std::make_unique<SwitchData>();
-            switchData->exprPath = exprInfoPath(arg->expr);
-            switchData->exprIsRecursive = arg->expr.isRecursive;
-            switchData->exprIsOptional = arg->expr.isOptional;
-            switchData->enumTypeName = enumTypeName;
+            switchData->expr = exprValueRefToContext(arg->expr);
             switchData->cases = std::move(casesVec);
 
             RenderInstruction result;
@@ -665,11 +774,9 @@ inline RenderInstruction convertInstruction(
         }
         else if constexpr (std::is_same_v<T, tpp::CallInstr>)
         {
-            std::vector<CallArgInfo> argsVec;
+            std::vector<RenderValueRef> argsVec;
             for (size_t i = 0; i < arg.arguments.size(); ++i)
-                argsVec.push_back({exprInfoPath(arg.arguments[i]),
-                                   arg.arguments[i].isRecursive,
-                                   arg.arguments[i].isOptional});
+                argsVec.push_back(exprValueRefToContext(arg.arguments[i]));
 
             CallData callData;
             callData.functionName = cfg.functionPrefix + arg.functionName;
@@ -688,24 +795,15 @@ inline RenderInstruction convertInstruction(
     }, instr.value);
 }
 
-/// Sanitize a policy tag into a valid identifier (replace non-alnum with _).
-inline std::string sanitizeIdentifier(const std::string &tag)
-{
-    std::string id;
-    for (char c : tag)
-        id += (std::isalnum(c) ? c : '_');
-    return id;
-}
-
 /// Build the policy context.
-inline std::vector<PolicyInfo> buildPolicyContext(const tpp::IR &ir, const std::string &nullLiteral)
+inline std::vector<PolicyInfo> buildPolicyContext(const tpp::IR &ir)
 {
     std::vector<PolicyInfo> policies;
     for (const auto &pol : ir.policies)
     {
         PolicyInfo pj;
         pj.tagLit = stringLiteral(pol.tag);
-        pj.identifier = sanitizeIdentifier(pol.tag);
+        pj.identifier = pol.identifier;
         if (pol.length.has_value() && pol.length->min.has_value())
             pj.minVal = std::to_string(*pol.length->min);
         if (pol.length.has_value() && pol.length->max.has_value())
@@ -720,7 +818,7 @@ inline std::vector<PolicyInfo> buildPolicyContext(const tpp::IR &ir, const std::
         for (const auto &r : pol.require)
             reqArr.push_back({
                 stringLiteral(r.regex),
-                !r.replace.empty() ? std::make_optional(stringLiteral(tpp::precompile_replace(r.replace))) : std::nullopt
+                r.compiledReplace.has_value() ? std::make_optional(stringLiteral(*r.compiledReplace)) : std::nullopt
             });
         if (!reqArr.empty())
             pj.require = std::move(reqArr);
@@ -748,8 +846,7 @@ inline std::vector<PolicyInfo> buildPolicyContext(const tpp::IR &ir, const std::
 
 struct BuildFunctionsConfig
 {
-    std::string nullLiteral;
-    std::string staticModifier;
+    bool needsStatic = false;
     bool callNeedsTry = false;
     bool preserveCapturedBlockInstructions = false;
     std::vector<std::string> includes;
@@ -757,8 +854,7 @@ struct BuildFunctionsConfig
     static BuildFunctionsConfig forCpp(const std::vector<std::string> &includes = {})
     {
         BuildFunctionsConfig cfg;
-        cfg.nullLiteral = "std::nullopt";
-        cfg.staticModifier = "";
+        cfg.needsStatic = false;
         cfg.callNeedsTry = false;
         cfg.preserveCapturedBlockInstructions = true;
         cfg.includes = includes;
@@ -768,8 +864,7 @@ struct BuildFunctionsConfig
     static BuildFunctionsConfig forJava()
     {
         BuildFunctionsConfig cfg;
-        cfg.nullLiteral = "null";
-        cfg.staticModifier = "static ";
+        cfg.needsStatic = true;
         cfg.callNeedsTry = false;
         cfg.preserveCapturedBlockInstructions = true;
         return cfg;
@@ -778,8 +873,7 @@ struct BuildFunctionsConfig
     static BuildFunctionsConfig forSwift(const std::string &namespaceName, bool policiesPresent)
     {
         BuildFunctionsConfig cfg;
-        cfg.nullLiteral = "nil";
-        cfg.staticModifier = namespaceName.empty() ? "" : "static ";
+        cfg.needsStatic = !namespaceName.empty();
         cfg.callNeedsTry = policiesPresent;
         cfg.preserveCapturedBlockInstructions = true;
         return cfg;
@@ -828,9 +922,9 @@ inline RenderFunctionsInput buildFunctionsContext(
     RenderFunctionsInput result;
     result.functions = std::move(functions);
     if (policiesPresent)
-        result.policies = buildPolicyContext(ir, bfCfg.nullLiteral);
+        result.policies = buildPolicyContext(ir);
     result.functionPrefix = functionPrefix;
-    result.staticModifier = bfCfg.staticModifier;
+    result.needsStatic = bfCfg.needsStatic;
     if (!bfCfg.includes.empty())
         result.includes = bfCfg.includes;
     if (!namespaceName.empty())

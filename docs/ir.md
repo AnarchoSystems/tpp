@@ -64,6 +64,13 @@ The IR is produced only after the compiler has already done the language-level w
 
 That means a backend does not need to rediscover field access rules, optional semantics, switch structure, or policy declarations from raw source files. Those concerns have already been compiled into the IR.
 
+More concretely, the compiler now owns and serializes the semantic facts that backends and the runtime actually consume:
+
+- `ForInstr.elementType` tells consumers the resolved iteration element type directly.
+- `IfInstr.conditionKind` distinguishes boolean conditions from presence checks, so consumers do not infer control-flow semantics from raw types.
+- `CaseInstr.variantIndex` records enum declaration order, and `CaseInstr.payloadType` is populated for payload-bearing cases.
+- `PolicyDef.identifier` and `PolicyRequire.compiledReplace` carry the backend/runtime-ready policy metadata that used to be recomputed downstream.
+
 What the IR does not promise is a separately versioned long-term stability guarantee yet. It is a real toolchain contract, but it still evolves together with the compiler.
 
 ---
@@ -95,6 +102,15 @@ In JSON, a `TypeKind` is encoded as a single-key object where the key is the tag
 {"List": {"Named": "Item"}}
 {"Optional": {"Int": {}}}
 ```
+
+### IfConditionKind
+
+Conditional instructions carry a dedicated condition kind so consumers can distinguish `@if flag@` from `@if maybeValue@` without re-deriving that meaning from the expression type.
+
+| Tag | Description |
+|---|---|
+| `Bool` | The condition is a boolean expression and should use boolean truth semantics |
+| `Presence` | The condition is an optional/presence check and should use nil/null presence semantics |
 
 ---
 
@@ -196,12 +212,13 @@ All expression references in instructions carry resolved type information:
 
 | Field | Type | Description |
 |---|---|---|
-| `path` | string | Dot-separated field access path (e.g. `"item.name"`) |
+| `bindingName` | string | Root binding name (for example `"item"`) |
+| `segments` | array of `ExprPathSegment` | Ordered field-access segments after the root binding |
 | `type` | [TypeKind](#typekind) | Resolved type of the expression |
 | `isRecursive` | bool | Whether generated code must dereference recursive storage before using the value |
 | `isOptional` | bool | Whether generated code must unwrap optional storage before using the value |
 
-`ExprInfo` is intentionally execution-oriented. It records the resolved access path, the resolved type, and the storage annotations needed by downstream runtimes and code generators. Consumers should treat it as a compiled access plan, not as a lossless source-level expression tree.
+`ExprInfo` is intentionally execution-oriented. `bindingName` plus `segments` form the compiled access path, and the node also carries the resolved type and storage annotations needed by downstream runtimes and code generators. Consumers should treat it as a compiled access plan, not as a lossless source-level expression tree.
 
 ### EmitInstr
 
@@ -229,6 +246,7 @@ Loop over each element of a collection expression.
 | `varName` | string | Loop variable name |
 | `enumeratorName` | string, optional | Enumerator variable for the loop (e.g. `"_enum"`) |
 | `collection` | [ExprInfo](#exprinfo) | The collection to iterate |
+| `elementType` | [TypeKind](#typekind) | Compiler-resolved element type yielded on each iteration |
 | `body` | array of Instruction | Loop body |
 | `sep` | string, optional | Separator text emitted between iterations |
 | `followedBy` | string, optional | Text emitted after the last iteration if the collection is non-empty |
@@ -245,6 +263,7 @@ Conditional emission.
 | Field | Type | Description |
 |---|---|---|
 | `condExpr` | [ExprInfo](#exprinfo) | The condition expression (must be `Bool` or `Optional`) |
+| `conditionKind` | [IfConditionKind](#ifconditionkind) | Compiler-resolved condition semantics |
 | `negated` | bool | Whether the condition is negated (`@if not …@`) |
 | `thenBody` | array of Instruction | Body when condition is true |
 | `elseBody` | array of Instruction | Body when condition is false (empty if no else branch) |
@@ -267,9 +286,10 @@ The public IR does not carry a separate default branch. If the source switch con
 |---|---|---|
 | `tag` | string | Variant tag to match |
 | `bindingName` | [CaseBinding](#casebinding) or null | Explicit payload binding information, if this case binds the payload |
-| `payloadType` | [TypeKind](#typekind) or null | Type of the payload (null for tag-only variants) |
+| `payloadType` | [TypeKind](#typekind) or null | Compiler-resolved payload type (null for tag-only variants) |
 | `payloadIsRecursive` | bool | Whether the payload is stored behind recursive indirection in generated code |
 | `body` | array of Instruction | Case body |
+| `variantIndex` | int | Zero-based enum declaration index for the matched variant |
 
 #### CaseBinding
 
@@ -303,6 +323,7 @@ The IR stores policies structurally rather than as opaque blobs. That allows run
 | Field | Type | Description |
 |---|---|---|
 | `tag` | string | Policy identifier used in templates |
+| `identifier` | string | Compiler-sanitized identifier used by generated backends |
 | `length` | [PolicyLength](#policylength) or null | Length constraints |
 | `rejectIf` | [PolicyRejectIf](#policyrejectif) or null | Rejection pattern |
 | `require` | array of [PolicyRequire](#policyrequire) | Required pattern transformations |
@@ -329,8 +350,9 @@ The IR stores policies structurally rather than as opaque blobs. That allows run
 |---|---|---|
 | `regex` | string | Required pattern |
 | `replace` | string | Replacement template (empty for validation-only) |
+| `compiledReplace` | string or null | Compiler-precompiled replacement string used by regex APIs |
 
-Replacement precompilation is an internal runtime/codegen concern and is not serialized in the public IR.
+`replace` preserves the user-authored template syntax. `compiledReplace` carries the compiler-owned lowered form actually consumed by the runtime and generated backends.
 
 #### PolicyReplacement
 

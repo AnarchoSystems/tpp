@@ -145,12 +145,12 @@ END
 
 // ── Expression → Swift String expression ─────────────────────────────────────
 
-template swift_value_path(path: string, isRecursive: bool, isOptional: bool)
-@if isRecursive@@if isOptional@@path@!.value@else@@path@.value@end if@@else@@if isOptional@@path@!@else@@path@@end if@@end if@
+template swift_value_path(value: RenderValueRef)
+@if value.isRecursive@@if value.isOptional@@value.path@!.value@else@@value.path@.value@end if@@else@@if value.isOptional@@value.path@!@else@@value.path@@end if@@end if@
 END
 
-template swift_optional_some_path(path: string, isRecursive: bool)
-@if isRecursive@@path@!.value@else@@path@!@end if@
+template swift_optional_some_path(value: RenderValueRef)
+@if value.isRecursive@@value.path@!.value@else@@value.path@!@end if@
 END
 
 template swift_type(t: RenderTypeKind)
@@ -158,11 +158,11 @@ template swift_type(t: RenderTypeKind)
 END
 
 template swift_optional_to_str(expr: RenderExprInfo, inner: RenderTypeKind)
-@switch inner@@case Str@(@expr.path@ != nil ? @swift_optional_some_path(expr.path, expr.isRecursive)@ : "")@end case@@case Int@(@expr.path@ != nil ? String(@swift_optional_some_path(expr.path, expr.isRecursive)@) : "")@end case@@case Bool@(@expr.path@ != nil ? String(@swift_optional_some_path(expr.path, expr.isRecursive)@) : "")@end case@@case Named(n)@(@expr.path@ != nil ? String(describing: @swift_optional_some_path(expr.path, expr.isRecursive)@) : "")@end case@@case List(e)@(@expr.path@ != nil ? String(describing: @swift_optional_some_path(expr.path, expr.isRecursive)@) : "")@end case@@case Optional(i)@(@expr.path@ != nil ? String(describing: @swift_optional_some_path(expr.path, expr.isRecursive)@) : "")@end case@@end switch@
+@switch inner@@case Str@(@expr.ref.path@ != nil ? @swift_optional_some_path(expr.ref)@ : "")@end case@@case Int@(@expr.ref.path@ != nil ? String(@swift_optional_some_path(expr.ref)@) : "")@end case@@case Bool@(@expr.ref.path@ != nil ? String(@swift_optional_some_path(expr.ref)@) : "")@end case@@case Named(n)@(@expr.ref.path@ != nil ? String(describing: @swift_optional_some_path(expr.ref)@) : "")@end case@@case List(e)@(@expr.ref.path@ != nil ? String(describing: @swift_optional_some_path(expr.ref)@) : "")@end case@@case Optional(i)@(@expr.ref.path@ != nil ? String(describing: @swift_optional_some_path(expr.ref)@) : "")@end case@@end switch@
 END
 
 template swift_expr_path(expr: RenderExprInfo)
-@swift_value_path(expr.path, expr.isRecursive, expr.isOptional)@
+@swift_value_path(expr.ref)@
 END
 
 template swift_expr_to_str(expr: RenderExprInfo)
@@ -203,8 +203,8 @@ _sb.emit(@c.functionName@(@for arg in c.args | sep=", "@@swift_call_arg(arg)@@en
 @end if@
 END
 
-template swift_call_arg(arg: CallArgInfo)
-@swift_value_path(arg.path, arg.isRecursive, arg.isOptional)@
+template swift_call_arg(arg: RenderValueRef)
+@swift_value_path(arg)@
 END
 
 template swift_policy_ref(ref: PolicyRef)
@@ -264,8 +264,8 @@ END
 
 template emit_for_inline(f: ForData)
 @if f.body@
-for _i@f.scopeId@ in 0..<@swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.count {
-    let @f.varName@ = @swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@[_i@f.scopeId@]
+for _i@f.scopeId@ in 0..<@swift_value_path(f.collection)@.count {
+    let @f.varName@ = @swift_value_path(f.collection)@[_i@f.scopeId@]
     @if f.enumeratorName@
     let @f.enumeratorName@ = _i@f.scopeId@
     @end if@
@@ -276,13 +276,13 @@ for _i@f.scopeId@ in 0..<@swift_value_path(f.collPath, f.collIsRecursive, f.coll
     @emit_instr(instr)@
     @end for@
     @if f.sepLit@
-    if _i@f.scopeId@ + 1 < @swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.count { _sb.emit(@f.sepLit@) }
+    if _i@f.scopeId@ + 1 < @swift_value_path(f.collection)@.count { _sb.emit(@f.sepLit@) }
     @if f.followedByLit@
-    else if !@swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.isEmpty { _sb.emit(@f.followedByLit@) }
+    else if !@swift_value_path(f.collection)@.isEmpty { _sb.emit(@f.followedByLit@) }
     @end if@
     @else@
     @if f.followedByLit@
-    if _i@f.scopeId@ + 1 >= @swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.count && !@swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.isEmpty { _sb.emit(@f.followedByLit@) }
+    if _i@f.scopeId@ + 1 >= @swift_value_path(f.collection)@.count && !@swift_value_path(f.collection)@.isEmpty { _sb.emit(@f.followedByLit@) }
     @end if@
     @end if@
 }
@@ -296,8 +296,8 @@ _sb.beginCapturedBlock(@f.bodyBlockIndentInParentBlock@)
 @else@
 _sb.beginCapturedBlock()
 @end if@
-for _i@f.scopeId@ in 0..<@swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.count {
-    let @f.varName@ = @swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@[_i@f.scopeId@]
+for _i@f.scopeId@ in 0..<@swift_value_path(f.collection)@.count {
+    let @f.varName@ = @swift_value_path(f.collection)@[_i@f.scopeId@]
     @if f.enumeratorName@
     let @f.enumeratorName@ = _i@f.scopeId@
     @end if@
@@ -313,16 +313,16 @@ for _i@f.scopeId@ in 0..<@swift_value_path(f.collPath, f.collIsRecursive, f.coll
     @end if@
     _sb.emit(_iterText@f.scopeId@)
     @if f.sepLit@
-    if _i@f.scopeId@ + 1 < @swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.count {
+    if _i@f.scopeId@ + 1 < @swift_value_path(f.collection)@.count {
         _sb.emit(@f.sepLit@)
     } else {
         @if f.followedByLit@
-        if !@swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.isEmpty { _sb.emit(@f.followedByLit@) }
+        if !@swift_value_path(f.collection)@.isEmpty { _sb.emit(@f.followedByLit@) }
         @end if@
     }
     @else@
     @if f.followedByLit@
-    if _i@f.scopeId@ + 1 >= @swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.count && !@swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.isEmpty { _sb.emit(@f.followedByLit@) }
+    if _i@f.scopeId@ + 1 >= @swift_value_path(f.collection)@.count && !@swift_value_path(f.collection)@.isEmpty { _sb.emit(@f.followedByLit@) }
     @end if@
     @end if@
 }
@@ -363,8 +363,8 @@ END
 template emit_aligned_for(f: ForData)
 @if f.cells@
 var _rows@f.scopeId@: [[String]] = []
-for _i@f.scopeId@ in 0..<@swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.count {
-    let @f.varName@ = @swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@[_i@f.scopeId@]
+for _i@f.scopeId@ in 0..<@swift_value_path(f.collection)@.count {
+    let @f.varName@ = @swift_value_path(f.collection)@[_i@f.scopeId@]
     @if f.enumeratorName@
     let @f.enumeratorName@ = _i@f.scopeId@
     @end if@
@@ -438,7 +438,7 @@ END
 // ── Switch / Case ────────────────────────────────────────────────────────────
 
 template emit_switch(s: SwitchData)
-switch @swift_value_path(s.exprPath, s.exprIsRecursive, s.exprIsOptional)@ {
+switch @swift_value_path(s.expr)@ {
 @for c in s.cases@
 @if c.bindingName@
 case .@c.tag@(let @c.bindingName@):
@@ -487,8 +487,8 @@ p.outputFilter = [@for f in pol.outputFilter | sep=", "@try! Regex(@f.regexLit@)
 return p
 END
 
-template emit_policy_instance(pol: PolicyInfo, staticPrefix: string)
-@staticPrefix@let @pol.identifier@: TppPolicy = {
+template emit_policy_instance(pol: PolicyInfo, needsStatic: bool)
+@if needsStatic@static @end if@let @pol.identifier@: TppPolicy = {
     @emit_policy_instance_body(pol)@
 }()
 END
@@ -496,7 +496,7 @@ END
 template emit_policy_instances(ctx: RenderFunctionsInput)
 @if ctx.policies@
 @for pol in ctx.policies@
-@emit_policy_instance(pol, ctx.staticModifier)@
+@emit_policy_instance(pol, ctx.needsStatic)@
 @end for@
 @end if@
 END
@@ -514,12 +514,12 @@ extension @ctx.namespaceName@ {
 
 @if ctx.policies@
 @if fn.doc@@fn.doc@@end if@
-@ctx.staticModifier@func @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@_ @param.name@: @swift_type(param.type)@@end for@) throws -> String { return try @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", " followedBy=", "@@param.name@@end for@TppPolicy.pure) }
+@if ctx.needsStatic@static @end if@func @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@_ @param.name@: @swift_type(param.type)@@end for@) throws -> String { return try @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", " followedBy=", "@@param.name@@end for@TppPolicy.pure) }
 
-fileprivate @ctx.staticModifier@func @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", " followedBy=", "@_ @param.name@: @swift_type(param.type)@@end for@_ _policy: TppPolicy) throws -> String {
+fileprivate @if ctx.needsStatic@static @end if@func @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", " followedBy=", "@_ @param.name@: @swift_type(param.type)@@end for@_ _policy: TppPolicy) throws -> String {
 @else@
 @if fn.doc@@fn.doc@@end if@
-@ctx.staticModifier@func @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@_ @param.name@: @swift_type(param.type)@@end for@) -> String {
+@if ctx.needsStatic@static @end if@func @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@_ @param.name@: @swift_type(param.type)@@end for@) -> String {
 @end if@
     let _sb = TppWriter()
     @for instr in fn.body@

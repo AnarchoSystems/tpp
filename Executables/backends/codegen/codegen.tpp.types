@@ -12,16 +12,21 @@ enum RenderTypeKind
     Optional(RenderTypeKind)
 }
 
+struct RenderValueRef
+{
+    path : string;
+    isRecursive : bool;
+    isOptional : bool;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Instruction IR types — for rendering function generation
 // ═══════════════════════════════════════════════════════════════════════════════
 
 struct RenderExprInfo
 {
-    path : string;
+    ref : RenderValueRef;
     type : RenderTypeKind;
-    isRecursive : bool;
-    isOptional : bool;
 }
 
 struct EmitData
@@ -32,7 +37,6 @@ struct EmitData
 struct EmitExprData
 {
     expr : RenderExprInfo;
-    staticPolicyLit : optional<string>;
     staticPolicyId : optional<string>;
     useRuntimePolicy : bool;
 }
@@ -51,9 +55,7 @@ struct AlignCellInfo
 struct ForData
 {
     scopeId : int;
-    collPath : string;
-    collIsRecursive : bool;
-    collIsOptional : bool;
+    collection : RenderValueRef;
     elemType : RenderTypeKind;
     varName : string;
     enumeratorName : optional<string>;
@@ -63,11 +65,9 @@ struct ForData
     precededByLit : optional<string>;
     capturesBody : bool;
     bodyBlockIndentInParentBlock : optional<int>;
-    alignSpec : optional<string>;
     cells : optional<list<AlignCellInfo>>;
     numCols : int;
     alignSpecChars : list<string>;
-    singleAlignChar : bool;
 }
 
 struct CaseData
@@ -77,7 +77,6 @@ struct CaseData
     bindingName : optional<string>;
     payloadType : optional<RenderTypeKind>;
     body : optional<list<RenderInstruction>>;
-    isFirst : bool;
     variantIndex : int;
     isRecursivePayload : bool;
 }
@@ -93,18 +92,8 @@ struct IfData
 
 struct SwitchData
 {
-    exprPath : string;
-    exprIsRecursive : bool;
-    exprIsOptional : bool;
-    enumTypeName : string;
+    expr : RenderValueRef;
     cases : list<CaseData>;
-}
-
-struct CallArgInfo
-{
-    path : string;
-    isRecursive : bool;
-    isOptional : bool;
 }
 
 enum PolicyRef
@@ -117,7 +106,7 @@ enum PolicyRef
 struct CallData
 {
     functionName : string;
-    args : list<CallArgInfo>;
+    args : list<RenderValueRef>;
     policyArg : optional<PolicyRef>;
     needsTry : bool;
 }
@@ -232,6 +221,6 @@ struct RenderFunctionsInput
     policies : optional<list<PolicyInfo>>;
     functionPrefix : string;
     namespaceName : optional<string>;
-    staticModifier : string;
+    needsStatic : bool;
     includes : optional<list<string>>;
 }

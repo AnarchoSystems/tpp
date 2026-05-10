@@ -3,14 +3,14 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // ── Expression → C++ String expression ───────────────────────────────────────
 
-template cpp_value_path(path: string, isRecursive: bool, isOptional: bool)
-@if isRecursive@
-*@path@
+template cpp_value_path(value: RenderValueRef)
+@if value.isRecursive@
+*@value.path@
 @else@
-@if isOptional@
-*@path@
+@if value.isOptional@
+*@value.path@
 @else@
-@path@
+@value.path@
 @end if@
 @end if@
 END
@@ -18,22 +18,22 @@ END
 template cpp_optional_to_str(expr: RenderExprInfo, inner: RenderTypeKind)
 @switch inner@
 @case Str@
-@if expr.isRecursive@(@expr.path@ ? *@expr.path@ : std::string{})@else@(@expr.path@.has_value() ? *@expr.path@ : std::string{})@end if@
+@if expr.ref.isRecursive@(@expr.ref.path@ ? *@expr.ref.path@ : std::string{})@else@(@expr.ref.path@.has_value() ? *@expr.ref.path@ : std::string{})@end if@
 @end case@
 @case Int@
-@if expr.isRecursive@(@expr.path@ ? std::to_string(*@expr.path@) : std::string{})@else@(@expr.path@.has_value() ? std::to_string(*@expr.path@) : std::string{})@end if@
+@if expr.ref.isRecursive@(@expr.ref.path@ ? std::to_string(*@expr.ref.path@) : std::string{})@else@(@expr.ref.path@.has_value() ? std::to_string(*@expr.ref.path@) : std::string{})@end if@
 @end case@
 @case Bool@
-@if expr.isRecursive@(@expr.path@ ? (*@expr.path@ ? "true" : "false") : std::string{})@else@(@expr.path@.has_value() ? (*@expr.path@ ? "true" : "false") : std::string{})@end if@
+@if expr.ref.isRecursive@(@expr.ref.path@ ? (*@expr.ref.path@ ? "true" : "false") : std::string{})@else@(@expr.ref.path@.has_value() ? (*@expr.ref.path@ ? "true" : "false") : std::string{})@end if@
 @end case@
 @case Named(n)@
-@if expr.isRecursive@(@expr.path@ ? std::to_string(*@expr.path@) : std::string{})@else@(@expr.path@.has_value() ? std::to_string(*@expr.path@) : std::string{})@end if@
+@if expr.ref.isRecursive@(@expr.ref.path@ ? std::to_string(*@expr.ref.path@) : std::string{})@else@(@expr.ref.path@.has_value() ? std::to_string(*@expr.ref.path@) : std::string{})@end if@
 @end case@
 @case List(e)@
-@if expr.isRecursive@(@expr.path@ ? std::to_string(*@expr.path@) : std::string{})@else@(@expr.path@.has_value() ? std::to_string(*@expr.path@) : std::string{})@end if@
+@if expr.ref.isRecursive@(@expr.ref.path@ ? std::to_string(*@expr.ref.path@) : std::string{})@else@(@expr.ref.path@.has_value() ? std::to_string(*@expr.ref.path@) : std::string{})@end if@
 @end case@
 @case Optional(i)@
-@if expr.isRecursive@(@expr.path@ ? std::to_string(*@expr.path@) : std::string{})@else@(@expr.path@.has_value() ? std::to_string(*@expr.path@) : std::string{})@end if@
+@if expr.ref.isRecursive@(@expr.ref.path@ ? std::to_string(*@expr.ref.path@) : std::string{})@else@(@expr.ref.path@.has_value() ? std::to_string(*@expr.ref.path@) : std::string{})@end if@
 @end case@
 @end switch@
 END
@@ -41,15 +41,15 @@ END
 template cpp_expr_to_str(expr: RenderExprInfo)
 @switch expr.type@
 @case Str@
-@cpp_value_path(expr.path, expr.isRecursive, expr.isOptional)@@end case@
+@cpp_value_path(expr.ref)@@end case@
 @case Int@
-std::to_string(@cpp_value_path(expr.path, expr.isRecursive, expr.isOptional)@)@end case@
+std::to_string(@cpp_value_path(expr.ref)@)@end case@
 @case Bool@
-(@cpp_value_path(expr.path, expr.isRecursive, expr.isOptional)@ ? "true" : "false")@end case@
+(@cpp_value_path(expr.ref)@ ? "true" : "false")@end case@
 @case Named(n)@
-std::to_string(@cpp_value_path(expr.path, expr.isRecursive, expr.isOptional)@)@end case@
+std::to_string(@cpp_value_path(expr.ref)@)@end case@
 @case List(e)@
-std::to_string(@cpp_value_path(expr.path, expr.isRecursive, expr.isOptional)@)@end case@
+std::to_string(@cpp_value_path(expr.ref)@)@end case@
 @case Optional(inner)@
 @cpp_optional_to_str(expr, inner)@@end case@
 @end switch@
@@ -91,8 +91,8 @@ if (!_writer.emit(@c.functionName@(@for arg in c.args | sep=", "@@cpp_call_arg(a
 @end if@
 END
 
-template cpp_call_arg(arg: CallArgInfo)
-@cpp_value_path(arg.path, arg.isRecursive, arg.isOptional)@
+template cpp_call_arg(arg: RenderValueRef)
+@cpp_value_path(arg)@
 END
 
 template cpp_policy_ref(ref: PolicyRef)
@@ -177,7 +177,7 @@ END
 template emit_for_inline(f: ForData)
 @if f.body@
 if (!_writer.emitForEach(
-        @cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@,
+    @cpp_value_path(f.collection)@,
     @cpp_inline_loop_options(f)@,
         [&](const auto& @f.varName@, @if f.enumeratorName@int @f.enumeratorName@@else@int@end if@) {
             @for instr in f.body@
@@ -192,7 +192,7 @@ template emit_for_block(f: ForData)
 @if f.body@
 @if f.bodyBlockIndentInParentBlock@
 if (!_writer.emitCapturedBlockForEach(
-        @cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@,
+    @cpp_value_path(f.collection)@,
     @f.bodyBlockIndentInParentBlock@,
     @cpp_block_loop_options(f)@,
         [&](const auto& @f.varName@, @if f.enumeratorName@int @f.enumeratorName@@else@int@end if@) {
@@ -202,7 +202,7 @@ if (!_writer.emitCapturedBlockForEach(
         }))
     throw std::runtime_error("tpp render error: " + _writer.error());
 @else@
-if (!_writer.emitCapturedBlockForEach(@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@,
+if (!_writer.emitCapturedBlockForEach(@cpp_value_path(f.collection)@,
                                      @cpp_block_loop_options(f)@,
                                     [&](const auto& @f.varName@, @if f.enumeratorName@int @f.enumeratorName@@else@int@end if@) {
                                         @for instr in f.body@
@@ -234,10 +234,10 @@ END
 template emit_aligned_for(f: ForData)
 @if f.cells@
 if (!_writer.emitAlignedForEach(
-        @cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@,
+    @cpp_value_path(f.collection)@,
         @f.numCols@,
         std::vector<char>{ @for ch in f.alignSpecChars | sep=", "@'@ch@'@end for@ },
-        @if f.singleAlignChar@true@else@false@end if@,
+        std::vector<char>{ @for ch in f.alignSpecChars | sep=", "@'@ch@'@end for@ }.size() == 1,
     @cpp_inline_loop_options(f)@,
         [&](const auto& @f.varName@, @if f.enumeratorName@int @f.enumeratorName@@else@int@end if@) {
             @for cell in f.cells@
@@ -271,14 +271,14 @@ END
 // ── Switch / Case ────────────────────────────────────────────────────────────
 
 template emit_switch(s: SwitchData)
-switch ((@cpp_value_path(s.exprPath, s.exprIsRecursive, s.exprIsOptional)@).value.index()) {
+switch ((@cpp_value_path(s.expr)@).value.index()) {
 @for c in s.cases@
     case @c.variantIndex@: { // @c.tag@
         @if c.bindingName@
         @if c.isRecursivePayload@
-        [[maybe_unused]] const auto& @c.bindingName@ = *std::get<@c.variantIndex@>((@cpp_value_path(s.exprPath, s.exprIsRecursive, s.exprIsOptional)@).value);
+    [[maybe_unused]] const auto& @c.bindingName@ = *std::get<@c.variantIndex@>((@cpp_value_path(s.expr)@).value);
         @else@
-        [[maybe_unused]] const auto& @c.bindingName@ = std::get<@c.variantIndex@>((@cpp_value_path(s.exprPath, s.exprIsRecursive, s.exprIsOptional)@).value);
+    [[maybe_unused]] const auto& @c.bindingName@ = std::get<@c.variantIndex@>((@cpp_value_path(s.expr)@).value);
         @end if@
         @end if@
         @if c.body@
@@ -375,11 +375,11 @@ static std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep="
     return _writer.takeOutput(tpp::Writer::OutputPostProcessing::StripSingleTrailingNewline);
 }
 
-@ctx.staticModifier@std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@) {
+@if ctx.needsStatic@static @end if@std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@) {
     return @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@@param.name@@end for@, _tppPolicyPure);
 }
 @else@
-@ctx.staticModifier@std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@) {
+@if ctx.needsStatic@static @end if@std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@) {
     tpp::Writer _writer;
     @for instr in fn.body@
     @emit_instr(instr)@
