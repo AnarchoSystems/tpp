@@ -396,7 +396,8 @@ Backends consume it:
 
 ```
 tpp2cpp types < ir.json       # Generate C++ types
-tpp2cpp functions < ir.json   # Generate C++ function implementations
+tpp2cpp functions < ir.json   # Generate C++ function declarations
+tpp2cpp impl < ir.json        # Generate C++ function implementations
 render-tpp main < ir.json     # Render the 'main' template with JSON input
 ```
 

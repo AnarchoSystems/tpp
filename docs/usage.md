@@ -1,4 +1,3 @@
-| `<tpp/Types.h>` | Type definitions (`StructDef`, `EnumDef`, `TypeRef`) and lookup helpers |
 # tpp Usage & Tooling Guide
 
 This guide covers the tpp compiler toolchain as a whole: how source files become validated IR, how that IR feeds multiple backends, how to integrate the generated code into builds, and how to use the runtime and editor tooling.
@@ -145,7 +144,6 @@ The intermediate representation JSON is read from stdin by default, or from a fi
 | `types` | Generate a types header (`_types.h`) |
 | `functions` | Generate a functions header (`_functions.h`) |
 | `impl` | Generate a function implementations file (`_implementation.cc`) |
-| `runtime` | Generate a standalone runtime helpers header |
 
 ### Options
 
@@ -155,7 +153,6 @@ The intermediate representation JSON is read from stdin by default, or from a fi
 | `-ns <name>` | Wrap all generated code in a C++ namespace |
 | `-i <file>` | Add an `#include` directive at the top of the generated file (repeatable) |
 | `--input <file>` | Read intermediate representation from `<file>` instead of stdin |
-| `--extern-runtime` | Suppress inlining runtime helpers |
 
 ### Three-Step Code Generation
 
@@ -234,7 +231,9 @@ The intermediate representation JSON is read from stdin by default, or from a fi
 | Command | Description |
 |---|---|
 | `source` | Generate Java types and rendering functions |
-| `runtime` | Generate only the standalone runtime helpers class |
+| `runtime` | Alias for `runtime-shared` |
+| `runtime-shared` | Generate the dedicated shared runtime helpers file |
+| `bundle` | Generate a namespaced Java wrapper with types and rendering functions |
 
 ### Options
 
@@ -247,6 +246,7 @@ The intermediate representation JSON is read from stdin by default, or from a fi
 ### Output Contract
 
 - `source` generates only Java types and rendering functions.
+- `bundle` generates a namespaced Java wrapper with generated types and rendering functions.
 - `runtime` and `runtime-shared` both generate the dedicated shared runtime helpers file.
 - Compile `runtime-shared` output together with `source` or `bundle` output.
 
@@ -278,7 +278,8 @@ The intermediate representation JSON is read from stdin by default, or from a fi
 | Command | Description |
 |---|---|
 | `source` | Generate Swift types and rendering functions |
-| `runtime` | Generate only the standalone runtime helpers file |
+| `runtime` | Alias for `runtime-shared` |
+| `runtime-shared` | Generate the dedicated shared runtime helpers file |
 
 ### Options
 

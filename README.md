@@ -61,7 +61,7 @@ and this template:
 Then
 
 ```bash
-tpp . | tpp2cpp -functions > project_functions.h
+tpp . | tpp2cpp functions > project_functions.h
 ```
 
 generates
