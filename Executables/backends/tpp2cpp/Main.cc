@@ -4,7 +4,6 @@
 #include "defs.h"
 #include <fstream>
 #include <iostream>
-#include <map>
 #include <sstream>
 
 // usage: tpp2cpp <command> [options]
@@ -29,7 +28,6 @@ struct tpp2cpp
 {
     std::string namespaceName;
     Mode mode = Mode::None;
-    bool externalRuntime = false;
     std::vector<std::string> includes;
     tpp::IR input;
     tpp2cpp(int argc, char *argv[]);
@@ -69,7 +67,6 @@ tpp2cpp::tpp2cpp(int argc, char *argv[])
     auto cli = codegen::parseBackendCommandLine(argc, argv, commands, printUsage, true);
     namespaceName = std::move(cli.namespaceName);
     mode = cli.mode;
-    externalRuntime = cli.externalRuntime;
     includes = std::move(cli.includes);
     input = codegen::loadIRInputOrExit(cli.inputFile);
 }
@@ -88,9 +85,8 @@ static codegen::RenderFunctionsInput buildFunctionsContext(
     const std::string &namespaceName);
 
 static std::string toCppStringLiteral(const std::string &s);
-static std::string injectDocComments(const std::string &output, const std::map<std::string, std::string> &docComments);
-static std::map<std::string, std::string> buildTypeDocComments(const tpp::IR &ir);
-static std::map<std::string, std::string> buildFunctionDocComments(const tpp::IR &ir);
+static std::string formatDocComment(const std::string &doc, const std::string &indent);
+static void qualifyNamedTypeJson(nlohmann::json &typeJson);
 
 static const tpp::IR &mainIR()
 {
@@ -123,11 +119,9 @@ void tpp2cpp::run()
         break;
     case Mode::Types:
         output = renderFunction("render_cpp_types", to_render_cpp_type_input(input, includes, namespaceName));
-        output = injectDocComments(output, buildTypeDocComments(input));
         break;
     case Mode::Functions:
         output = renderFunction("render_cpp_functions", to_render_cpp_functions_input(input, includes, namespaceName));
-        output = injectDocComments(output, buildFunctionDocComments(input));
         break;
     case Mode::Implementation:
     {
@@ -152,31 +146,6 @@ static std::string toCppStringLiteral(const std::string &s)
         else result += c;
     }
     return result + "\"";
-}
-
-static std::string makeStructDocMarker(const std::string &name)
-{
-    return "__TPP_DOC__STRUCT__" + name + "__";
-}
-
-static std::string makeEnumDocMarker(const std::string &name)
-{
-    return "__TPP_DOC__ENUM__" + name + "__";
-}
-
-static std::string makeFieldDocMarker(const std::string &structName, const std::string &fieldName)
-{
-    return "__TPP_DOC__FIELD__" + structName + "__" + fieldName + "__";
-}
-
-static std::string makeVariantDocMarker(const std::string &enumName, const std::string &variantTag)
-{
-    return "__TPP_DOC__VARIANT__" + enumName + "__" + variantTag + "__";
-}
-
-static std::string makeFunctionDocMarker(size_t index)
-{
-    return "__TPP_DOC__FUNCTION__" + std::to_string(index) + "__";
 }
 
 static std::string formatDocComment(const std::string &doc, const std::string &indent)
@@ -204,70 +173,71 @@ static std::string formatDocComment(const std::string &doc, const std::string &i
     return formatted.str();
 }
 
-static std::string injectDocComments(const std::string &output, const std::map<std::string, std::string> &docComments)
+static void setFormattedDocComment(nlohmann::json &target, const std::string &doc, const std::string &indent)
 {
-    std::ostringstream rewritten;
-    size_t lineStart = 0;
-
-    while (lineStart < output.size())
-    {
-        size_t lineEnd = output.find('\n', lineStart);
-        const bool hasTrailingNewline = lineEnd != std::string::npos;
-        if (!hasTrailingNewline)
-            lineEnd = output.size();
-
-        const std::string line = output.substr(lineStart, lineEnd - lineStart);
-        const size_t indentEnd = line.find_first_not_of(" \t");
-        const std::string indent = indentEnd == std::string::npos ? line : line.substr(0, indentEnd);
-        const std::string marker = indentEnd == std::string::npos ? std::string{} : line.substr(indentEnd);
-
-        auto docIt = docComments.find(marker);
-        if (docIt != docComments.end())
-        {
-            rewritten << formatDocComment(docIt->second, indent);
-        }
-        else
-        {
-            rewritten << line;
-            if (hasTrailingNewline)
-                rewritten << '\n';
-        }
-
-        if (!hasTrailingNewline)
-            break;
-
-        lineStart = lineEnd + 1;
-    }
-
-    return rewritten.str();
+    const std::string formatted = formatDocComment(doc, indent);
+    if (!formatted.empty())
+        target["docComment"] = formatted;
 }
 
-static std::map<std::string, std::string> buildTypeDocComments(const tpp::IR &ir)
+static nlohmann::json toCppFieldContext(const tpp::FieldDef &field)
 {
-    std::map<std::string, std::string> docComments;
-    for (const auto &structDef : ir.structs)
-    {
-        docComments.emplace(makeStructDocMarker(structDef.name), structDef.doc);
-        for (const auto &field : structDef.fields)
-            docComments.emplace(makeFieldDocMarker(structDef.name, field.name), field.doc);
-    }
-
-    for (const auto &enumDef : ir.enums)
-    {
-        docComments.emplace(makeEnumDocMarker(enumDef.name), enumDef.doc);
-        for (const auto &variant : enumDef.variants)
-            docComments.emplace(makeVariantDocMarker(enumDef.name, variant.tag), variant.doc);
-    }
-
-    return docComments;
+    nlohmann::json fieldJson;
+    fieldJson["name"] = field.name;
+    fieldJson["type"] = *field.type;
+    fieldJson["recursive"] = field.recursive;
+    setFormattedDocComment(fieldJson, field.doc, "    ");
+    return fieldJson;
 }
 
-static std::map<std::string, std::string> buildFunctionDocComments(const tpp::IR &ir)
+static nlohmann::json toCppStructContext(const tpp::StructDef &structDef)
 {
-    std::map<std::string, std::string> docComments;
-    for (size_t index = 0; index < ir.functions.size(); ++index)
-        docComments.emplace(makeFunctionDocMarker(index), ir.functions[index].doc);
-    return docComments;
+    nlohmann::json structJson;
+    structJson["name"] = structDef.name;
+    structJson["fields"] = nlohmann::json::array();
+    for (const auto &field : structDef.fields)
+        structJson["fields"].push_back(toCppFieldContext(field));
+    structJson["rawTypedefs"] = toCppStringLiteral(structDef.rawTypedefs);
+    setFormattedDocComment(structJson, structDef.doc, "");
+    return structJson;
+}
+
+static nlohmann::json toCppVariantContext(const tpp::VariantDef &variant)
+{
+    nlohmann::json variantJson;
+    variantJson["tag"] = variant.tag;
+    if (variant.payload)
+        variantJson["payload"] = *variant.payload;
+    variantJson["recursive"] = variant.recursive;
+    setFormattedDocComment(variantJson, variant.doc, "");
+    return variantJson;
+}
+
+static nlohmann::json toCppEnumContext(const tpp::EnumDef &enumDef)
+{
+    nlohmann::json enumJson;
+    enumJson["name"] = enumDef.name;
+    enumJson["variants"] = nlohmann::json::array();
+    for (const auto &variant : enumDef.variants)
+        enumJson["variants"].push_back(toCppVariantContext(variant));
+    enumJson["rawTypedefs"] = toCppStringLiteral(enumDef.rawTypedefs);
+    setFormattedDocComment(enumJson, enumDef.doc, "");
+    return enumJson;
+}
+
+static nlohmann::json toCppFunctionContext(const tpp::FunctionDef &function)
+{
+    nlohmann::json functionJson;
+    functionJson["name"] = function.name;
+    functionJson["params"] = nlohmann::json::array();
+    for (const auto &param : function.params)
+    {
+        nlohmann::json paramJson = param;
+        qualifyNamedTypeJson(paramJson["type"]);
+        functionJson["params"].push_back(std::move(paramJson));
+    }
+    setFormattedDocComment(functionJson, function.doc, "");
+    return functionJson;
 }
 
 static bool hasRecursiveVariant(const tpp::EnumDef &enumDef)
@@ -298,18 +268,15 @@ static nlohmann::json to_render_cpp_type_input(const tpp::IR &iRep,
                                                const std::vector<std::string> &includes,
                                                const std::string &namespaceName)
 {
-    nlohmann::json irJson = iRep;
-    nlohmann::json structs = irJson["structs"];
-    for (auto &structDef : structs)
-        structDef["rawTypedefs"] = toCppStringLiteral(structDef["rawTypedefs"].get<std::string>());
+    nlohmann::json structs = nlohmann::json::array();
+    for (const auto &structDef : iRep.structs)
+        structs.push_back(toCppStructContext(structDef));
 
     nlohmann::json preStructEnums = nlohmann::json::array();
     nlohmann::json postStructEnums = nlohmann::json::array();
-    const nlohmann::json &allEnums = irJson["enums"];
     for (size_t enumIndex = 0; enumIndex < iRep.enums.size(); ++enumIndex)
     {
-        auto enumJson = allEnums[enumIndex];
-        enumJson["rawTypedefs"] = toCppStringLiteral(enumJson["rawTypedefs"].get<std::string>());
+        auto enumJson = toCppEnumContext(iRep.enums[enumIndex]);
         if (hasRecursiveVariant(iRep.enums[enumIndex]))
             postStructEnums.push_back(std::move(enumJson));
         else
@@ -324,11 +291,9 @@ static nlohmann::json to_render_cpp_functions_input(const tpp::IR &iRep,
                                                     const std::vector<std::string> &includes,
                                                     const std::string &namespaceName)
 {
-    nlohmann::json irJson = iRep;
-    nlohmann::json functions = irJson["functions"];
-    for (auto &function : functions)
-        for (auto &param : function["params"])
-            qualifyNamedTypeJson(param["type"]);
+    nlohmann::json functions = nlohmann::json::array();
+    for (const auto &function : iRep.functions)
+        functions.push_back(toCppFunctionContext(function));
 
     nlohmann::json ns = namespaceName.empty() ? nlohmann::json() : nlohmann::json(namespaceName);
     return nlohmann::json::array({functions, nlohmann::json(includes), ns, ""});

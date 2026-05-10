@@ -4,23 +4,37 @@
 // ── Expression → C++ String expression ───────────────────────────────────────
 
 template cpp_value_path(path: string, isRecursive: bool, isOptional: bool)
-@if isRecursive@*@path@@else@@if isOptional@*@path@@else@@path@@end if@@end if@
+@if isRecursive@
+*@path@
+@else@
+@if isOptional@
+*@path@
+@else@
+@path@
+@end if@
+@end if@
 END
 
 template cpp_optional_to_str(expr: RenderExprInfo, inner: RenderTypeKind)
 @switch inner@
 @case Str@
-@if expr.isRecursive@(@expr.path@ ? *@expr.path@ : std::string{})@else@(@expr.path@.has_value() ? *@expr.path@ : std::string{})@end if@@end case@
+@if expr.isRecursive@(@expr.path@ ? *@expr.path@ : std::string{})@else@(@expr.path@.has_value() ? *@expr.path@ : std::string{})@end if@
+@end case@
 @case Int@
-@if expr.isRecursive@(@expr.path@ ? std::to_string(*@expr.path@) : std::string{})@else@(@expr.path@.has_value() ? std::to_string(*@expr.path@) : std::string{})@end if@@end case@
+@if expr.isRecursive@(@expr.path@ ? std::to_string(*@expr.path@) : std::string{})@else@(@expr.path@.has_value() ? std::to_string(*@expr.path@) : std::string{})@end if@
+@end case@
 @case Bool@
-@if expr.isRecursive@(@expr.path@ ? (*@expr.path@ ? "true" : "false") : std::string{})@else@(@expr.path@.has_value() ? (*@expr.path@ ? "true" : "false") : std::string{})@end if@@end case@
+@if expr.isRecursive@(@expr.path@ ? (*@expr.path@ ? "true" : "false") : std::string{})@else@(@expr.path@.has_value() ? (*@expr.path@ ? "true" : "false") : std::string{})@end if@
+@end case@
 @case Named(n)@
-@if expr.isRecursive@(@expr.path@ ? std::to_string(*@expr.path@) : std::string{})@else@(@expr.path@.has_value() ? std::to_string(*@expr.path@) : std::string{})@end if@@end case@
+@if expr.isRecursive@(@expr.path@ ? std::to_string(*@expr.path@) : std::string{})@else@(@expr.path@.has_value() ? std::to_string(*@expr.path@) : std::string{})@end if@
+@end case@
 @case List(e)@
-@if expr.isRecursive@(@expr.path@ ? std::to_string(*@expr.path@) : std::string{})@else@(@expr.path@.has_value() ? std::to_string(*@expr.path@) : std::string{})@end if@@end case@
+@if expr.isRecursive@(@expr.path@ ? std::to_string(*@expr.path@) : std::string{})@else@(@expr.path@.has_value() ? std::to_string(*@expr.path@) : std::string{})@end if@
+@end case@
 @case Optional(i)@
-@if expr.isRecursive@(@expr.path@ ? std::to_string(*@expr.path@) : std::string{})@else@(@expr.path@.has_value() ? std::to_string(*@expr.path@) : std::string{})@end if@@end case@
+@if expr.isRecursive@(@expr.path@ ? std::to_string(*@expr.path@) : std::string{})@else@(@expr.path@.has_value() ? std::to_string(*@expr.path@) : std::string{})@end if@
+@end case@
 @end switch@
 END
 
@@ -45,23 +59,23 @@ END
 
 template emit_emit(e: EmitData)
 {
-    if (!@e.sb@.emit(@e.textLit@))
-        throw std::runtime_error("tpp render error: " + @e.sb@.error());
+    if (!_writer.emit(@e.textLit@))
+        throw std::runtime_error("tpp render error: " + _writer.error());
 }
 END
 
 template emit_emit_expr(e: EmitExprData)
 {
 @if e.staticPolicyId@
-    if (!@e.sb@.emitValue(@cpp_expr_to_str(e.expr)@, _tppPolicy_@e.staticPolicyId@))
-        throw std::runtime_error("tpp render error: " + @e.sb@.error());
+    if (!_writer.emitValue(@cpp_expr_to_str(e.expr)@, _tppPolicy_@e.staticPolicyId@))
+        throw std::runtime_error("tpp render error: " + _writer.error());
 @else@
 @if e.useRuntimePolicy@
-    if (!@e.sb@.emitValue(@cpp_expr_to_str(e.expr)@, _policy))
-        throw std::runtime_error("tpp render error: " + @e.sb@.error());
+    if (!_writer.emitValue(@cpp_expr_to_str(e.expr)@, _policy))
+        throw std::runtime_error("tpp render error: " + _writer.error());
 @else@
-    if (!@e.sb@.emitValue(@cpp_expr_to_str(e.expr)@))
-        throw std::runtime_error("tpp render error: " + @e.sb@.error());
+    if (!_writer.emitValue(@cpp_expr_to_str(e.expr)@))
+        throw std::runtime_error("tpp render error: " + _writer.error());
 @end if@
 @end if@
 }
@@ -69,11 +83,11 @@ END
 
 template emit_call(c: CallData)
 @if c.policyArg@
-if (!@c.sb@.emit(@c.functionName@(@for arg in c.args | sep=", " followedBy=", "@@cpp_call_arg(arg)@@end for@@cpp_policy_ref(c.policyArg)@)))
-    throw std::runtime_error("tpp render error: " + @c.sb@.error());
+if (!_writer.emit(@c.functionName@(@for arg in c.args | sep=", " followedBy=", "@@cpp_call_arg(arg)@@end for@@cpp_policy_ref(c.policyArg)@)))
+    throw std::runtime_error("tpp render error: " + _writer.error());
 @else@
-if (!@c.sb@.emit(@c.functionName@(@for arg in c.args | sep=", "@@cpp_call_arg(arg)@@end for@)))
-    throw std::runtime_error("tpp render error: " + @c.sb@.error());
+if (!_writer.emit(@c.functionName@(@for arg in c.args | sep=", "@@cpp_call_arg(arg)@@end for@)))
+    throw std::runtime_error("tpp render error: " + _writer.error());
 @end if@
 END
 
@@ -115,16 +129,16 @@ template emit_instr(instr: RenderInstruction)
 @end case@
 @case BeginCapturedBlock(p)@
 @if p.blockIndentInParentBlock@
-if (!_sb.beginCapturedBlock(@p.blockIndentInParentBlock@)) {
+if (!_writer.beginCapturedBlock(@p.blockIndentInParentBlock@)) {
 @else@
-if (!_sb.beginCapturedBlock()) {
+if (!_writer.beginCapturedBlock()) {
 @end if@
-    throw std::runtime_error("tpp render error: " + _sb.error());
+    throw std::runtime_error("tpp render error: " + _writer.error());
 }
 @end case@
 @case EmitCapturedBlock@
-if (!_sb.emitCapturedBlock()) {
-    throw std::runtime_error("tpp render error: " + _sb.error());
+if (!_writer.emitCapturedBlock()) {
+    throw std::runtime_error("tpp render error: " + _writer.error());
 }
 @end case@
 @case For(f)@
@@ -162,87 +176,75 @@ END
 
 template emit_for_inline(f: ForData)
 @if f.body@
-const auto& _coll@f.scopeId@ = (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@);
-if (!@f.sb@.emitForEach(
-        _coll@f.scopeId@,
+if (!_writer.emitForEach(
+        @cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@,
     @cpp_inline_loop_options(f)@,
-        [&](const auto& @f.varName@, int _tppEnumerator@f.scopeId@) {
-            @if f.enumeratorName@
-            [[maybe_unused]] int @f.enumeratorName@ = _tppEnumerator@f.scopeId@;
-            @end if@
+        [&](const auto& @f.varName@, @if f.enumeratorName@int @f.enumeratorName@@else@int@end if@) {
             @for instr in f.body@
             @emit_instr(instr)@
             @end for@
         }))
-    throw std::runtime_error("tpp render error: " + @f.sb@.error());
+    throw std::runtime_error("tpp render error: " + _writer.error());
 @end if@
 END
 
 template emit_for_block(f: ForData)
 @if f.body@
-const auto& _coll@f.scopeId@ = (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@);
 @if f.bodyBlockIndentInParentBlock@
-if (!@f.sb@.emitCapturedBlockForEach(
-        _coll@f.scopeId@,
+if (!_writer.emitCapturedBlockForEach(
+        @cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@,
     @f.bodyBlockIndentInParentBlock@,
     @cpp_block_loop_options(f)@,
-        [&](const auto& @f.varName@, int _tppEnumerator@f.scopeId@) {
-            @if f.enumeratorName@
-            [[maybe_unused]] int @f.enumeratorName@ = _tppEnumerator@f.scopeId@;
-            @end if@
+        [&](const auto& @f.varName@, @if f.enumeratorName@int @f.enumeratorName@@else@int@end if@) {
             @for instr in f.body@
             @emit_instr(instr)@
             @end for@
         }))
-    throw std::runtime_error("tpp render error: " + @f.sb@.error());
+    throw std::runtime_error("tpp render error: " + _writer.error());
 @else@
-if (!@f.sb@.emitCapturedBlockForEach(
-        _coll@f.scopeId@,
-    @cpp_block_loop_options(f)@,
-        [&](const auto& @f.varName@, int _tppEnumerator@f.scopeId@) {
-            @if f.enumeratorName@
-            [[maybe_unused]] int @f.enumeratorName@ = _tppEnumerator@f.scopeId@;
-            @end if@
-            @for instr in f.body@
-            @emit_instr(instr)@
-            @end for@
-        }))
-    throw std::runtime_error("tpp render error: " + @f.sb@.error());
+if (!_writer.emitCapturedBlockForEach(@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@,
+                                     @cpp_block_loop_options(f)@,
+                                    [&](const auto& @f.varName@, @if f.enumeratorName@int @f.enumeratorName@@else@int@end if@) {
+                                        @for instr in f.body@
+                                        @emit_instr(instr)@
+                                        @end for@
+                                    }))
+{
+    throw std::runtime_error("tpp render error: " + _writer.error());
+}
 @end if@
 @end if@
 END
 
 // ── Aligned for ──────────────────────────────────────────────────────────────
 
-template emit_align_cell(scopeId: int, cell: AlignCellInfo, sb: string)
+template emit_align_cell(cell: AlignCellInfo)
 {
-    if (!@sb@.captureAlignedCell(@cell.cellIndex@, [&]() {
+    if (!_writer.captureAlignedCell(@cell.cellIndex@, [&]() {
             @for instr in cell.body@
             @emit_instr(instr)@
             @end for@
         }))
-        throw std::runtime_error("tpp render error: " + @sb@.error());
+    {
+        throw std::runtime_error("tpp render error: " + _writer.error());
+    }
 }
 END
 
 template emit_aligned_for(f: ForData)
 @if f.cells@
-const auto& _coll@f.scopeId@ = (@cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@);
-if (!@f.sb@.emitAlignedForEach(
-        _coll@f.scopeId@,
+if (!_writer.emitAlignedForEach(
+        @cpp_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@,
         @f.numCols@,
         std::vector<char>{ @for ch in f.alignSpecChars | sep=", "@'@ch@'@end for@ },
         @if f.singleAlignChar@true@else@false@end if@,
     @cpp_inline_loop_options(f)@,
-        [&](const auto& @f.varName@, int _tppEnumerator@f.scopeId@) {
-            @if f.enumeratorName@
-            [[maybe_unused]] int @f.enumeratorName@ = _tppEnumerator@f.scopeId@;
-            @end if@
+        [&](const auto& @f.varName@, @if f.enumeratorName@int @f.enumeratorName@@else@int@end if@) {
             @for cell in f.cells@
-            @emit_align_cell(f.scopeId, cell, f.sb)@
+            @emit_align_cell(cell)@
             @end for@
         }))
-    throw std::runtime_error("tpp render error: " + @f.sb@.error());
+    throw std::runtime_error("tpp render error: " + _writer.error());
 @end if@
 END
 
@@ -366,14 +368,11 @@ static std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep="
 
 @if ctx.policies@
 static std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@, const tpp::TppPolicy& _policy) {
-    tpp::Writer _sb;
+    tpp::Writer _writer;
     @for instr in fn.body@
     @emit_instr(instr)@
     @end for@
-    std::string _out = _sb.takeOutput();
-    if (!_out.empty() && _out.back() == '\n')
-        _out.pop_back();
-    return _out;
+    return _writer.takeOutput(tpp::Writer::OutputPostProcessing::StripSingleTrailingNewline);
 }
 
 @ctx.staticModifier@std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@) {
@@ -381,14 +380,11 @@ static std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep="
 }
 @else@
 @ctx.staticModifier@std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@typename tpp::ArgType<@cpp_type(param.type)@>::type @param.name@@end for@) {
-    tpp::Writer _sb;
+    tpp::Writer _writer;
     @for instr in fn.body@
     @emit_instr(instr)@
     @end for@
-    std::string _out = _sb.takeOutput();
-    if (!_out.empty() && _out.back() == '\n')
-        _out.pop_back();
-    return _out;
+    return _writer.takeOutput(tpp::Writer::OutputPostProcessing::StripSingleTrailingNewline);
 }
 @end if@
 @end for@

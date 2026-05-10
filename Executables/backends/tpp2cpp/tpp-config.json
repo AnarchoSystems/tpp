@@ -6,6 +6,7 @@
     ],
     "types": [
         "../../../Libraries/lib_tpp/ir.tpp.types",
+        "cpp-context.tpp.types",
         "../codegen/codegen.tpp.types"
     ]
 }

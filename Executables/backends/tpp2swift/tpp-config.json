@@ -1,6 +1,7 @@
 {
     "templates": [
-        "defs.tpp"
+        "source.tpp",
+        "runtime.tpp"
     ],
     "types": [
         "../../../Libraries/lib_tpp/ir.tpp.types",

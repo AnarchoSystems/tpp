@@ -106,6 +106,8 @@ add_executable(tpp_acceptance_test
     src/LspClient.cc
     src/LspTest.cc
     src/Tpp2CppCliTest.cc
+    src/Tpp2JavaCliTest.cc
+    src/Tpp2SwiftCliTest.cc
     src/WriterTest.cc
 )
 
@@ -114,11 +116,13 @@ target_include_directories(tpp_acceptance_test PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-add_dependencies(tpp_acceptance_test tpp render-tpp tpp-lsp)
+add_dependencies(tpp_acceptance_test tpp tpp2cpp tpp2java tpp2swift render-tpp tpp-lsp)
 
 target_compile_definitions(tpp_acceptance_test PUBLIC
     TPP_EXE="$<TARGET_FILE:tpp>"
     TPP2CPP_EXE="$<TARGET_FILE:tpp2cpp>"
+    TPP2JAVA_EXE="$<TARGET_FILE:tpp2java>"
+    TPP2SWIFT_EXE="$<TARGET_FILE:tpp2swift>"
     RENDER_TPP_EXE="$<TARGET_FILE:render-tpp>"
     TPP_LSP_EXE="$<TARGET_FILE:tpp-lsp>")
 
@@ -278,7 +282,7 @@ foreach(test_name IN LISTS tpp_codegen_cases)
         OUTPUT "${java_bundle}"
         COMMAND ${CMAKE_COMMAND}
             -DCMD=$<TARGET_FILE:tpp2java>
-            "-DARGS=bundle;-ns;${java_namespace};--extern-runtime;--input;${shared_ir}"
+            "-DARGS=bundle;-ns;${java_namespace};--input;${shared_ir}"
             -DOUT=${java_bundle}
             -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
         DEPENDS $<TARGET_FILE:tpp2java> "${shared_ir}"
@@ -308,7 +312,7 @@ foreach(test_name IN LISTS tpp_codegen_cases)
         OUTPUT "${swift_bundle}"
         COMMAND ${CMAKE_COMMAND}
             -DCMD=$<TARGET_FILE:tpp2swift>
-            "-DARGS=source;-ns;${swift_namespace};--extern-runtime;--input;${shared_ir}"
+            "-DARGS=source;-ns;${swift_namespace};--input;${shared_ir}"
             -DOUT=${swift_bundle}
             -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
         DEPENDS $<TARGET_FILE:tpp2swift> "${shared_ir}"

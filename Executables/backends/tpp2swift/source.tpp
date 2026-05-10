@@ -1,0 +1,542 @@
+// ── Type name helpers ─────────────────────────────────────────────────────
+
+template swift_ir_type(t: RenderTypeKind)
+@switch t@@case Str@String@end case@@case Int@Int@end case@@case Bool@Bool@end case@@case Named(name)@@name@@end case@@case List(elemType)@[@swift_ir_type(elemType)@]@end case@@case Optional(innerType)@@swift_ir_type(innerType)@?@end case@@end switch@
+END
+
+template swift_ir_boxed_type(t: RenderTypeKind)
+@switch t@@case Str@Box<String>@end case@@case Int@Box<Int>@end case@@case Bool@Box<Bool>@end case@@case Named(name)@Box<@name@>@end case@@case List(elemType)@Box<[@swift_ir_type(elemType)@]>@end case@@case Optional(innerType)@Box<@swift_ir_type(innerType)@>?@end case@@end switch@
+END
+
+// ── Enum generation helpers ──────────────────────────────────────────────
+
+template swift_decode_case(v: SourceVariantDef)
+@if v.payload@
+@switch v.payload@@case Str@self = .@v.tag@(try container.decode(Swift.String.self, forKey: .@v.tag@))@end case@@case Int@self = .@v.tag@(try container.decode(Swift.Int.self, forKey: .@v.tag@))@end case@@case Bool@self = .@v.tag@(try container.decode(Swift.Bool.self, forKey: .@v.tag@))@end case@@case Named(typeName)@self = .@v.tag@(try container.decode(@typeName@.self, forKey: .@v.tag@))@end case@@case List(elemType)@self = .@v.tag@(try container.decode([@swift_ir_type(elemType)@].self, forKey: .@v.tag@))@end case@@case Optional(inner)@self = .@v.tag@(try container.decodeIfPresent(@swift_ir_type(inner)@.self, forKey: .@v.tag@))@end case@@end switch@
+@else@
+self = .@v.tag@
+@end if@
+END
+
+template swift_encode_case(v: SourceVariantDef)
+@if v.payload@
+case .@v.tag@(let val): try container.encode(val, forKey: .@v.tag@)
+@else@
+case .@v.tag@: try container.encode(true, forKey: .@v.tag@)
+@end if@
+END
+
+// ── Main codegen template ────────────────────────────────────────────────
+
+template render_swift_top_level_enum(e: SourceEnumDef)
+@if e.docComment@@e.docComment@@end if@indirect enum @e.name@: Codable {
+    @for v in e.variants@
+    @if v.docComment@@v.docComment@@end if@    @if v.payload@case @v.tag@(@swift_ir_type(v.payload)@)@else@case @v.tag@@end if@
+    @end for@
+
+    enum CodingKeys: String, CodingKey {
+        @for v in e.variants@
+        case @v.tag@
+        @end for@
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        guard let key = container.allKeys.first else {
+            throw DecodingError.dataCorrupted(DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "No matching key"))
+        }
+        switch key {
+        @for v in e.variants@
+        case .@v.tag@:
+            @swift_decode_case(v)@
+        @end for@
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        @for v in e.variants@
+        @swift_encode_case(v)@
+        @end for@
+        }
+    }
+}
+END
+
+template render_swift_nested_enum(e: SourceEnumDef)
+@if e.docComment@@e.docComment@@end if@    indirect enum @e.name@: Codable {
+        @for v in e.variants@
+        @if v.docComment@@v.docComment@@end if@        @if v.payload@case @v.tag@(@swift_ir_type(v.payload)@)@else@case @v.tag@@end if@
+        @end for@
+
+        enum CodingKeys: String, CodingKey {
+            @for v in e.variants@
+            case @v.tag@
+            @end for@
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            guard let key = container.allKeys.first else {
+                throw DecodingError.dataCorrupted(DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "No matching key"))
+            }
+            switch key {
+            @for v in e.variants@
+            case .@v.tag@:
+                @swift_decode_case(v)@
+            @end for@
+            }
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            switch self {
+            @for v in e.variants@
+            @swift_encode_case(v)@
+            @end for@
+            }
+        }
+    }
+END
+
+template render_swift_top_level_struct(s: SourceStructDef)
+@if s.docComment@@s.docComment@@end if@struct @s.name@: Codable {
+    @for field in s.fields@
+    @if field.docComment@@field.docComment@@end if@    var @field.name@: @if field.recursive@@swift_ir_boxed_type(field.type)@@else@@swift_ir_type(field.type)@@end if@
+    @end for@
+}
+END
+
+template render_swift_nested_struct(s: SourceStructDef)
+@if s.docComment@@s.docComment@@end if@    struct @s.name@: Codable {
+        @for field in s.fields@
+        @if field.docComment@@field.docComment@@end if@        var @field.name@: @if field.recursive@@swift_ir_boxed_type(field.type)@@else@@swift_ir_type(field.type)@@end if@
+        @end for@
+    }
+END
+
+template render_swift_source(input: SourceInput)
+// Generated by tpp2swift — do not edit.
+@render_swift_types_body(input)@
+END
+
+template render_swift_types_body(input: SourceInput)
+@for e in input.enums@
+@render_swift_top_level_enum(e)@
+@end for@
+@for s in input.structs@
+@render_swift_top_level_struct(s)@
+@end for@
+END
+
+template render_swift_nested_types_body(input: SourceInput)
+@for e in input.enums@
+@render_swift_nested_enum(e)@
+@end for@
+@for s in input.structs@
+@render_swift_nested_struct(s)@
+@end for@
+END
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Instruction IR → Swift rendering functions
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── Expression → Swift String expression ─────────────────────────────────────
+
+template swift_value_path(path: string, isRecursive: bool, isOptional: bool)
+@if isRecursive@@if isOptional@@path@!.value@else@@path@.value@end if@@else@@if isOptional@@path@!@else@@path@@end if@@end if@
+END
+
+template swift_optional_some_path(path: string, isRecursive: bool)
+@if isRecursive@@path@!.value@else@@path@!@end if@
+END
+
+template swift_type(t: RenderTypeKind)
+@switch t@@case Str@String@end case@@case Int@Int@end case@@case Bool@Bool@end case@@case Named(name)@@name@@end case@@case List(elemType)@[@swift_type(elemType)@]@end case@@case Optional(innerType)@@swift_type(innerType)@?@end case@@end switch@
+END
+
+template swift_optional_to_str(expr: RenderExprInfo, inner: RenderTypeKind)
+@switch inner@@case Str@(@expr.path@ != nil ? @swift_optional_some_path(expr.path, expr.isRecursive)@ : "")@end case@@case Int@(@expr.path@ != nil ? String(@swift_optional_some_path(expr.path, expr.isRecursive)@) : "")@end case@@case Bool@(@expr.path@ != nil ? String(@swift_optional_some_path(expr.path, expr.isRecursive)@) : "")@end case@@case Named(n)@(@expr.path@ != nil ? String(describing: @swift_optional_some_path(expr.path, expr.isRecursive)@) : "")@end case@@case List(e)@(@expr.path@ != nil ? String(describing: @swift_optional_some_path(expr.path, expr.isRecursive)@) : "")@end case@@case Optional(i)@(@expr.path@ != nil ? String(describing: @swift_optional_some_path(expr.path, expr.isRecursive)@) : "")@end case@@end switch@
+END
+
+template swift_expr_path(expr: RenderExprInfo)
+@swift_value_path(expr.path, expr.isRecursive, expr.isOptional)@
+END
+
+template swift_expr_to_str(expr: RenderExprInfo)
+@switch expr.type@@case Str@@swift_expr_path(expr)@@end case@@case Int@String(@swift_expr_path(expr)@)@end case@@case Bool@String(@swift_expr_path(expr)@)@end case@@case Named(n)@String(describing: @swift_expr_path(expr)@)@end case@@case List(e)@String(describing: @swift_expr_path(expr)@)@end case@@case Optional(inner)@@swift_optional_to_str(expr, inner)@@end case@@end switch@
+END
+
+// ── Leaf instruction templates ───────────────────────────────────────────────
+
+template emit_emit(e: EmitData)
+_sb.emit(@e.textLit@)
+END
+
+template emit_emit_expr(e: EmitExprData)
+@if e.staticPolicyId@
+try _sb.emitValue(@swift_expr_to_str(e.expr)@, @e.staticPolicyId@)
+@else@
+@if e.useRuntimePolicy@
+try _sb.emitValue(@swift_expr_to_str(e.expr)@, _policy)
+@else@
+_sb.emitValue(@swift_expr_to_str(e.expr)@)
+@end if@
+@end if@
+END
+
+template emit_call(c: CallData)
+@if c.needsTry@
+@if c.policyArg@
+_sb.emit(try @c.functionName@(@for arg in c.args | sep=", " followedBy=", "@@swift_call_arg(arg)@@end for@@swift_policy_ref(c.policyArg)@))
+@else@
+_sb.emit(try @c.functionName@(@for arg in c.args | sep=", "@@swift_call_arg(arg)@@end for@))
+@end if@
+@else@
+@if c.policyArg@
+_sb.emit(@c.functionName@(@for arg in c.args | sep=", " followedBy=", "@@swift_call_arg(arg)@@end for@@swift_policy_ref(c.policyArg)@))
+@else@
+_sb.emit(@c.functionName@(@for arg in c.args | sep=", "@@swift_call_arg(arg)@@end for@))
+@end if@
+@end if@
+END
+
+template swift_call_arg(arg: CallArgInfo)
+@swift_value_path(arg.path, arg.isRecursive, arg.isOptional)@
+END
+
+template swift_policy_ref(ref: PolicyRef)
+@switch ref@@case Named(tag)@@tag@@end case@@case Pure@TppPolicy.pure@end case@@case Runtime@_policy@end case@@end switch@
+END
+
+// ── Recursive instruction dispatcher (block-style switch — avoids bug) ───────
+
+template emit_instr(instr: RenderInstruction)
+@switch instr@
+@case Emit(e)@
+@emit_emit(e)@
+@end case@
+@case EmitExpr(e)@
+@emit_emit_expr(e)@
+@end case@
+@case AlignCell@
+@end case@
+@case BeginCapturedBlock(p)@
+@if p.blockIndentInParentBlock@
+_sb.beginCapturedBlock(@p.blockIndentInParentBlock@)
+@else@
+_sb.beginCapturedBlock()
+@end if@
+@end case@
+@case EmitCapturedBlock@
+_sb.emitCapturedBlock()
+@end case@
+@case For(f)@
+@emit_for(f)@
+@end case@
+@case If(i)@
+@emit_if(i)@
+@end case@
+@case Switch(s)@
+@emit_switch(s)@
+@end case@
+@case Call(c)@
+@emit_call(c)@
+@end case@
+@end switch@
+END
+
+// ── For loop ─────────────────────────────────────────────────────────────────
+
+template emit_for(f: ForData)
+@if f.cells@
+@emit_aligned_for(f)@
+@else@
+@if f.capturesBody@
+@emit_for_block(f)@
+@else@
+@emit_for_inline(f)@
+@end if@
+@end if@
+END
+
+template emit_for_inline(f: ForData)
+@if f.body@
+for _i@f.scopeId@ in 0..<@swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.count {
+    let @f.varName@ = @swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@[_i@f.scopeId@]
+    @if f.enumeratorName@
+    let @f.enumeratorName@ = _i@f.scopeId@
+    @end if@
+    @if f.precededByLit@
+    _sb.emit(@f.precededByLit@)
+    @end if@
+    @for instr in f.body@
+    @emit_instr(instr)@
+    @end for@
+    @if f.sepLit@
+    if _i@f.scopeId@ + 1 < @swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.count { _sb.emit(@f.sepLit@) }
+    @if f.followedByLit@
+    else if !@swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.isEmpty { _sb.emit(@f.followedByLit@) }
+    @end if@
+    @else@
+    @if f.followedByLit@
+    if _i@f.scopeId@ + 1 >= @swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.count && !@swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.isEmpty { _sb.emit(@f.followedByLit@) }
+    @end if@
+    @end if@
+}
+@end if@
+END
+
+template emit_for_block(f: ForData)
+@if f.body@
+@if f.bodyBlockIndentInParentBlock@
+_sb.beginCapturedBlock(@f.bodyBlockIndentInParentBlock@)
+@else@
+_sb.beginCapturedBlock()
+@end if@
+for _i@f.scopeId@ in 0..<@swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.count {
+    let @f.varName@ = @swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@[_i@f.scopeId@]
+    @if f.enumeratorName@
+    let @f.enumeratorName@ = _i@f.scopeId@
+    @end if@
+    _sb.beginCapture()
+    @for instr in f.body@
+    @emit_instr(instr)@
+    @end for@
+    if _sb.hasError { fatalError("tpp render error: \(_sb.error)") }
+    let _iter@f.scopeId@ = _sb.endCaptureResult()
+    let _iterText@f.scopeId@ = _iter@f.scopeId@.text
+    @if f.precededByLit@
+    _sb.emit(@f.precededByLit@)
+    @end if@
+    _sb.emit(_iterText@f.scopeId@)
+    @if f.sepLit@
+    if _i@f.scopeId@ + 1 < @swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.count {
+        _sb.emit(@f.sepLit@)
+    } else {
+        @if f.followedByLit@
+        if !@swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.isEmpty { _sb.emit(@f.followedByLit@) }
+        @end if@
+    }
+    @else@
+    @if f.followedByLit@
+    if _i@f.scopeId@ + 1 >= @swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.count && !@swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.isEmpty { _sb.emit(@f.followedByLit@) }
+    @end if@
+    @end if@
+}
+_sb.emitCapturedBlock()
+@end if@
+END
+
+template swift_align_spec(f: ForData)
+({
+    let _chars: [Character] = [@for ch in f.alignSpecChars | sep=", "@"@ch@"@end for@]
+    if _chars.count == 1 {
+        return [Character](repeating: _chars[0], count: @f.numCols@)
+    }
+    if _chars.isEmpty {
+        return [Character](repeating: "l", count: @f.numCols@)
+    }
+    return _chars
+})()
+END
+
+// ── Aligned for ──────────────────────────────────────────────────────────────
+
+template emit_align_cell(scopeId: int, cell: AlignCellInfo)
+do {
+    _sb.beginCapture()
+    @for instr in cell.body@
+    @emit_instr(instr)@
+    @end for@
+    if _sb.hasError { fatalError("tpp render error: \(_sb.error)") }
+    let _cell@scopeId@_@cell.cellIndex@ = _sb.endCaptureResult()
+    if TppWriter.containsLineBreak(_cell@scopeId@_@cell.cellIndex@.text) {
+        fatalError("tpp render error: aligned cells must be single-line")
+    }
+    _row@scopeId@[@cell.cellIndex@] = _cell@scopeId@_@cell.cellIndex@.text
+}
+END
+
+template emit_aligned_for(f: ForData)
+@if f.cells@
+var _rows@f.scopeId@: [[String]] = []
+for _i@f.scopeId@ in 0..<@swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@.count {
+    let @f.varName@ = @swift_value_path(f.collPath, f.collIsRecursive, f.collIsOptional)@[_i@f.scopeId@]
+    @if f.enumeratorName@
+    let @f.enumeratorName@ = _i@f.scopeId@
+    @end if@
+    var _row@f.scopeId@ = [String](repeating: "", count: @f.numCols@)
+    @for cell in f.cells@
+    @emit_align_cell(f.scopeId, cell)@
+    @end for@
+    _rows@f.scopeId@.append(_row@f.scopeId@)
+}
+var _cw@f.scopeId@ = [Int](repeating: 0, count: @f.numCols@)
+for _r in _rows@f.scopeId@ { for _c in 0..<_r.count { _cw@f.scopeId@[_c] = max(_cw@f.scopeId@[_c], _r[_c].count) } }
+let _spec@f.scopeId@ = @swift_align_spec(f)@
+for _i@f.scopeId@ in 0..<_rows@f.scopeId@.count {
+    let _r = _rows@f.scopeId@[_i@f.scopeId@]
+    var _line@f.scopeId@ = ""
+    for _c in 0..<_r.count {
+        if _c + 1 < @f.numCols@ {
+            _line@f.scopeId@ += TppWriter.padCell(_r[_c], _cw@f.scopeId@[_c], _spec@f.scopeId@[_c])
+        } else {
+            let _sp = _spec@f.scopeId@[_c]; let _pd = _cw@f.scopeId@[_c] - _r[_c].count
+            if _pd > 0 && _sp != "l" { let _left = (_sp == "c") ? _pd / 2 : _pd; _line@f.scopeId@ += String(repeating: " ", count: _left) }
+            _line@f.scopeId@ += _r[_c]
+        }
+    }
+    @if f.precededByLit@
+    _sb.emit(@f.precededByLit@)
+    @end if@
+    _sb.emit(_line@f.scopeId@)
+    @if f.sepLit@
+    if _i@f.scopeId@ + 1 < _rows@f.scopeId@.count { _sb.emit(@f.sepLit@) }
+    @if f.followedByLit@
+    else if !_rows@f.scopeId@.isEmpty { _sb.emit(@f.followedByLit@) }
+    @end if@
+    @else@
+    @if f.followedByLit@
+    if _i@f.scopeId@ + 1 >= _rows@f.scopeId@.count && !_rows@f.scopeId@.isEmpty { _sb.emit(@f.followedByLit@) }
+    @end if@
+    @end if@
+}
+@end if@
+END
+
+// ── If / Else ────────────────────────────────────────────────────────────────
+
+template emit_if(i: IfData)
+@if i.condIsBool@
+@if i.isNegated@
+if !@i.condPath@ {
+@else@
+if @i.condPath@ {
+@end if@
+@else@
+@if i.isNegated@
+if @i.condPath@ == nil {
+@else@
+if @i.condPath@ != nil {
+@end if@
+@end if@
+    @for instr in i.thenBody@
+    @emit_instr(instr)@
+    @end for@
+@if i.elseBody@
+} else {
+    @for instr in i.elseBody@
+    @emit_instr(instr)@
+    @end for@
+@end if@
+}
+END
+
+// ── Switch / Case ────────────────────────────────────────────────────────────
+
+template emit_switch(s: SwitchData)
+switch @swift_value_path(s.exprPath, s.exprIsRecursive, s.exprIsOptional)@ {
+@for c in s.cases@
+@if c.bindingName@
+case .@c.tag@(let @c.bindingName@):
+@else@
+@if c.payloadType@
+case .@c.tag@(_):
+@else@
+case .@c.tag@:
+@end if@
+@end if@
+    @if c.body@
+    @for instr in c.body@
+    @emit_instr(instr)@
+    @end for@
+    @else@
+    break
+    @end if@
+@end for@
+}
+END
+
+// ── Policy helpers ───────────────────────────────────────────────────────────
+
+template emit_policy_instance_body(pol: PolicyInfo)
+var p = TppPolicy(tag: @pol.tagLit@)
+@if pol.minVal@
+p.minLength = @pol.minVal@
+@end if@
+@if pol.maxVal@
+p.maxLength = @pol.maxVal@
+@end if@
+@if pol.rejectIfRegexLit@
+@if pol.rejectMsgLit@
+p.rejectIf = TppPolicy.RejectRule(pattern: try! Regex(@pol.rejectIfRegexLit@), message: @pol.rejectMsgLit@)
+@end if@
+@end if@
+@if pol.require@
+p.require = [@for r in pol.require | sep=", "@TppPolicy.RequireStep(pattern: try! Regex(@r.regexLit@), replace: @if r.replaceLit@@r.replaceLit@@else@nil@end if@)@end for@]
+@end if@
+@if pol.replacements@
+p.replacements = [@for r in pol.replacements | sep=", "@(@r.findLit@, @r.replaceLit@)@end for@]
+@end if@
+@if pol.outputFilter@
+p.outputFilter = [@for f in pol.outputFilter | sep=", "@try! Regex(@f.regexLit@)@end for@]
+@end if@
+return p
+END
+
+template emit_policy_instance(pol: PolicyInfo, staticPrefix: string)
+@staticPrefix@let @pol.identifier@: TppPolicy = {
+    @emit_policy_instance_body(pol)@
+}()
+END
+
+template emit_policy_instances(ctx: RenderFunctionsInput)
+@if ctx.policies@
+@for pol in ctx.policies@
+@emit_policy_instance(pol, ctx.staticModifier)@
+@end for@
+@end if@
+END
+
+template render_swift_functions(ctx: RenderFunctionsInput)
+@if ctx.namespaceName@
+
+extension @ctx.namespaceName@ {
+@end if@
+@if ctx.policies@
+
+@emit_policy_instances(ctx)@
+@end if@
+@for fn in ctx.functions@
+
+@if ctx.policies@
+@if fn.doc@@fn.doc@@end if@
+@ctx.staticModifier@func @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@_ @param.name@: @swift_type(param.type)@@end for@) throws -> String { return try @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", " followedBy=", "@@param.name@@end for@TppPolicy.pure) }
+
+fileprivate @ctx.staticModifier@func @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", " followedBy=", "@_ @param.name@: @swift_type(param.type)@@end for@_ _policy: TppPolicy) throws -> String {
+@else@
+@if fn.doc@@fn.doc@@end if@
+@ctx.staticModifier@func @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@_ @param.name@: @swift_type(param.type)@@end for@) -> String {
+@end if@
+    let _sb = TppWriter()
+    @for instr in fn.body@
+    @emit_instr(instr)@
+    @end for@
+    return _sb.takeOutput(.stripSingleTrailingNewline)
+}
+@end for@
+@if ctx.namespaceName@
+}
+@end if@
+END
+
+template render_swift_namespaced_source(input: SourceInput, namespaceName: string)
+// Generated by tpp2swift — namespaced source.
+
+enum @namespaceName@ {
+@render_swift_nested_types_body(input)@
+}
+END

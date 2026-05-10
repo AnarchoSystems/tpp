@@ -182,9 +182,9 @@ namespace tpp
             return ok;
         }
 
-        std::string take_output()
+        std::string take_output(Writer::OutputPostProcessing postProcessing = Writer::OutputPostProcessing::None)
         {
-            return writer_.takeOutput();
+            return writer_.takeOutput(postProcessing);
         }
 
         const std::string &error() const
@@ -774,10 +774,7 @@ namespace tpp
                 return false;
             }
 
-            std::string result = interpreter.take_output();
-            if (!result.empty() && result.back() == '\n')
-                result.pop_back();
-            output = std::move(result);
+            output = interpreter.take_output(Writer::OutputPostProcessing::StripSingleTrailingNewline);
             return true;
         }
         catch (const std::exception &e)

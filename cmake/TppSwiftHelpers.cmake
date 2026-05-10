@@ -2,9 +2,10 @@
 # Provides tpp_swift_add() to generate and compile a Swift test from a tpp
 # acceptance-test directory.  The pipeline is:
 #   1. tpp           → IR JSON
-#   2. tpp2swift     → Generated.swift  (types + function stubs)
-#   3. make-swift-test → Test.swift     (test harness)
-#   4. swiftc        → compile both together
+#   2. tpp2swift     → Runtime.swift    (shared runtime helpers)
+#   3. tpp2swift     → Generated.swift  (types + rendering functions)
+#   4. make-swift-test → Test.swift     (test harness)
+#   5. swiftc        → compile all three together
 #
 # Usage:
 #   tpp_swift_add(<target>
@@ -35,6 +36,7 @@ function(tpp_swift_add target_name)
 
     set(swift_dir       "${CMAKE_CURRENT_BINARY_DIR}/swift_tests/${TS_NAME}")
     set(ir_json         "${swift_dir}/${TS_NAME}-tpp.json")
+    set(runtime_src     "${swift_dir}/Runtime.swift")
     set(generated_src   "${swift_dir}/Generated.swift")
     set(test_src        "${swift_dir}/main.swift")
     set(swift_bin       "${swift_dir}/Test")
@@ -54,7 +56,20 @@ function(tpp_swift_add target_name)
         VERBATIM
     )
 
-    # Step 2: tpp2swift → Generated.swift (types + function stubs)
+    # Step 2: tpp2swift → Runtime.swift (shared runtime helpers)
+    add_custom_command(
+        OUTPUT "${runtime_src}"
+        COMMAND ${CMAKE_COMMAND}
+            -DCMD=$<TARGET_FILE:tpp2swift>
+            "-DARGS=runtime-shared"
+            -DOUT=${runtime_src}
+            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
+        DEPENDS $<TARGET_FILE:tpp2swift>
+        COMMENT "tpp2swift runtime-shared ${TS_NAME}"
+        VERBATIM
+    )
+
+    # Step 3: tpp2swift → Generated.swift (types + rendering functions)
     add_custom_command(
         OUTPUT "${generated_src}"
         COMMAND ${CMAKE_COMMAND}
@@ -67,7 +82,7 @@ function(tpp_swift_add target_name)
         VERBATIM
     )
 
-    # Step 3: make-swift-test → Test.swift (test harness)
+    # Step 4: make-swift-test → Test.swift (test harness)
     add_custom_command(
         OUTPUT "${test_src}"
         COMMAND ${CMAKE_COMMAND}
@@ -80,11 +95,11 @@ function(tpp_swift_add target_name)
         VERBATIM
     )
 
-    # Step 4: swiftc — compile both together
+    # Step 5: swiftc — compile runtime, generated code, and test harness together
     add_custom_command(
         OUTPUT "${swift_bin}"
-        COMMAND "${SWIFT_COMPILER}" -o "${swift_bin}" "${generated_src}" "${test_src}"
-        DEPENDS "${generated_src}" "${test_src}"
+        COMMAND "${SWIFT_COMPILER}" -o "${swift_bin}" "${runtime_src}" "${generated_src}" "${test_src}"
+        DEPENDS "${runtime_src}" "${generated_src}" "${test_src}"
         COMMENT "swiftc ${TS_NAME}"
     )
 

@@ -135,7 +135,7 @@ static void checkPatternAbsentInImplFiles(const std::string &pattern)
 
 TEST(IRStability, GeneratedImplementationContainsTakeOutput)
 {
-    checkPatternInImplFiles(".takeOutput()");
+    checkPatternInImplFiles(".takeOutput(");
 }
 
 TEST(IRStability, GeneratedImplementationContainsTppWriter)

@@ -27,13 +27,11 @@ struct RenderExprInfo
 struct EmitData
 {
     textLit : string;
-    sb : string;
 }
 
 struct EmitExprData
 {
     expr : RenderExprInfo;
-    sb : string;
     staticPolicyLit : optional<string>;
     staticPolicyId : optional<string>;
     useRuntimePolicy : bool;
@@ -65,7 +63,6 @@ struct ForData
     precededByLit : optional<string>;
     capturesBody : bool;
     bodyBlockIndentInParentBlock : optional<int>;
-    sb : string;
     alignSpec : optional<string>;
     cells : optional<list<AlignCellInfo>>;
     numCols : int;
@@ -92,7 +89,6 @@ struct IfData
     isNegated : bool;
     thenBody : list<RenderInstruction>;
     elseBody : optional<list<RenderInstruction>>;
-    sb : string;
 }
 
 struct SwitchData
@@ -102,7 +98,6 @@ struct SwitchData
     exprIsOptional : bool;
     enumTypeName : string;
     cases : list<CaseData>;
-    sb : string;
 }
 
 struct CallArgInfo
@@ -124,7 +119,6 @@ struct CallData
     functionName : string;
     args : list<CallArgInfo>;
     policyArg : optional<PolicyRef>;
-    sb : string;
     needsTry : bool;
 }
 
@@ -182,6 +176,45 @@ struct ParamInfo
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Declaration-source context (shared across source-generating backends)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+struct SourceFieldDef
+{
+    name : string;
+    type : RenderTypeKind;
+    recursive : bool;
+    docComment : optional<string>;
+}
+
+struct SourceStructDef
+{
+    name : string;
+    fields : list<SourceFieldDef>;
+    docComment : optional<string>;
+}
+
+struct SourceVariantDef
+{
+    tag : string;
+    payload : optional<RenderTypeKind>;
+    docComment : optional<string>;
+}
+
+struct SourceEnumDef
+{
+    name : string;
+    variants : list<SourceVariantDef>;
+    docComment : optional<string>;
+}
+
+struct SourceInput
+{
+    enums : list<SourceEnumDef>;
+    structs : list<SourceStructDef>;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Function rendering context (shared across all backends)
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -201,5 +234,4 @@ struct RenderFunctionsInput
     namespaceName : optional<string>;
     staticModifier : string;
     includes : optional<list<string>>;
-    externalRuntime : optional<bool>;
 }

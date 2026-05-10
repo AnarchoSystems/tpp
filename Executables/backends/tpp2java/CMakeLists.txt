@@ -22,7 +22,7 @@ add_custom_command(OUTPUT "${java_ir}"
     COMMENT "tpp java_defs"
     VERBATIM)
 
-# Step 2: generate C++ functions header (uses CodegenTypes.h, no separate types header)
+# Step 2: generate C++ functions header (uses CodegenTypes.h)
 set(java_funs "${CMAKE_CURRENT_BINARY_DIR}/java_defs_functions.h")
 set(_java_funs_args functions -ns codegen -i CodegenTypes.h -i tpp/IR.h --input "${java_ir}")
 add_custom_command(OUTPUT "${java_funs}"

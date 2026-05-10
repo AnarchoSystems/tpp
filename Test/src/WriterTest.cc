@@ -35,6 +35,16 @@ TEST(WriterTest, EmitLiteral)
     EXPECT_EQ(writer.takeOutput(), "hello world");
 }
 
+TEST(WriterTest, TakeOutputCanStripSingleTrailingNewline)
+{
+    Writer writer;
+
+    EXPECT_TRUE(writer.emit("hello\n"));
+
+    EXPECT_EQ(writer.takeOutput(), "hello\n");
+    EXPECT_EQ(writer.takeOutput(Writer::OutputPostProcessing::StripSingleTrailingNewline), "hello");
+}
+
 TEST(WriterTest, EmitValueWithPolicy)
 {
     Writer writer;

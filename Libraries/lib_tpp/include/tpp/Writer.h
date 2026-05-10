@@ -24,6 +24,12 @@ namespace tpp
             std::optional<std::string_view> followedBy;
         };
 
+        enum class OutputPostProcessing
+        {
+            None,
+            StripSingleTrailingNewline,
+        };
+
         struct CaptureResult
         {
             std::string text;
@@ -470,9 +476,16 @@ namespace tpp
             return renderIndentedFrame(endCaptureFrame(), indentColumns);
         }
 
-        std::string takeOutput()
+        std::string takeOutput(OutputPostProcessing postProcessing = OutputPostProcessing::None)
         {
-            return outputStack_.empty() ? std::string{} : serializeFrame(outputStack_.front());
+            std::string output = outputStack_.empty() ? std::string{} : serializeFrame(outputStack_.front());
+            if (postProcessing == OutputPostProcessing::StripSingleTrailingNewline &&
+                !output.empty() &&
+                output.back() == '\n')
+            {
+                output.pop_back();
+            }
+            return output;
         }
 
         std::string &error()

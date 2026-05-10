@@ -40,7 +40,6 @@ struct ParsedBackendCommandLine
     Mode mode;
     std::string inputFile;
     std::string namespaceName;
-    bool externalRuntime = false;
     std::vector<std::string> includes;
 };
 
@@ -110,10 +109,6 @@ inline ParsedBackendCommandLine<Mode> parseBackendCommandLine(
                 std::exit(EXIT_FAILURE);
             }
             result.includes.push_back(argv[++i]);
-        }
-        else if (arg == "--extern-runtime")
-        {
-            result.externalRuntime = true;
         }
         else
         {
@@ -434,7 +429,7 @@ inline bool instructionListUsesBinding(
 
 /// Recursively convert an IR instruction to the render-model instruction tree.
 inline RenderInstruction convertInstruction(
-    const tpp::Instruction &instr, const std::string &sb,
+    const tpp::Instruction &instr,
     const std::string &activePolicy, int &scope, const tpp::IR &ir,
     const ConvertConfig &cfg)
 {
@@ -444,7 +439,7 @@ inline RenderInstruction convertInstruction(
 
         if constexpr (std::is_same_v<T, tpp::EmitInstr>)
         {
-            return {EmitData{stringLiteral(arg.text), sb}};
+            return {EmitData{stringLiteral(arg.text)}};
         }
         else if constexpr (std::is_same_v<T, tpp::EmitExprInstr>)
         {
@@ -452,7 +447,6 @@ inline RenderInstruction convertInstruction(
 
             EmitExprData data;
             data.expr = exprInfoToContext(arg.expr);
-            data.sb = sb;
             data.useRuntimePolicy = false;
 
             if (effPol == "none")
@@ -512,7 +506,6 @@ inline RenderInstruction convertInstruction(
                 forData->precededByLit = stringLiteral(*arg->precededBy);
             forData->capturesBody = bodyIndent.wrapped;
             forData->bodyBlockIndentInParentBlock = bodyIndent.blockIndentInParentBlock;
-            forData->sb = sb;
             forData->alignSpec = arg->alignSpec;
             forData->singleAlignChar = arg->alignSpec.has_value() && arg->alignSpec->size() == 1;
 
@@ -525,7 +518,7 @@ inline RenderInstruction convertInstruction(
                 {
                     auto cellBody = std::make_unique<std::vector<RenderInstruction>>();
                     for (const auto *bi : cellGroups[ci])
-                        cellBody->push_back(convertInstruction(*bi, sb, pol, scope, ir, cfg));
+                        cellBody->push_back(convertInstruction(*bi, pol, scope, ir, cfg));
                     cellsVec->push_back({ci, std::move(cellBody)});
                 }
                 forData->cells = std::move(cellsVec);
@@ -541,7 +534,7 @@ inline RenderInstruction convertInstruction(
                 const size_t firstIndex = bodyIndent.wrapped ? bodyIndent.firstIndex : (preserveCapturedBlock ? 0 : bodyIndent.firstIndex);
                 const size_t pastLastIndex = bodyIndent.wrapped ? bodyIndent.pastLastIndex : (preserveCapturedBlock ? arg->body->size() : bodyIndent.pastLastIndex);
                 for (size_t index = firstIndex; index < pastLastIndex; ++index)
-                    bodyVec->push_back(convertInstruction((*arg->body)[index], sb, pol, scope, ir, cfg));
+                    bodyVec->push_back(convertInstruction((*arg->body)[index], pol, scope, ir, cfg));
                 forData->body = std::move(bodyVec);
                 forData->numCols = 0;
             }
@@ -563,13 +556,12 @@ inline RenderInstruction convertInstruction(
             ifData->condPath = exprInfoPath(arg->condExpr);
             ifData->condIsBool = arg->condExpr.type->value.index() == 2;
             ifData->isNegated = arg->negated;
-            ifData->sb = sb;
 
             auto thenVec = std::make_unique<std::vector<RenderInstruction>>();
             const size_t thenFirstIndex = preserveCapturedBlock ? 0 : thenIndent.firstIndex;
             const size_t thenPastLastIndex = preserveCapturedBlock ? arg->thenBody->size() : thenIndent.pastLastIndex;
             for (size_t index = thenFirstIndex; index < thenPastLastIndex; ++index)
-                thenVec->push_back(convertInstruction((*arg->thenBody)[index], sb, activePolicy, scope, ir, cfg));
+                thenVec->push_back(convertInstruction((*arg->thenBody)[index], activePolicy, scope, ir, cfg));
             ifData->thenBody = std::move(thenVec);
 
             if (elseBodyPresent)
@@ -578,7 +570,7 @@ inline RenderInstruction convertInstruction(
                 const size_t elseFirstIndex = preserveCapturedBlock ? 0 : elseIndent.firstIndex;
                 const size_t elsePastLastIndex = preserveCapturedBlock ? arg->elseBody->size() : elseIndent.pastLastIndex;
                 for (size_t index = elseFirstIndex; index < elsePastLastIndex; ++index)
-                    elseVec->push_back(convertInstruction((*arg->elseBody)[index], sb, activePolicy, scope, ir, cfg));
+                    elseVec->push_back(convertInstruction((*arg->elseBody)[index], activePolicy, scope, ir, cfg));
                 ifData->elseBody = std::move(elseVec);
             }
 
@@ -616,7 +608,7 @@ inline RenderInstruction convertInstruction(
                 const size_t caseFirstIndex = preserveCapturedBlock ? 0 : caseIndent.firstIndex;
                 const size_t casePastLastIndex = preserveCapturedBlock ? c.body->size() : caseIndent.pastLastIndex;
                 for (size_t index = caseFirstIndex; index < casePastLastIndex; ++index)
-                    caseBody->push_back(convertInstruction((*c.body)[index], sb, pol, scope, ir, cfg));
+                    caseBody->push_back(convertInstruction((*c.body)[index], pol, scope, ir, cfg));
 
                 int variantIndex = -1;
                 if (enumDef)
@@ -666,7 +658,6 @@ inline RenderInstruction convertInstruction(
             switchData->exprIsOptional = arg->expr.isOptional;
             switchData->enumTypeName = enumTypeName;
             switchData->cases = std::move(casesVec);
-            switchData->sb = sb;
 
             RenderInstruction result;
             result.value.emplace<7>(std::move(switchData));
@@ -683,7 +674,6 @@ inline RenderInstruction convertInstruction(
             CallData callData;
             callData.functionName = cfg.functionPrefix + arg.functionName;
             callData.args = std::move(argsVec);
-            callData.sb = sb;
             callData.needsTry = cfg.callNeedsTry && !ir.policies.empty();
             callData.policyArg = makePolicyRef(activePolicy, ir);
 
@@ -693,7 +683,7 @@ inline RenderInstruction convertInstruction(
         }
         else
         {
-            return {EmitData{"", ""}};
+            return {EmitData{""}};
         }
     }, instr.value);
 }
@@ -823,7 +813,7 @@ inline RenderFunctionsInput buildFunctionsContext(
         {
             if (!cfg.preserveCapturedBlockInstructions && isCapturedBlockInstruction(instr))
                 continue;
-            body->push_back(convertInstruction(instr, "_sb", fn.policy, scope, ir, cfg));
+            body->push_back(convertInstruction(instr, fn.policy, scope, ir, cfg));
         }
 
         RenderFunctionDef def;

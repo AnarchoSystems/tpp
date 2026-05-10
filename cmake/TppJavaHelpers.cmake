@@ -2,9 +2,10 @@
 # Provides tpp_java_add() to generate and compile a Java test from a tpp
 # acceptance-test directory.  The pipeline is:
 #   1. tpp          → IR JSON
-#   2. tpp2java     → Generated.java  (types + function stubs)
-#   3. make-java-test → Test.java     (test harness)
-#   4. javac        → compile both together
+#   2. tpp2java     → Runtime.java    (shared runtime helpers)
+#   3. tpp2java     → Generated.java  (types + rendering functions)
+#   4. make-java-test → Test.java     (test harness)
+#   5. javac        → compile all three together
 #
 # Usage:
 #   tpp_java_add(<target>
@@ -51,6 +52,7 @@ function(tpp_java_add target_name)
 
     set(java_dir     "${CMAKE_CURRENT_BINARY_DIR}/java_tests/${TJ_NAME}")
     set(ir_json      "${java_dir}/${TJ_NAME}-tpp.json")
+    set(runtime_src  "${java_dir}/Runtime.java")
     set(generated_src "${java_dir}/Generated.java")
     set(test_src     "${java_dir}/Test.java")
     set(java_class   "${java_dir}/Test.class")
@@ -70,7 +72,20 @@ function(tpp_java_add target_name)
         VERBATIM
     )
 
-    # Step 2: tpp2java → Generated.java (types + function stubs)
+    # Step 2: tpp2java → Runtime.java (shared runtime helpers)
+    add_custom_command(
+        OUTPUT "${runtime_src}"
+        COMMAND ${CMAKE_COMMAND}
+            -DCMD=$<TARGET_FILE:tpp2java>
+            "-DARGS=runtime-shared"
+            -DOUT=${runtime_src}
+            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
+        DEPENDS $<TARGET_FILE:tpp2java>
+        COMMENT "tpp2java runtime-shared ${TJ_NAME}"
+        VERBATIM
+    )
+
+    # Step 3: tpp2java → Generated.java (types + rendering functions)
     add_custom_command(
         OUTPUT "${generated_src}"
         COMMAND ${CMAKE_COMMAND}
@@ -83,7 +98,7 @@ function(tpp_java_add target_name)
         VERBATIM
     )
 
-    # Step 3: make-java-test → Test.java (test harness)
+    # Step 4: make-java-test → Test.java (test harness)
     add_custom_command(
         OUTPUT "${test_src}"
         COMMAND ${CMAKE_COMMAND}
@@ -96,12 +111,12 @@ function(tpp_java_add target_name)
         VERBATIM
     )
 
-    # Step 4: javac — compile both together
+    # Step 5: javac — compile runtime, generated code, and test harness together
     add_custom_command(
         OUTPUT "${java_class}"
         COMMAND "${JAVA_COMPILER}" -cp "${ORG_JSON_JAR}" -d "${java_dir}"
-                "${generated_src}" "${test_src}"
-        DEPENDS "${generated_src}" "${test_src}" "${ORG_JSON_JAR}"
+                "${runtime_src}" "${generated_src}" "${test_src}"
+        DEPENDS "${runtime_src}" "${generated_src}" "${test_src}" "${ORG_JSON_JAR}"
         COMMENT "javac ${TJ_NAME}"
     )
 

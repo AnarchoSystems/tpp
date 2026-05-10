@@ -243,11 +243,17 @@ The intermediate representation JSON is read from stdin by default, or from a fi
 | `-h`, `--help` | Print usage information and exit |
 | `--input <file>` | Read intermediate representation from `<file>` instead of stdin |
 | `-ns <name>` | Use `<name>` as the generated Java class name |
-| `--extern-runtime` | Suppress inlining runtime helpers in generated source |
+
+### Output Contract
+
+- `source` generates only Java types and rendering functions.
+- `runtime` and `runtime-shared` both generate the dedicated shared runtime helpers file.
+- Compile `runtime-shared` output together with `source` or `bundle` output.
 
 ### Example
 
 ```bash
+tpp my_project | tpp2java runtime-shared > Runtime.java
 tpp my_project | tpp2java source -ns Functions > Functions.java
 ```
 
@@ -281,11 +287,17 @@ The intermediate representation JSON is read from stdin by default, or from a fi
 | `-h`, `--help` | Print usage information and exit |
 | `--input <file>` | Read intermediate representation from `<file>` instead of stdin |
 | `-ns <name>` | Wrap generated code in an enum namespace |
-| `--extern-runtime` | Suppress inlining runtime helpers in generated source |
+
+### Output Contract
+
+- `source` generates only Swift types and rendering functions.
+- `runtime` and `runtime-shared` both generate the dedicated shared runtime helpers file.
+- Compile `runtime-shared` output together with `source` output.
 
 ### Example
 
 ```bash
+tpp . | tpp2swift runtime-shared > Runtime.swift
 tpp . | tpp2swift source -ns Functions > Functions.swift
 ```
 
