@@ -1,0 +1,5 @@
+struct Foo
+{
+    int bar = 42;
+    std::string baz = "Hello, World!";
+};

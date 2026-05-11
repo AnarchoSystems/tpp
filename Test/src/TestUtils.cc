@@ -51,8 +51,18 @@ static bool matchGlob(const std::string &pattern, const std::string &text)
     return pi == pattern.size();
 }
 
+static bool hasAllowedSourceExtension(const std::string &name, bool isTypes)
+{
+    if (name.size() >= 4 && name.substr(name.size() - 4) == ".tpp")
+        return true;
+    if (isTypes && name.size() >= 10 && name.substr(name.size() - 10) == ".tpp.types")
+        return true;
+    return false;
+}
+
 static std::vector<std::filesystem::path> expandPattern(const std::filesystem::path &baseDir,
-                                                        const std::string &pattern)
+                                                        const std::string &pattern,
+                                                        bool isTypes)
 {
     std::filesystem::path patPath(pattern);
     std::string filename = patPath.filename().string();
@@ -68,7 +78,7 @@ static std::vector<std::filesystem::path> expandPattern(const std::filesystem::p
         {
             if (!entry.is_regular_file()) continue;
             auto name = entry.path().filename().string();
-            if (name.size() < 4 || name.substr(name.size() - 4) != ".tpp") continue;
+            if (!hasAllowedSourceExtension(name, isTypes)) continue;
             if (matchGlob(filename, name)) results.push_back(entry.path());
         }
         std::sort(results.begin(), results.end());
@@ -100,7 +110,7 @@ tLoadedTestCase tTestCase::extract() const
 
     for (const auto &pattern : config.value("types", nlohmann::json::array()))
     {
-        for (const auto &filePath : expandPattern(path, pattern.get<std::string>()))
+        for (const auto &filePath : expandPattern(path, pattern.get<std::string>(), true))
         {
             std::string relPath = std::filesystem::relative(filePath, path).string();
             loaded.sources.push_back({name + "/" + relPath, readFile(filePath), true});
@@ -108,7 +118,7 @@ tLoadedTestCase tTestCase::extract() const
     }
     for (const auto &pattern : config.value("templates", nlohmann::json::array()))
     {
-        for (const auto &filePath : expandPattern(path, pattern.get<std::string>()))
+        for (const auto &filePath : expandPattern(path, pattern.get<std::string>(), false))
         {
             std::string relPath = std::filesystem::relative(filePath, path).string();
             loaded.sources.push_back({name + "/" + relPath, readFile(filePath), false});
@@ -219,21 +229,38 @@ std::vector<tTestCase> GetPositiveTestCases()
 // ── CLI runner ────────────────────────────────────────────────────────────────
 // agent went into full nervous breakdown because of a hang
 // code works, so whatever...
-static tCLIOutput runCommandArgv(const char *const argv[])
+static tCLIOutput runCommandArgv(const char *const argv[], const std::string *stdinData = nullptr)
 {
-    int pipefd[2];
-    if (pipe(pipefd) == -1)
+    int stdoutPipe[2];
+    if (pipe(stdoutPipe) == -1)
         throw std::runtime_error("pipe() failed!");
+
+    int stdinPipe[2] = {-1, -1};
+    if (stdinData && pipe(stdinPipe) == -1)
+    {
+        close(stdoutPipe[0]);
+        close(stdoutPipe[1]);
+        throw std::runtime_error("pipe() failed!");
+    }
 
     posix_spawn_file_actions_t fa;
     posix_spawn_file_actions_init(&fa);
-    // stdin → /dev/null, stdout+stderr → our pipe write end
-    posix_spawn_file_actions_addopen(&fa, STDIN_FILENO, "/dev/null", O_RDONLY, 0);
-    posix_spawn_file_actions_adddup2(&fa, pipefd[1], STDOUT_FILENO);
-    posix_spawn_file_actions_adddup2(&fa, pipefd[1], STDERR_FILENO);
+    if (stdinData)
+    {
+        posix_spawn_file_actions_adddup2(&fa, stdinPipe[0], STDIN_FILENO);
+        posix_spawn_file_actions_addclose(&fa, stdinPipe[0]);
+        posix_spawn_file_actions_addclose(&fa, stdinPipe[1]);
+    }
+    else
+    {
+        // stdin → /dev/null when the caller does not provide input.
+        posix_spawn_file_actions_addopen(&fa, STDIN_FILENO, "/dev/null", O_RDONLY, 0);
+    }
+    posix_spawn_file_actions_adddup2(&fa, stdoutPipe[1], STDOUT_FILENO);
+    posix_spawn_file_actions_adddup2(&fa, stdoutPipe[1], STDERR_FILENO);
     // Close the original pipe fds inside the spawned process
-    posix_spawn_file_actions_addclose(&fa, pipefd[0]);
-    posix_spawn_file_actions_addclose(&fa, pipefd[1]);
+    posix_spawn_file_actions_addclose(&fa, stdoutPipe[0]);
+    posix_spawn_file_actions_addclose(&fa, stdoutPipe[1]);
 
     posix_spawnattr_t attr;
     posix_spawnattr_init(&attr);
@@ -251,21 +278,38 @@ static tCLIOutput runCommandArgv(const char *const argv[])
                           const_cast<char *const *>(argv), environ);
     posix_spawn_file_actions_destroy(&fa);
     posix_spawnattr_destroy(&attr);
-    close(pipefd[1]); // parent doesn't write
+    close(stdoutPipe[1]);
+    if (stdinData)
+        close(stdinPipe[0]);
 
     if (err != 0) {
-        close(pipefd[0]);
+        close(stdoutPipe[0]);
+        if (stdinData)
+            close(stdinPipe[1]);
         throw std::runtime_error(std::string("posix_spawn failed: ") + strerror(err));
+    }
+
+    if (stdinData)
+    {
+        size_t offset = 0;
+        while (offset < stdinData->size())
+        {
+            ssize_t written = write(stdinPipe[1], stdinData->data() + offset, stdinData->size() - offset);
+            if (written <= 0)
+                break;
+            offset += static_cast<size_t>(written);
+        }
+        close(stdinPipe[1]);
     }
 
     std::string result;
     {
         std::array<char, 4096> buf;
         ssize_t n;
-        while ((n = read(pipefd[0], buf.data(), buf.size())) > 0)
+        while ((n = read(stdoutPipe[0], buf.data(), buf.size())) > 0)
             result.append(buf.data(), static_cast<size_t>(n));
     }
-    close(pipefd[0]);
+    close(stdoutPipe[0]);
 
     int status = 0;
     waitpid(pid, &status, 0);
@@ -296,4 +340,13 @@ tCLIOutput runCommandDirect(const std::vector<std::string> &args)
     for (const auto &a : args) argv.push_back(a.c_str());
     argv.push_back(nullptr);
     return runCommandArgv(argv.data());
+}
+
+tCLIOutput runCommandDirect(const std::vector<std::string> &args, const std::string &stdinData)
+{
+    std::vector<const char *> argv;
+    argv.reserve(args.size() + 1);
+    for (const auto &a : args) argv.push_back(a.c_str());
+    argv.push_back(nullptr);
+    return runCommandArgv(argv.data(), &stdinData);
 }

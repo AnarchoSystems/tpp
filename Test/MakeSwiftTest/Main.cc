@@ -42,8 +42,18 @@ static bool matchGlob(const std::string &pattern, const std::string &text)
     return pi == pattern.size();
 }
 
+static bool hasAllowedSourceExtension(const std::string &name, bool isTypes)
+{
+    if (name.size() >= 4 && name.substr(name.size() - 4) == ".tpp")
+        return true;
+    if (isTypes && name.size() >= 10 && name.substr(name.size() - 10) == ".tpp.types")
+        return true;
+    return false;
+}
+
 static std::vector<std::filesystem::path> expandPattern(const std::filesystem::path &baseDir,
-                                                        const std::string &pattern)
+                                                        const std::string &pattern,
+                                                        bool isTypes)
 {
     std::filesystem::path patPath(pattern);
     std::string filename = patPath.filename().string();
@@ -57,7 +67,7 @@ static std::vector<std::filesystem::path> expandPattern(const std::filesystem::p
         {
             if (!entry.is_regular_file()) continue;
             auto name = entry.path().filename().string();
-            if (name.size() < 4 || name.substr(name.size() - 4) != ".tpp") continue;
+            if (!hasAllowedSourceExtension(name, isTypes)) continue;
             if (matchGlob(filename, name)) results.push_back(entry.path());
         }
         std::sort(results.begin(), results.end());
@@ -175,10 +185,10 @@ int main(int argc, char *argv[])
     struct FileEntry { std::filesystem::path path; bool isTypes; };
     std::vector<FileEntry> fileEntries;
     for (const auto &p : config.value("types", nlohmann::json::array()))
-        for (const auto &f : expandPattern(testDir, p.get<std::string>()))
+        for (const auto &f : expandPattern(testDir, p.get<std::string>(), true))
             fileEntries.push_back({f, true});
     for (const auto &p : config.value("templates", nlohmann::json::array()))
-        for (const auto &f : expandPattern(testDir, p.get<std::string>()))
+        for (const auto &f : expandPattern(testDir, p.get<std::string>(), false))
             fileEntries.push_back({f, false});
 
     tpp::TppProject project;

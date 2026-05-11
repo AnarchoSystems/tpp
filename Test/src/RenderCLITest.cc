@@ -13,18 +13,19 @@ TEST_P(AcceptanceTestOnlyPositives, CompareRenderByCLI)
     if (!testCase.expectSuccess)
         return; // failure cases are covered by AcceptanceTest
 
-    std::string signatureArgs;
-    for (const auto &sig : testCase.previewSignature)
-        signatureArgs += " '" + sig + "'";
+    const auto projectPath = std::filesystem::absolute("TestCases/" + testCase.name).string();
+    auto compileOutput = runCommandDirect({TPP_EXE, projectPath});
 
-    auto sCommand = TPP_EXE " " +
-        std::filesystem::absolute("TestCases/" + testCase.name).string() +
-        " | " RENDER_TPP_EXE " " + testCase.previewTemplateName + " '" + testCase.input.dump() + "'" + signatureArgs + " 2>&1";
-    auto cliOutput = runCommand(sCommand);
+    ASSERT_TRUE(compileOutput.success)
+        << "Test case: " << testCase.name
+        << "\nDiagnostics: " << nlohmann::json(compileOutput.diagnostics).dump(2);
+
+    std::vector<std::string> renderArgs = {RENDER_TPP_EXE, testCase.previewTemplateName, testCase.input.dump()};
+    renderArgs.insert(renderArgs.end(), testCase.previewSignature.begin(), testCase.previewSignature.end());
+    auto cliOutput = runCommandDirect(renderArgs, compileOutput.output);
 
     EXPECT_TRUE(cliOutput.success)
         << "Test case: " << testCase.name
-        << "\nCommand: " << sCommand
         << "\nOutput: " << cliOutput.output
         << "\nDiagnostics: " << nlohmann::json(cliOutput.diagnostics).dump(2);
     if (!cliOutput.success) return;

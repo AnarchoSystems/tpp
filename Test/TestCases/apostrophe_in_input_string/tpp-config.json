@@ -1,0 +1,18 @@
+{
+    "types": [
+        "typedefs.tpp"
+    ],
+    "templates": [
+        "template.tpp"
+    ],
+    "previews": [
+        {
+            "template": "main",
+            "input": {
+                "name": "O'Reilly",
+                "age": 30
+            },
+            "name": "default"
+        }
+    ]
+}

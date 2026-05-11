@@ -71,6 +71,7 @@ struct tCLIOutput
 
 tCLIOutput runCommand(const std::string &command);
 tCLIOutput runCommandDirect(const std::vector<std::string> &argv);
+tCLIOutput runCommandDirect(const std::vector<std::string> &argv, const std::string &stdinData);
 
 // ── Test case discovery (driven by configure-time compile definitions) ────────
 

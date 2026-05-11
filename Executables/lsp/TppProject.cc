@@ -81,6 +81,18 @@ namespace tpp
         return normalized;
     }
 
+    static bool isPathWithinRoot(const fs::path &path, const fs::path &root)
+    {
+        auto pathIt = path.begin();
+        auto rootIt = root.begin();
+        for (; rootIt != root.end(); ++rootIt, ++pathIt)
+        {
+            if (pathIt == path.end() || *pathIt != *rootIt)
+                return false;
+        }
+        return true;
+    }
+
     WorkspaceProject::WorkspaceProject(fs::path configPath)
         : configPath_(std::move(configPath))
         , root_(configPath_.parent_path())
@@ -206,10 +218,7 @@ namespace tpp
             return true;
 
         fs::path normalizedRoot = normalizePath(root_);
-        auto rootString = normalizedRoot.string();
-        auto pathString = normalizedPath.string();
-        if (pathString.size() < rootString.size() ||
-            pathString.compare(0, rootString.size(), rootString) != 0)
+        if (!isPathWithinRoot(normalizedPath, normalizedRoot))
             return false;
 
         std::string fileName = normalizedPath.filename().string();

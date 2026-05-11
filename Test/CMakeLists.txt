@@ -104,6 +104,7 @@ configure_file(LspTestSpec.h.in ${CMAKE_CURRENT_BINARY_DIR}/LspTestSpec.h @ONLY)
 # ── Main acceptance test binary ───────────────────────────────────────────────
 
 add_executable(tpp_acceptance_test
+    ${PROJECT_SOURCE_DIR}/Executables/lsp/TppProject.cc
     src/TestUtils.cc
     src/AcceptanceTest.cc
     src/FunctionLookupTest.cc
@@ -111,6 +112,7 @@ add_executable(tpp_acceptance_test
     src/IRStabilityTest.cc
     src/LspClient.cc
     src/LspTest.cc
+    src/WorkspaceProjectTest.cc
     src/Tpp2CppCliTest.cc
     src/Tpp2JavaCliTest.cc
     src/Tpp2SwiftCliTest.cc
@@ -120,7 +122,8 @@ add_executable(tpp_acceptance_test
 target_link_libraries(tpp_acceptance_test PRIVATE ${TPP_GTEST_MAIN_TARGET} tpp_lsp_defs)
 target_include_directories(tpp_acceptance_test PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${PROJECT_SOURCE_DIR}/Executables/lsp)
 
 add_dependencies(tpp_acceptance_test tpp tpp2cpp tpp2java tpp2swift render-tpp tpp-lsp)
 

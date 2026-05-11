@@ -51,8 +51,19 @@ static bool matchGlob(const std::string &pattern, const std::string &text)
     return pi == pattern.size();
 }
 
+static bool hasAllowedSourceExtension(const std::string &name, bool isTypes)
+{
+    if (name.size() >= 4 && name.substr(name.size() - 4) == ".tpp")
+        return true;
+    if (isTypes && name.size() >= 10 && name.substr(name.size() - 10) == ".tpp.types")
+        return true;
+    return false;
+}
+
 // Expands a single config pattern to a sorted list of file paths.
-static std::vector<std::filesystem::path> expandPattern(const std::filesystem::path &baseDir, const std::string &pattern)
+static std::vector<std::filesystem::path> expandPattern(const std::filesystem::path &baseDir,
+                                                        const std::string &pattern,
+                                                        bool isTypes)
 {
     std::filesystem::path patPath(pattern);
     std::string filename = patPath.filename().string();
@@ -71,7 +82,7 @@ static std::vector<std::filesystem::path> expandPattern(const std::filesystem::p
             if (!entry.is_regular_file())
                 continue;
             auto name = entry.path().filename().string();
-            if (name.size() < 4 || name.substr(name.size() - 4) != ".tpp")
+            if (!hasAllowedSourceExtension(name, isTypes))
                 continue;
             if (matchGlob(filename, name))
                 results.push_back(entry.path());
@@ -162,12 +173,12 @@ int main(int argc, char *argv[])
     std::vector<FileEntry> fileEntries;
     for (const auto &pattern : config.value("types", nlohmann::json::array()))
     {
-        for (const auto &p : expandPattern(testDir, pattern.get<std::string>()))
+        for (const auto &p : expandPattern(testDir, pattern.get<std::string>(), true))
             fileEntries.push_back({p, true});
     }
     for (const auto &pattern : config.value("templates", nlohmann::json::array()))
     {
-        for (const auto &p : expandPattern(testDir, pattern.get<std::string>()))
+        for (const auto &p : expandPattern(testDir, pattern.get<std::string>(), false))
             fileEntries.push_back({p, false});
     }
 
