@@ -31,7 +31,7 @@ For the full multi-file sync rules, use `.github/MAINTENANCE-CHECKLIST.md`.
 | Type parsing | `TypedefParser.cc` | Tokenizes/parses type definitions |
 | Template parsing | `TemplateParser.cc` | Builds the template AST |
 | Rendering | `Rendering.cc` | Executes the AST against a `RenderContext`; handles alignment and policy scopes |
-| Compiler bridge | `IR.cc` | Type/function lookup for the renderer |
+| IR bridge | `Compiler.cc`, `PublicIRConverter.h`, `IRAssembler.h` | Converts the internal compiler model into the public IR consumed by backends and the runtime renderer |
 | Public API | `Libraries/lib_tpp/include/tpp/` | `Compiler.h`, `IR.h`, `Types.h`, `AST.h`, `Policy.h`, `Diagnostic.h`, etc. |
 | Internal headers | `tpp/` | `TypedefParser.h`, `TemplateParser.h`, `Tokenizer.h`, `Parser.h` |
 | Compiler CLI | `Executables/tpp/Main.cc` | Command-line entry point; reads tpp-config.json, emits JSON to stdout |

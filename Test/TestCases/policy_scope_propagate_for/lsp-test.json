@@ -1,0 +1,24 @@
+{
+    "go_to_definition": [
+        {
+            "name": "inline_call_resolves_local_template",
+            "file": "template.tpp",
+            "line": 1,
+            "character": 53,
+            "expected_file": "template.tpp",
+            "expected_line": 4,
+            "expected_character": 0
+        }
+    ],
+    "hover": [
+        {
+            "name": "inline_call_hover_signature",
+            "file": "template.tpp",
+            "line": 1,
+            "character": 53,
+            "expected_contains": [
+                "template id(v: string)"
+            ]
+        }
+    ]
+}

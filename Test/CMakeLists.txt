@@ -219,23 +219,26 @@ gtest_discover_tests(tpp_acceptance_test
 
 # ── Java tests (aggregated single-runner build) ──────────────────────────────
 
+find_program(JAVA_COMPILER javac)
+find_program(JAVA_RUNTIME java)
+find_program(SWIFT_COMPILER swiftc)
+
 set(ORG_JSON_JAR "${CMAKE_BINARY_DIR}/org.json.jar")
 set(ORG_JSON_URL "https://repo1.maven.org/maven2/org/json/json/20240303/json-20240303.jar")
+set(ORG_JSON_SHA256 "3cf6cd6892e32e2b4c1c39e0f52f5248a2f5b37646fdfbb79a66b46b618414ed")
 
-if(NOT EXISTS "${ORG_JSON_JAR}")
+if(JAVA_COMPILER AND NOT EXISTS "${ORG_JSON_JAR}")
     message(STATUS "Downloading org.json JAR ...")
     file(DOWNLOAD "${ORG_JSON_URL}" "${ORG_JSON_JAR}"
+         EXPECTED_HASH "SHA256=${ORG_JSON_SHA256}"
          STATUS _dl_status
          TLS_VERIFY ON)
     list(GET _dl_status 0 _dl_code)
     if(NOT _dl_code EQUAL 0)
-        message(WARNING "Failed to download org.json JAR (${_dl_status}). Java tests will not work.")
+        message(FATAL_ERROR
+            "Failed to download verified org.json JAR (${_dl_status}). Java tests require ${ORG_JSON_URL}.")
     endif()
 endif()
-
-find_program(JAVA_COMPILER javac)
-find_program(JAVA_RUNTIME java)
-find_program(SWIFT_COMPILER swiftc)
 
 add_custom_target(java_tests)
 add_custom_target(swift_tests)
