@@ -186,6 +186,28 @@ std::vector<nlohmann::json> LspClient::didOpen(const std::string &uri,
     return drainNotifications(300);
 }
 
+std::vector<nlohmann::json> LspClient::didChange(const std::string &uri,
+                                                 const std::string &content,
+                                                 int version)
+{
+    sendMsg({
+        {"jsonrpc", "2.0"},
+        {"method",  "textDocument/didChange"},
+        {"params",  {
+            {"textDocument", {
+                {"uri",     uri},
+                {"version", version}
+            }},
+            {"contentChanges", nlohmann::json::array({
+                {
+                    {"text", content}
+                }
+            })}
+        }}
+    });
+    return drainNotifications(300);
+}
+
 std::vector<nlohmann::json> LspClient::didChangeWatchedFiles(const nlohmann::json &changes)
 {
     sendMsg({

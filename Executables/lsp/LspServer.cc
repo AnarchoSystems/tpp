@@ -30,6 +30,15 @@ static std::string currentVersion()
 static std::string uriDecode(const std::string &s);
 static std::string uriToFsPath(const std::string &uri);
 
+static fs::path normalizePath(const fs::path &path)
+{
+    std::error_code ec;
+    fs::path normalized = fs::weakly_canonical(path, ec);
+    if (ec)
+        normalized = path.lexically_normal();
+    return normalized;
+}
+
 static nlohmann::json makeResponse(const nlohmann::json &id, const nlohmann::json &result)
 {
     return {{"jsonrpc", "2.0"}, {"id", id}, {"result", result}};
@@ -372,18 +381,14 @@ void LspServer::scanWorkspace(const std::vector<std::string> &roots)
 
 WorkspaceProject *LspServer::projectFor(const std::string &uri)
 {
-    // Normalize: VS Code percent-encodes paths (e.g. C%2B%2B), but stored URIs
-    // are built from filesystem paths without encoding.
-    std::string normUri = uriDecode(uri);
-
     // O(P) scan – number of projects is small
     for (auto &p : projects_)
-        if (p->ownsUri(normUri))
+        if (p->ownsUri(uri))
             return p.get();
 
     // Fallback: walk up directories from the file path to find the nearest
     // config that has been loaded.
-    fs::path filePath = uriToFsPath(normUri);
+    fs::path filePath = uriToFsPath(uri);
     fs::path dir = filePath.parent_path();
     while (!dir.empty() && dir != dir.parent_path())
     {
@@ -420,7 +425,7 @@ void LspServer::publishDiagnostics(const WorkspaceProject &project,
 void LspServer::onDidOpen(const nlohmann::json &params, std::vector<nlohmann::json> &outNotifs)
 {
     const auto &doc = params.at("textDocument");
-    std::string uri  = uriDecode(doc.at("uri").get<std::string>());
+    std::string uri  = doc.at("uri").get<std::string>();
     std::string text = doc.at("text").get<std::string>();
 
     WorkspaceProject *proj = projectFor(uri);
@@ -476,7 +481,7 @@ void LspServer::onDidOpen(const nlohmann::json &params, std::vector<nlohmann::js
 void LspServer::onDidChange(const nlohmann::json &params, std::vector<nlohmann::json> &outNotifs)
 {
     const auto &doc = params.at("textDocument");
-    std::string uri  = uriDecode(doc.at("uri").get<std::string>());
+    std::string uri  = doc.at("uri").get<std::string>();
 
     // Full sync: take the last content change.
     const auto &changes = params.at("contentChanges");
@@ -516,7 +521,7 @@ void LspServer::onDidChange(const nlohmann::json &params, std::vector<nlohmann::
 
 void LspServer::onDidClose(const nlohmann::json &params)
 {
-    std::string uri = uriDecode(params.at("textDocument").at("uri").get<std::string>());
+    std::string uri = params.at("textDocument").at("uri").get<std::string>();
     WorkspaceProject *proj = projectFor(uri);
     if (proj)
         proj->clearDirty(uri);
@@ -528,7 +533,7 @@ void LspServer::onDidClose(const nlohmann::json &params)
 
 nlohmann::json LspServer::onSemanticTokensFull(const nlohmann::json &params)
 {
-    std::string uri = uriDecode(params.at("textDocument").at("uri").get<std::string>());
+    std::string uri = params.at("textDocument").at("uri").get<std::string>();
     WorkspaceProject *proj = projectFor(uri);
     if (proj) return computeSemanticTokens(uri, *proj);
 
@@ -547,7 +552,7 @@ nlohmann::json LspServer::onSemanticTokensFull(const nlohmann::json &params)
 
 nlohmann::json LspServer::onFoldingRange(const nlohmann::json &params)
 {
-    std::string uri = uriDecode(params.at("textDocument").at("uri").get<std::string>());
+    std::string uri = params.at("textDocument").at("uri").get<std::string>();
     WorkspaceProject *proj = projectFor(uri);
     if (!proj) return nlohmann::json::array();
     return computeFoldingRanges(uri, *proj);
@@ -555,7 +560,7 @@ nlohmann::json LspServer::onFoldingRange(const nlohmann::json &params)
 
 nlohmann::json LspServer::onDefinition(const nlohmann::json &params)
 {
-    std::string uri = uriDecode(params.at("textDocument").at("uri").get<std::string>());
+    std::string uri = params.at("textDocument").at("uri").get<std::string>();
     WorkspaceProject *proj = projectFor(uri);
     if (!proj) return nullptr;
     int line = params.at("position").at("line").get<int>();
@@ -565,7 +570,7 @@ nlohmann::json LspServer::onDefinition(const nlohmann::json &params)
 
 nlohmann::json LspServer::onHover(const nlohmann::json &params)
 {
-    std::string uri = uriDecode(params.at("textDocument").at("uri").get<std::string>());
+    std::string uri = params.at("textDocument").at("uri").get<std::string>();
     WorkspaceProject *proj = projectFor(uri);
     if (!proj) return nullptr;
     int line = params.at("position").at("line").get<int>();
@@ -575,7 +580,7 @@ nlohmann::json LspServer::onHover(const nlohmann::json &params)
 
 nlohmann::json LspServer::onCompletion(const nlohmann::json &params)
 {
-    std::string uri = uriDecode(params.at("textDocument").at("uri").get<std::string>());
+    std::string uri = params.at("textDocument").at("uri").get<std::string>();
     WorkspaceProject *proj = projectFor(uri);
     if (!proj) return nlohmann::json::array();
     int line = params.at("position").at("line").get<int>();
@@ -589,12 +594,10 @@ nlohmann::json LspServer::onRenderPreview(const nlohmann::json &params)
     WorkspaceProject *proj = nullptr;
     if (params.contains("configPath") && params["configPath"].is_string())
     {
-        std::string configUri = params["configPath"].get<std::string>();
-        // configPath may be a file URI or a filesystem path; try both.
+        fs::path requestedConfigPath = normalizePath(uriToFsPath(params["configPath"].get<std::string>()));
         for (auto &p : projects_)
         {
-            std::string cu = "file://" + p->configPath().string();
-            if (cu == configUri || p->configPath().string() == configUri)
+            if (normalizePath(p->configPath()) == requestedConfigPath)
             {
                 proj = p.get();
                 break;

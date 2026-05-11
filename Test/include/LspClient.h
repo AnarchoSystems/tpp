@@ -34,6 +34,12 @@ public:
     std::vector<nlohmann::json> didOpen(const std::string &uri,
                                          const std::string &content);
 
+    // Send textDocument/didChange with full document content and return the
+    // resulting notifications.
+    std::vector<nlohmann::json> didChange(const std::string &uri,
+                                          const std::string &content,
+                                          int version);
+
     // Send workspace/didChangeWatchedFiles and return resulting notifications.
     std::vector<nlohmann::json> didChangeWatchedFiles(const nlohmann::json &changes);
 

@@ -21,6 +21,7 @@
 
 #include <gtest/gtest.h>
 #include <tpp/Diagnostic.h>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -164,7 +165,28 @@ static std::vector<LspHoverSpec> GetLspHoverSpecs()
 
 static std::string fileUri(const std::filesystem::path &p)
 {
-    return "file://" + std::filesystem::weakly_canonical(p).string();
+    static constexpr char kHex[] = "0123456789ABCDEF";
+
+    std::string rawPath = std::filesystem::weakly_canonical(p).string();
+    std::replace(rawPath.begin(), rawPath.end(), '\\', '/');
+
+    std::string encoded;
+    encoded.reserve(rawPath.size());
+    for (unsigned char ch : rawPath)
+    {
+        if (std::isalnum(ch) || ch == '-' || ch == '_' || ch == '.' || ch == '~' ||
+            ch == '/' || ch == ':')
+        {
+            encoded.push_back(static_cast<char>(ch));
+            continue;
+        }
+
+        encoded.push_back('%');
+        encoded.push_back(kHex[ch >> 4]);
+        encoded.push_back(kHex[ch & 0x0F]);
+    }
+
+    return "file://" + encoded;
 }
 
 static std::string readFileStr(const std::filesystem::path &p)
@@ -619,6 +641,168 @@ TEST(LspWatchTest, PolicyChangesReloadProjectAndPublishPolicyDiagnostics)
 
     client.shutdown();
     std::error_code ec;
+    fs::remove_all(tempDir, ec);
+}
+
+TEST(LspWatchTest, DirtyPolicyEditsRecompileProjectWithoutSave)
+{
+    namespace fs = std::filesystem;
+
+    fs::path tempDir = fs::temp_directory_path() / fs::path("tpp-lsp-policy-dirty-XXXXXX");
+    std::string tempTemplate = tempDir.string();
+    std::vector<char> tempBuffer(tempTemplate.begin(), tempTemplate.end());
+    tempBuffer.push_back('\0');
+    char *createdDir = mkdtemp(tempBuffer.data());
+    ASSERT_NE(createdDir, nullptr);
+    tempDir = fs::path(createdDir);
+
+    const fs::path configPath = tempDir / "tpp-config.json";
+    const fs::path templatePath = tempDir / "template.tpp";
+    const fs::path policyPath = tempDir / "policies" / "escape-html.policy.json";
+
+    writeFileStr(configPath,
+        "{\n"
+        "    \"types\": [],\n"
+        "    \"templates\": [\"template.tpp\"],\n"
+        "    \"replacement-policies\": [\"policies/*.policy.json\"],\n"
+        "    \"previews\": [{\"template\": \"main\", \"input\": {\"v\": \"<x>\"}}]\n"
+        "}\n");
+    writeFileStr(templatePath,
+        "template main(v: string)\n"
+        "@v | policy=\"escape-html\"@\n"
+        "END\n");
+    writeFileStr(policyPath, "{\"tag\":123}\n");
+
+    const std::string validPolicy =
+        "{\n"
+        "    \"tag\": \"escape-html\",\n"
+        "    \"replacements\": [{\"find\": \"<\", \"replace\": \"&lt;\"}]\n"
+        "}\n";
+
+    tpp_test::LspClient client(TPP_LSP_EXE);
+    client.initialize(fileUri(tempDir));
+
+    const std::string templateUri = fileUri(templatePath);
+    const std::string policyUri = fileUri(policyPath);
+
+    auto byUri = [&](const std::vector<tpp::DiagnosticLSPMessage> &messages, const std::string &uri)
+        -> const std::vector<tpp::Diagnostic>*
+    {
+        for (const auto &message : messages)
+            if (message.uri == uri)
+                return &message.diagnostics;
+        return nullptr;
+    };
+
+    auto rawPublishForUri = [&](const std::vector<nlohmann::json> &notifications, const std::string &uri)
+        -> const nlohmann::json*
+    {
+        for (const auto &notification : notifications)
+        {
+            if (notification.value("method", "") != "textDocument/publishDiagnostics")
+                continue;
+            const auto &params = notification["params"];
+            if (params.value("uri", "") == uri)
+                return &params["diagnostics"];
+        }
+        return nullptr;
+    };
+
+    auto openNotifications = client.didOpen(templateUri, readFileStr(templatePath));
+    auto actual = lspDiagsFromNotifs(openNotifications);
+
+    const auto *templateDiags = byUri(actual, templateUri);
+    ASSERT_NE(templateDiags, nullptr);
+    ASSERT_EQ(templateDiags->size(), 1u);
+    EXPECT_NE((*templateDiags)[0].message.find("unknown policy 'escape-html'"), std::string::npos);
+
+    const auto *policyDiags = byUri(actual, policyUri);
+    ASSERT_NE(policyDiags, nullptr);
+    ASSERT_EQ(policyDiags->size(), 1u);
+    EXPECT_NE((*policyDiags)[0].message.find("missing required string field 'tag'"), std::string::npos);
+
+    client.didOpen(policyUri, readFileStr(policyPath));
+    auto changeNotifications = client.didChange(policyUri, validPolicy, 2);
+    const auto *clearedTemplateDiags = rawPublishForUri(changeNotifications, templateUri);
+    ASSERT_NE(clearedTemplateDiags, nullptr);
+    ASSERT_TRUE(clearedTemplateDiags->is_array());
+    EXPECT_TRUE(clearedTemplateDiags->empty());
+
+    const auto *clearedPolicyDiags = rawPublishForUri(changeNotifications, policyUri);
+    ASSERT_NE(clearedPolicyDiags, nullptr);
+    ASSERT_TRUE(clearedPolicyDiags->is_array());
+    EXPECT_TRUE(clearedPolicyDiags->empty());
+
+    EXPECT_EQ(readFileStr(policyPath), "{\"tag\":123}\n");
+
+    client.shutdown();
+    std::error_code ec;
+    fs::remove_all(tempDir, ec);
+}
+
+TEST(LspWatchTest, EncodedWorkspaceUriAndConfigPathResolveToProject)
+{
+    namespace fs = std::filesystem;
+
+    const fs::path baseDir = fs::temp_directory_path() / "tpp lsp+uri";
+    std::error_code ec;
+    fs::create_directories(baseDir, ec);
+    ASSERT_FALSE(ec);
+
+    fs::path tempDir = baseDir / "case-XXXXXX";
+    std::string tempTemplate = tempDir.string();
+    std::vector<char> tempBuffer(tempTemplate.begin(), tempTemplate.end());
+    tempBuffer.push_back('\0');
+    char *createdDir = mkdtemp(tempBuffer.data());
+    ASSERT_NE(createdDir, nullptr);
+    tempDir = fs::path(createdDir);
+
+    const fs::path configPath = tempDir / "tpp-config.json";
+    const fs::path templatePath = tempDir / "template.tpp";
+
+    writeFileStr(configPath,
+        "{\n"
+        "    \"types\": [],\n"
+        "    \"templates\": [\"template.tpp\"],\n"
+        "    \"previews\": [{\"template\": \"main\", \"input\": []}]\n"
+        "}\n");
+    writeFileStr(templatePath,
+        "template main()\n"
+        "OK\n"
+        "END\n");
+
+    tpp_test::LspClient client(TPP_LSP_EXE);
+    client.initialize(fileUri(tempDir));
+
+    const std::string templateUri = fileUri(templatePath);
+    auto openNotifications = client.didOpen(templateUri, readFileStr(templatePath));
+
+    auto rawPublishForUri = [&](const std::vector<nlohmann::json> &notifications, const std::string &uri)
+        -> const nlohmann::json*
+    {
+        for (const auto &notification : notifications)
+        {
+            if (notification.value("method", "") != "textDocument/publishDiagnostics")
+                continue;
+            const auto &params = notification["params"];
+            if (params.value("uri", "") == uri)
+                return &params["diagnostics"];
+        }
+        return nullptr;
+    };
+
+    const auto *templateDiags = rawPublishForUri(openNotifications, templateUri);
+    ASSERT_NE(templateDiags, nullptr);
+    ASSERT_TRUE(templateDiags->is_array());
+    EXPECT_TRUE(templateDiags->empty());
+
+    auto preview = client.request("tpp/renderPreview", {{"configPath", configPath.string()},
+                                                         {"previewIndex", 0}});
+    ASSERT_FALSE(preview.contains("error"))
+        << "tpp/renderPreview error: " << preview.value("error", "");
+    EXPECT_EQ(preview.value("output", ""), "OK");
+
+    client.shutdown();
     fs::remove_all(tempDir, ec);
 }
 

@@ -2,6 +2,7 @@
 #include <fstream>
 #include <sstream>
 #include <algorithm>
+#include <cctype>
 
 namespace tpp
 {
@@ -12,6 +13,63 @@ namespace tpp
     {
         return value.size() >= suffix.size() &&
                value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
+    }
+
+    static bool isUnescapedFileUriChar(unsigned char ch)
+    {
+        return std::isalnum(ch) || ch == '-' || ch == '_' || ch == '.' || ch == '~' ||
+               ch == '/' || ch == ':';
+    }
+
+    static std::string percentEncode(const std::string &input)
+    {
+        static constexpr char kHex[] = "0123456789ABCDEF";
+
+        std::string encoded;
+        encoded.reserve(input.size());
+        for (unsigned char ch : input)
+        {
+            if (isUnescapedFileUriChar(ch))
+            {
+                encoded.push_back(static_cast<char>(ch));
+                continue;
+            }
+
+            encoded.push_back('%');
+            encoded.push_back(kHex[ch >> 4]);
+            encoded.push_back(kHex[ch & 0x0F]);
+        }
+        return encoded;
+    }
+
+    static std::string percentDecode(const std::string &input)
+    {
+        std::string decoded;
+        decoded.reserve(input.size());
+        for (size_t index = 0; index < input.size(); ++index)
+        {
+            if (input[index] == '%' && index + 2 < input.size())
+            {
+                auto hexValue = [](char ch) -> int
+                {
+                    if (ch >= '0' && ch <= '9') return ch - '0';
+                    if (ch >= 'a' && ch <= 'f') return ch - 'a' + 10;
+                    if (ch >= 'A' && ch <= 'F') return ch - 'A' + 10;
+                    return -1;
+                };
+
+                int high = hexValue(input[index + 1]);
+                int low = hexValue(input[index + 2]);
+                if (high >= 0 && low >= 0)
+                {
+                    decoded.push_back(static_cast<char>((high << 4) | low));
+                    index += 2;
+                    continue;
+                }
+            }
+            decoded.push_back(input[index]);
+        }
+        return decoded;
     }
 
     static fs::path normalizePath(const fs::path &path)
@@ -81,35 +139,21 @@ namespace tpp
         for (const auto &path : typeFiles_)
         {
             std::string uri = pathToUri(path);
-            std::string text;
-            auto it = dirtyBuffer_.find(uri);
-            if (it != dirtyBuffer_.end())
-                text = it->second;
-            else
-                text = readFile(path);
-
-            project_.add_type_source(std::move(text), uri);
+            project_.add_type_source(getContent(uri), uri);
         }
 
         // Process template files
         for (const auto &path : templateFiles_)
         {
             std::string uri = pathToUri(path);
-            std::string text;
-            auto it = dirtyBuffer_.find(uri);
-            if (it != dirtyBuffer_.end())
-                text = it->second;
-            else
-                text = readFile(path);
-
-            project_.add_template_source(std::move(text), uri);
+            project_.add_template_source(getContent(uri), uri);
         }
 
         // Load replacement policies
         for (const auto &path : policyFiles_)
         {
             std::string uri = pathToUri(path);
-            project_.add_policy_source(readFile(path), uri);
+            project_.add_policy_source(getContent(uri), uri);
         }
 
         CompileOptions options;
@@ -193,22 +237,19 @@ namespace tpp
 
     std::string WorkspaceProject::pathToUri(const fs::path &path) const
     {
-        // Produce a file:// URI from an absolute path.
-        // Canonicalise to absolute first.
         std::error_code ec;
         fs::path abs = fs::weakly_canonical(path, ec);
         if (ec) abs = path;
         std::string s = abs.string();
-        // Replace backslashes on Windows (no-op on POSIX)
         std::replace(s.begin(), s.end(), '\\', '/');
-        return "file://" + s;
+        return "file://" + percentEncode(s);
     }
 
     fs::path WorkspaceProject::uriToPath(const std::string &uri) const
     {
         if (uri.rfind("file://", 0) == 0)
-            return fs::path(uri.substr(7));
-        return fs::path(uri);
+            return fs::path(percentDecode(uri.substr(7)));
+        return fs::path(percentDecode(uri));
     }
 
     std::vector<fs::path> WorkspaceProject::expandGlob(const std::string &pattern) const
