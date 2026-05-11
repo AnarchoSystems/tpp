@@ -23,12 +23,18 @@ jobs:
           java-version: '21'
 
       - name: Install Swift
+        if: runner.os == 'Linux'
         uses: swift-actions/setup-swift@v2
         with:
           swift-version: '5.10'
 
+      - name: Show toolchain versions
+        run: |
+          java -version
+          swift --version
+
       - name: Configure
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DTPP_ENABLE_TEST_CPP_UNITY=OFF
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug
 
       - name: Build
         run: cmake --build build --parallel
@@ -37,4 +43,4 @@ jobs:
         run: cmake --build build --target build_all_tests --parallel
 
       - name: Test
-        run: ctest --parallel --output-on-failure --test-dir build
+        run: ctest --parallel --progress --output-on-failure --test-dir build
