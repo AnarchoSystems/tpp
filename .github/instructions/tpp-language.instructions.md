@@ -307,7 +307,7 @@ Every tpp project has a `tpp-config.json` file. All paths are relative to the co
     "templates": ["template.tpp"],
     "replacement-policies": ["escape-html.policy.json"],
     "previews": [
-        { "name": "Default", "template": "main", "input": { "x": 1 } }
+    { "name": "Default", "template": "main", "language": "cpp", "input": { "x": 1 } }
     ]
 }
 ```
@@ -317,4 +317,4 @@ Every tpp project has a `tpp-config.json` file. All paths are relative to the co
 | `types` | Glob patterns for type-definition files. Expanded and sorted alphabetically per glob. |
 | `templates` | Glob patterns for template source files. Processed after types. |
 | `replacement-policies` | Paths to policy JSON files to load before compilation. |
-| `previews` | Preview configurations for the VS Code live preview panel. Each entry has `template` (required), `name` (optional), and `input` (inline JSON or path to a `.json` file). |
+| `previews` | Preview configurations for the VS Code live preview panel. Each entry has `template` (required), `name` (optional), `input` (inline JSON or path to a `.json` file), plus optional `language` or `fileExtension` hints for syntax highlighting. `language` takes precedence when both are present. |

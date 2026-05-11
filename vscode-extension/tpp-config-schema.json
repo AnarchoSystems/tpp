@@ -48,6 +48,14 @@
             "type": "string",
             "description": "Name of the template function to render (e.g. \"main\")."
           },
+          "language": {
+            "type": "string",
+            "description": "Optional syntax-highlighting language hint for the VS Code preview panel (for example \"cpp\", \"swift\", or \"json\"). If both language and fileExtension are set, language wins."
+          },
+          "fileExtension": {
+            "type": "string",
+            "description": "Optional file-extension hint for the VS Code preview panel, with or without a leading dot (for example \".cpp\" or \"swift\"). Used when language is omitted."
+          },
           "signature": {
             "type": "array",
             "description": "Optional parameter type signature used to disambiguate overloaded templates (e.g. [\"string\"] or [\"list<string>\"]).",

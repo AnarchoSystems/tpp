@@ -1,6 +1,7 @@
 #pragma once
 
 #include <tpp/Policy.h>
+#include <tpp/RenderMapping.h>
 
 #include <algorithm>
 #include <map>
@@ -34,6 +35,7 @@ namespace tpp
         {
             std::string text;
             bool topLevelIndented = false;
+            std::vector<RenderMapping> mappings;
         };
 
         explicit Writer(std::map<std::string, TppPolicy> namedPolicies = {})
@@ -48,9 +50,25 @@ namespace tpp
             return true;
         }
 
+        bool emitTracked(std::string_view text, const std::string &sourceUri, const Range &sourceRange)
+        {
+            const int outStart = static_cast<int>(activeFrame().size());
+            output(text);
+            addMapping(sourceUri, sourceRange, outStart, static_cast<int>(activeFrame().size()));
+            return true;
+        }
+
         bool emitValue(const std::string &value)
         {
             emitWithMultilineIndent(value);
+            return true;
+        }
+
+        bool emitValueTracked(const std::string &value, const std::string &sourceUri, const Range &sourceRange)
+        {
+            const int outStart = static_cast<int>(activeFrame().size());
+            emitWithMultilineIndent(value);
+            addMapping(sourceUri, sourceRange, outStart, static_cast<int>(activeFrame().size()));
             return true;
         }
 
@@ -70,6 +88,24 @@ namespace tpp
             return true;
         }
 
+        bool emitValueTracked(std::string value, const TppPolicy &policy, const std::string &sourceUri, const Range &sourceRange)
+        {
+            try
+            {
+                value = policy.apply(value);
+            }
+            catch (const std::exception &e)
+            {
+                error_ = e.what();
+                return false;
+            }
+
+            const int outStart = static_cast<int>(activeFrame().size());
+            emitWithMultilineIndent(value);
+            addMapping(sourceUri, sourceRange, outStart, static_cast<int>(activeFrame().size()));
+            return true;
+        }
+
         bool emitValue(std::string value, const std::string &exprPolicy)
         {
             const std::string effectivePolicy = exprPolicy.empty() ? activePolicy_ : exprPolicy;
@@ -84,6 +120,22 @@ namespace tpp
             }
 
             return emitValue(std::move(value), it->second);
+        }
+
+        bool emitValueTracked(std::string value, const std::string &exprPolicy, const std::string &sourceUri, const Range &sourceRange)
+        {
+            const std::string effectivePolicy = exprPolicy.empty() ? activePolicy_ : exprPolicy;
+            if (effectivePolicy.empty() || effectivePolicy == "none")
+            return emitValueTracked(value, sourceUri, sourceRange);
+
+            const auto it = namedPolicies_.find(effectivePolicy);
+            if (it == namedPolicies_.end())
+            {
+                error_ = "unknown policy '" + effectivePolicy + "'";
+                return false;
+            }
+
+            return emitValueTracked(std::move(value), it->second, sourceUri, sourceRange);
         }
 
         bool pushPolicy(const std::string &tag)
@@ -253,7 +305,7 @@ namespace tpp
 
                 if (!emitOptionalText(options.precededBy))
                     return false;
-                if (!emit(iterResult.text))
+                if (!emitCaptureResult(iterResult))
                     return false;
 
                 if (forEachHasNext())
@@ -316,11 +368,10 @@ namespace tpp
                 }
 
                 OutputFrame iterFrame = endCaptureFrame();
-                std::string iterResult = renderIndentedFrame(iterFrame, blockIndentInParentBlock);
 
                 if (!emitOptionalText(options.precededBy))
                     return false;
-                if (!emit(iterResult))
+                if (!emitIndentedFrame(iterFrame, blockIndentInParentBlock))
                     return false;
 
                 if (forEachHasNext())
@@ -468,7 +519,7 @@ namespace tpp
         CaptureResult endCaptureResult()
         {
             OutputFrame captured = endCaptureFrame();
-            return {serializeFrame(captured), captured.topLevelIndentedOnly};
+            return {serializeFrame(captured), captured.topLevelIndentedOnly, std::move(captured.mappings)};
         }
 
         std::string endBlockCapture(int indentColumns)
@@ -486,6 +537,52 @@ namespace tpp
                 output.pop_back();
             }
             return output;
+        }
+
+        size_t outputSize() const
+        {
+            return activeFrame().size();
+        }
+
+        const std::vector<RenderMapping> &mappings() const
+        {
+            return outputStack_.front().mappings;
+        }
+
+        void addMapping(const std::string &sourceUri, const Range &sourceRange, int outStart, int outEnd)
+        {
+            if (outStart >= outEnd)
+                return;
+
+            activeFrame().mappings.push_back(RenderMapping{
+                sourceUri,
+                sourceRange,
+                outStart,
+                outEnd
+            });
+        }
+
+        bool isTopLevelFrame() const
+        {
+            return outputStack_.size() == 1;
+        }
+
+        bool emitCaptureResult(const CaptureResult &result)
+        {
+            auto &out = activeFrame();
+            const int outStart = static_cast<int>(out.size());
+            out.notePlainOutput(result.text);
+            out.append(result.text);
+            for (const auto &mapping : result.mappings)
+            {
+                out.mappings.push_back(RenderMapping{
+                    mapping.sourceUri,
+                    mapping.sourceRange,
+                    outStart + mapping.outStart,
+                    outStart + mapping.outEnd
+                });
+            }
+            return true;
         }
 
         std::string &error()
@@ -559,6 +656,7 @@ namespace tpp
         {
             std::vector<std::string> lines;
             std::string currentLine;
+            std::vector<RenderMapping> mappings;
             size_t firstLineBaseColumn = 0;
             bool trailingNewline = false;
             bool sawAnyOutput = false;
@@ -594,6 +692,14 @@ namespace tpp
 
                 const size_t baseColumn = lines.empty() ? firstLineBaseColumn : 0U;
                 return baseColumn + currentLine.size();
+            }
+
+            size_t size() const
+            {
+                size_t total = currentLine.size();
+                for (const auto &line : lines)
+                    total += line.size() + 1;
+                return total;
             }
 
             void notePlainOutput(std::string_view text)
@@ -699,7 +805,9 @@ namespace tpp
             return std::string(line);
         }
 
-        static std::string renderIndentedFrame(const OutputFrame &frame, int indentColumns)
+        static std::string renderIndentedFrame(const OutputFrame &frame,
+                                               int indentColumns,
+                                               std::vector<RenderMapping> *rebasedMappings = nullptr)
         {
             if (frame.empty())
                 return "";
@@ -738,10 +846,30 @@ namespace tpp
                 ? static_cast<size_t>(indentColumns) - frame.firstLineBaseColumn
                 : 0U;
             std::string result;
+            std::vector<int> rawToRendered(frame.size() + 1, 0);
+            size_t rawOffset = 0;
 
-            for (size_t index = first; index < pastLast; ++index)
+            for (size_t index = 0; index < logicalLines.size(); ++index)
             {
                 const auto &[line, terminated] = logicalLines[index];
+                const bool included = index >= first && index < pastLast;
+                if (!included)
+                {
+                    for (size_t charIndex = 0; charIndex < line.size(); ++charIndex)
+                        rawToRendered[++rawOffset] = static_cast<int>(result.size());
+                    if (terminated)
+                        rawToRendered[++rawOffset] = static_cast<int>(result.size());
+                    continue;
+                }
+
+                size_t strippedWidth = 0;
+                while (strippedWidth < line.size() && strippedWidth < minSharedIndent &&
+                       (line[strippedWidth] == ' ' || line[strippedWidth] == '\t'))
+                {
+                    rawToRendered[++rawOffset] = static_cast<int>(result.size());
+                    ++strippedWidth;
+                }
+
                 const std::string currentLine = stripSharedIndent(line, minSharedIndent);
                 if (!currentLine.empty())
                 {
@@ -749,10 +877,44 @@ namespace tpp
                         result.append(firstLineIndent, ' ');
                     else
                         result += indent;
+
+                    rawToRendered[rawOffset] = static_cast<int>(result.size());
                     result += currentLine;
+
+                    for (size_t charIndex = strippedWidth; charIndex < line.size(); ++charIndex)
+                        rawToRendered[++rawOffset] = static_cast<int>(result.size() - (line.size() - charIndex - 1));
                 }
+                else
+                {
+                    for (size_t charIndex = strippedWidth; charIndex < line.size(); ++charIndex)
+                        rawToRendered[++rawOffset] = static_cast<int>(result.size());
+                }
+
                 if (terminated)
+                {
                     result += '\n';
+                    rawToRendered[++rawOffset] = static_cast<int>(result.size());
+                }
+            }
+
+            if (rebasedMappings)
+            {
+                rebasedMappings->clear();
+                rebasedMappings->reserve(frame.mappings.size());
+                for (const auto &mapping : frame.mappings)
+                {
+                    const int start = rawToRendered[static_cast<size_t>(mapping.outStart)];
+                    const int end = rawToRendered[static_cast<size_t>(mapping.outEnd)];
+                    if (start < end)
+                    {
+                        rebasedMappings->push_back(RenderMapping{
+                            mapping.sourceUri,
+                            mapping.sourceRange,
+                            start,
+                            end
+                        });
+                    }
+                }
             }
 
             return result;
@@ -771,9 +933,21 @@ namespace tpp
                 return true;
 
             auto &out = activeFrame();
-            const std::string rendered = renderIndentedFrame(frame, indentColumns);
+            std::vector<RenderMapping> rebasedMappings;
+            const std::string rendered = renderIndentedFrame(frame, indentColumns, &rebasedMappings);
+            const int outStart = static_cast<int>(out.size());
             out.noteIndentedOutput(rendered);
             out.append(rendered);
+
+            for (const auto &mapping : rebasedMappings)
+            {
+                out.mappings.push_back(RenderMapping{
+                    mapping.sourceUri,
+                    mapping.sourceRange,
+                    outStart + mapping.outStart,
+                    outStart + mapping.outEnd
+                });
+            }
 
             return true;
         }

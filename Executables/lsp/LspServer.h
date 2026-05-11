@@ -48,6 +48,7 @@ namespace tpp
         nlohmann::json onSemanticTokensFull(const nlohmann::json &params);
         nlohmann::json onFoldingRange(const nlohmann::json &params);
         nlohmann::json onDefinition(const nlohmann::json &params);
+        nlohmann::json onHover(const nlohmann::json &params);
         nlohmann::json onCompletion(const nlohmann::json &params);
         nlohmann::json onRenderPreview(const nlohmann::json &params);
     };

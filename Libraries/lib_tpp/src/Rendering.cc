@@ -151,6 +151,34 @@ namespace tpp
         return result;
     }
 
+    static Range to_tracking_range(const SourceRange &sourceRange);
+
+    static void trim_mappings(std::vector<RenderMapping> &mappings, int newEnd)
+    {
+        std::vector<RenderMapping> adjusted;
+        adjusted.reserve(mappings.size());
+        for (const auto &mapping : mappings)
+        {
+            if (mapping.outStart >= newEnd)
+                continue;
+
+            RenderMapping trimmed = mapping;
+            trimmed.outEnd = std::min(trimmed.outEnd, newEnd);
+            if (trimmed.outStart < trimmed.outEnd)
+                adjusted.push_back(std::move(trimmed));
+        }
+        mappings = std::move(adjusted);
+    }
+
+    static void strip_trailing_newline(Writer::CaptureResult &result)
+    {
+        if (result.text.empty() || result.text.back() != '\n')
+            return;
+
+        result.text.pop_back();
+        trim_mappings(result.mappings, static_cast<int>(result.text.size()));
+    }
+
     class IRInterpreter
     {
     public:
@@ -162,10 +190,12 @@ namespace tpp
         bool render(const FunctionDef &function, std::map<std::string, nlohmann::json> bindings)
         {
             scopes_.push_back(std::move(bindings));
+            sourceUriStack_.push_back(function.sourceUri.value_or(""));
 
             const bool hasPolicy = !function.policy.empty();
             if (hasPolicy && !writer_.pushPolicy(function.policy))
             {
+                sourceUriStack_.pop_back();
                 scopes_.pop_back();
                 return false;
             }
@@ -174,10 +204,12 @@ namespace tpp
 
             if (hasPolicy && !writer_.popPolicy())
             {
+                sourceUriStack_.pop_back();
                 scopes_.pop_back();
                 return false;
             }
 
+            sourceUriStack_.pop_back();
             scopes_.pop_back();
             return ok;
         }
@@ -192,7 +224,37 @@ namespace tpp
             return writer_.error();
         }
 
+        const std::vector<RenderMapping> &mappings() const
+        {
+            return writer_.mappings();
+        }
+
     private:
+        const std::string &current_source_uri() const
+        {
+            static const std::string empty;
+            if (sourceUriStack_.empty())
+                return empty;
+            return sourceUriStack_.back();
+        }
+
+        template <typename Func>
+        bool exec_with_structural_tracking(const std::optional<SourceRange> &sourceRange, Func &&func)
+        {
+            const int outStart = static_cast<int>(writer_.outputSize());
+            const bool ok = std::forward<Func>(func)();
+            if (!ok)
+                return false;
+
+            if (sourceRange.has_value())
+            {
+                const int outEnd = static_cast<int>(writer_.outputSize());
+                writer_.addMapping(current_source_uri(), to_tracking_range(*sourceRange), outStart, outEnd);
+            }
+
+            return true;
+        }
+
         const nlohmann::json *resolve_binding(const std::string &name) const
         {
             for (auto it = scopes_.rbegin(); it != scopes_.rend(); ++it)
@@ -258,6 +320,8 @@ namespace tpp
 
                 if constexpr (std::is_same_v<T, EmitInstr>)
                 {
+                    if (arg.sourceRange.has_value())
+                        return writer_.emitTracked(arg.text, current_source_uri(), to_tracking_range(*arg.sourceRange));
                     return writer_.emit(arg.text);
                 }
                 else if constexpr (std::is_same_v<T, EmitExprInstr>)
@@ -265,6 +329,10 @@ namespace tpp
                     const nlohmann::json *value = resolve_expr(arg.expr);
                     if (!value)
                         return true;
+
+                    if (arg.sourceRange.has_value())
+                        return writer_.emitValueTracked(json_scalar_to_string(*value), arg.policy, current_source_uri(),
+                                                        to_tracking_range(*arg.sourceRange));
                     return writer_.emitValue(json_scalar_to_string(*value), arg.policy);
                 }
                 else if constexpr (std::is_same_v<T, Instruction_AlignCell>)
@@ -302,25 +370,27 @@ namespace tpp
 
         bool exec_for(const ForInstr &instr)
         {
-            const bool hasPolicy = !instr.policy.empty();
-            if (hasPolicy && !writer_.pushPolicy(instr.policy))
-                return false;
+            return exec_with_structural_tracking(instr.sourceRange, [&]() {
+                const bool hasPolicy = !instr.policy.empty();
+                if (hasPolicy && !writer_.pushPolicy(instr.policy))
+                    return false;
 
-            const nlohmann::json *collection = resolve_expr(instr.collection);
-            if (!collection || !collection->is_array())
-            {
-                if (hasPolicy)
-                    return writer_.popPolicy();
-                return true;
-            }
+                const nlohmann::json *collection = resolve_expr(instr.collection);
+                if (!collection || !collection->is_array())
+                {
+                    if (hasPolicy)
+                        return writer_.popPolicy();
+                    return true;
+                }
 
-            const bool ok = instr.alignSpec.has_value()
-                ? exec_for_aligned(instr, *collection)
-                : exec_for_normal(instr, *collection);
+                const bool ok = instr.alignSpec.has_value()
+                    ? exec_for_aligned(instr, *collection)
+                    : exec_for_normal(instr, *collection);
 
-            if (hasPolicy && !writer_.popPolicy())
-                return false;
-            return ok;
+                if (hasPolicy && !writer_.popPolicy())
+                    return false;
+                return ok;
+            });
         }
 
         bool exec_for_normal(const ForInstr &instr, const nlohmann::json &collection)
@@ -379,7 +449,7 @@ namespace tpp
                 if (instr.precededBy.has_value())
                     writer_.emit(*instr.precededBy);
 
-                writer_.emit(iterResult.text);
+                writer_.emitCaptureResult(iterResult);
 
                 if (index + 1 < items.size())
                 {
@@ -490,58 +560,65 @@ namespace tpp
 
         bool exec_if(const IfInstr &instr)
         {
-            bool cond = expr_truthy(instr.condExpr);
-            if (instr.negated)
-                cond = !cond;
+            return exec_with_structural_tracking(instr.sourceRange, [&]() {
+                bool cond = expr_truthy(instr.condExpr);
+                if (instr.negated)
+                    cond = !cond;
 
-            const auto &branch = cond ? *instr.thenBody : *instr.elseBody;
-            return exec_body(branch);
+                const auto &branch = cond ? *instr.thenBody : *instr.elseBody;
+                return exec_body(branch);
+            });
         }
 
         bool exec_switch(const SwitchInstr &instr)
         {
-            const bool hasPolicy = !instr.policy.empty();
-            if (hasPolicy && !writer_.pushPolicy(instr.policy))
-                return false;
+            return exec_with_structural_tracking(instr.sourceRange, [&]() {
+                const bool hasPolicy = !instr.policy.empty();
+                if (hasPolicy && !writer_.pushPolicy(instr.policy))
+                    return false;
 
-            const nlohmann::json *value = resolve_expr(instr.expr);
-            if (!value)
-            {
-                if (hasPolicy)
-                    return writer_.popPolicy();
-                return true;
-            }
+                const nlohmann::json *value = resolve_expr(instr.expr);
+                if (!value)
+                {
+                    if (hasPolicy)
+                        return writer_.popPolicy();
+                    return true;
+                }
 
-            std::string tag;
-            const nlohmann::json *payload = nullptr;
-            if (!extract_enum_case(*value, tag, payload))
-            {
-                if (hasPolicy)
-                    return writer_.popPolicy();
-                return true;
-            }
+                std::string tag;
+                const nlohmann::json *payload = nullptr;
+                if (!extract_enum_case(*value, tag, payload))
+                {
+                    if (hasPolicy)
+                        return writer_.popPolicy();
+                    return true;
+                }
 
-            for (const auto &caseInstr : *instr.cases)
-            {
-                if (caseInstr.tag != tag)
-                    continue;
+                for (const auto &caseInstr : *instr.cases)
+                {
+                    if (caseInstr.tag != tag)
+                        continue;
 
-                std::map<std::string, nlohmann::json> bindings;
-                if (caseInstr.bindingName.has_value() && payload)
-                    bindings.emplace(caseInstr.bindingName->name, *payload);
+                    std::map<std::string, nlohmann::json> bindings;
+                    if (caseInstr.bindingName.has_value() && payload)
+                        bindings.emplace(caseInstr.bindingName->name, *payload);
 
-                scopes_.push_back(std::move(bindings));
-                const bool ok = exec_body(*caseInstr.body);
-                scopes_.pop_back();
+                    const bool ok = exec_with_structural_tracking(caseInstr.sourceRange, [&]() {
+                        scopes_.push_back(std::move(bindings));
+                        const bool branchOk = exec_body(*caseInstr.body);
+                        scopes_.pop_back();
+                        return branchOk;
+                    });
+
+                    if (hasPolicy && !writer_.popPolicy())
+                        return false;
+                    return ok;
+                }
 
                 if (hasPolicy && !writer_.popPolicy())
                     return false;
-                return ok;
-            }
-
-            if (hasPolicy && !writer_.popPolicy())
-                return false;
-            return true;
+                return true;
+            });
         }
 
         bool exec_call(const CallInstr &instr)
@@ -554,6 +631,7 @@ namespace tpp
             }
 
             const FunctionDef &callee = ir_.functions[static_cast<size_t>(instr.functionIndex)];
+            const std::string callSiteUri = current_source_uri();
             std::map<std::string, nlohmann::json> bindings;
             for (size_t index = 0; index < instr.arguments.size() && index < callee.params.size(); ++index)
             {
@@ -563,37 +641,51 @@ namespace tpp
 
             scopes_.push_back(std::move(bindings));
             writer_.beginCapture();
+            sourceUriStack_.push_back(callee.sourceUri.value_or(""));
 
             const bool hasPolicy = !callee.policy.empty();
             if (hasPolicy && !writer_.pushPolicy(callee.policy))
             {
                 writer_.endCapture();
+                sourceUriStack_.pop_back();
                 scopes_.pop_back();
                 return false;
             }
 
             const bool ok = exec_body(*callee.body);
-            std::string callResult = writer_.endCapture();
+            Writer::CaptureResult callResult = writer_.endCaptureResult();
 
             if (hasPolicy && !writer_.popPolicy())
             {
+                sourceUriStack_.pop_back();
                 scopes_.pop_back();
                 return false;
             }
 
+            sourceUriStack_.pop_back();
             scopes_.pop_back();
             if (!ok)
                 return false;
 
-            if (!callResult.empty() && callResult.back() == '\n')
-                callResult.pop_back();
-            writer_.emit(callResult);
+            strip_trailing_newline(callResult);
+
+            const int outStart = static_cast<int>(writer_.outputSize());
+            if (!writer_.emitCaptureResult(callResult))
+                return false;
+
+            if (instr.sourceRange.has_value())
+            {
+                writer_.addMapping(callSiteUri, to_tracking_range(*instr.sourceRange),
+                                   outStart, static_cast<int>(writer_.outputSize()));
+            }
+
             return true;
         }
 
         const IR &ir_;
         Writer writer_;
         std::vector<std::map<std::string, nlohmann::json>> scopes_;
+        std::vector<std::string> sourceUriStack_;
     };
 
     static std::string type_signature_name(const TypeKind &tk)
@@ -617,6 +709,12 @@ namespace tpp
         default:
             return "?";
         }
+    }
+
+    static Range to_tracking_range(const SourceRange &sourceRange)
+    {
+        return {{sourceRange.start.line, sourceRange.start.character},
+                {sourceRange.end.line, sourceRange.end.character}};
     }
 
     static std::string function_signature_text(const FunctionDef &f)
@@ -654,8 +752,6 @@ namespace tpp
                          std::string &output, std::string &error,
                          std::vector<RenderMapping> *tracking)
     {
-        (void)tracking; // TODO: re-enable render mapping tracking
-
         try
         {
             // ── Bind JSON input to function parameters ──
@@ -775,6 +871,12 @@ namespace tpp
             }
 
             output = interpreter.take_output(Writer::OutputPostProcessing::StripSingleTrailingNewline);
+            if (tracking)
+            {
+                *tracking = interpreter.mappings();
+                trim_mappings(*tracking, static_cast<int>(output.size()));
+            }
+
             return true;
         }
         catch (const std::exception &e)

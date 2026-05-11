@@ -182,6 +182,7 @@ Each template compiles into a `FunctionDef` — a named function with typed para
 | `policy` | string | Default policy tag (empty string if none) |
 | `doc` | string | Doc comment text |
 | `sourceRange` | [SourceRange](#sourcerange) or null | Source location |
+| `sourceUri` | string or null | URI of the template source file when source ranges are enabled |
 
 #### ParamDef
 
@@ -227,6 +228,7 @@ Emit literal text into the output stream.
 | Field | Type | Description |
 |---|---|---|
 | `text` | string | Literal text to emit |
+| `sourceRange` | [SourceRange](#sourcerange) or null | Source span for this literal output when source ranges are enabled |
 
 ### EmitExprInstr
 
@@ -236,6 +238,9 @@ Emit the string value of an expression, optionally applying a policy.
 |---|---|---|
 | `expr` | [ExprInfo](#exprinfo) | The expression to interpolate |
 | `policy` | string | Policy tag to apply (empty string for no policy) |
+| `sourceRange` | [SourceRange](#sourcerange) or null | Source span for this interpolation when source ranges are enabled |
+
+Instruction-level `sourceRange` fields are primarily used by editor tooling, especially preview-to-source tracking in the language server. They are optional and omitted unless the compiler is asked to preserve source ranges.
 
 ### ForInstr
 
@@ -253,6 +258,7 @@ Loop over each element of a collection expression.
 | `precededBy` | string, optional | Text emitted before the first iteration if the collection is non-empty |
 | `policy` | string | Policy tag for this scope |
 | `alignSpec` | string, optional | Alignment specification string (e.g. `"llr"` for left/left/right); present when alignment is active |
+| `sourceRange` | [SourceRange](#sourcerange) or null | Source span for the `@for@` directive when source ranges are enabled |
 
 Absent optional loop fields are omitted from the JSON rather than encoded as empty-string sentinels.
 
@@ -267,6 +273,7 @@ Conditional emission.
 | `negated` | bool | Whether the condition is negated (`@if not …@`) |
 | `thenBody` | array of Instruction | Body when condition is true |
 | `elseBody` | array of Instruction | Body when condition is false (empty if no else branch) |
+| `sourceRange` | [SourceRange](#sourcerange) or null | Source span for the `@if@` directive when source ranges are enabled |
 
 ### SwitchInstr
 
@@ -277,6 +284,7 @@ Pattern match on a variant (enum) expression.
 | `expr` | [ExprInfo](#exprinfo) | The expression to match |
 | `cases` | array of [CaseInstr](#caseinstr) | Exhaustive case branches in enum declaration order |
 | `policy` | string | Policy tag for this scope |
+| `sourceRange` | [SourceRange](#sourcerange) or null | Source span for the `@switch@` directive when source ranges are enabled |
 
 The public IR does not carry a separate default branch. If the source switch contains a default, the compiler eagerly synthesizes per-variant cases using that body for any missing tags. If the source switch omits both an explicit case and a default for a tag, the compiler emits an empty body for that synthesized case.
 
@@ -307,6 +315,7 @@ Direct call to another template function.
 | `functionName` | string | Name of the function to call |
 | `functionIndex` | int | Resolved callee index chosen at compile time; always valid for the containing IR |
 | `arguments` | array of [ExprInfo](#exprinfo) | Arguments (must match the callee's parameter types) |
+| `sourceRange` | [SourceRange](#sourcerange) or null | Source span for the call site when source ranges are enabled |
 
 The renderer does not perform overload resolution from `functionName`. It trusts `functionIndex` as the compiler-chosen target and may reject IR where the index is invalid or inconsistent with the name/signature.
 
@@ -374,6 +383,8 @@ The IR stores policies structurally rather than as opaque blobs. That allows run
 When the compiler is invoked with source range tracking (used by the language server), each definition includes its source location.
 
 Source locations are optional metadata. Consumers that do not need editor features or source mapping can ignore them safely.
+
+`SourceRange` itself is intentionally line/character-only. Template-file identity for runtime/editor features is carried separately on `FunctionDef.sourceUri`, while schema-definition file identity remains in the compiler semantic model used by the language server.
 
 ### SourceRange
 

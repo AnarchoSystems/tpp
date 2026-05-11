@@ -116,6 +116,11 @@ namespace
         range = {};
     }
 
+    void clear_source_uri(std::string &sourceUri) noexcept
+    {
+        sourceUri.clear();
+    }
+
     void strip_type_ranges(std::vector<compiler::StructDef> &structs,
                            std::vector<compiler::EnumDef> &enums)
     {
@@ -215,9 +220,22 @@ namespace
     void strip_semantic_model_ranges(compiler::SemanticModel &semanticModel)
     {
         strip_type_ranges(semanticModel.structs, semanticModel.enums);
+        for (auto &structDef : semanticModel.structs)
+        {
+            clear_source_uri(structDef.sourceUri);
+            for (auto &field : structDef.fields)
+                clear_source_uri(field.sourceUri);
+        }
+        for (auto &enumDef : semanticModel.enums)
+        {
+            clear_source_uri(enumDef.sourceUri);
+            for (auto &variant : enumDef.variants)
+                clear_source_uri(variant.sourceUri);
+        }
         for (auto &function : semanticModel.mutable_functions())
         {
             clear_range(function.sourceRange);
+            clear_source_uri(function.sourceUri);
             strip_ast_ranges(function.body);
         }
         semanticModel.mutable_type_source_files().clear();
@@ -336,8 +354,13 @@ namespace
                 continue;
             }
 
+            auto mergedStruct = structDef;
+            mergedStruct.sourceUri = artifact.source().uri;
+            for (auto &field : mergedStruct.fields)
+                field.sourceUri = artifact.source().uri;
+
             const std::size_t index = semanticModel.structs.size();
-            semanticModel.structs.push_back(structDef);
+            semanticModel.structs.push_back(std::move(mergedStruct));
             semanticModel.nameIndex[structDef.name] = {compiler::TypeKind::Struct, index};
         }
 
@@ -351,8 +374,13 @@ namespace
                 continue;
             }
 
+            auto mergedEnum = enumDef;
+            mergedEnum.sourceUri = artifact.source().uri;
+            for (auto &variant : mergedEnum.variants)
+                variant.sourceUri = artifact.source().uri;
+
             const std::size_t index = semanticModel.enums.size();
-            semanticModel.enums.push_back(enumDef);
+            semanticModel.enums.push_back(std::move(mergedEnum));
             semanticModel.nameIndex[enumDef.name] = {compiler::TypeKind::Enum, index};
         }
     }
@@ -372,7 +400,8 @@ namespace
         return true;
     }
 
-    compiler::TemplateFunction to_template_function(const ParsedTemplateSource &templateSource)
+    compiler::TemplateFunction to_template_function(const ParsedTemplateSource &templateSource,
+                                                    const std::string &sourceUri)
     {
         compiler::TemplateFunction function;
         function.name = templateSource.name;
@@ -381,6 +410,7 @@ namespace
         function.policy = templateSource.policy;
         function.doc = templateSource.doc;
         function.sourceRange = templateSource.sourceRange;
+        function.sourceUri = sourceUri;
         return function;
     }
 }
@@ -654,7 +684,7 @@ bool compile(const ParsedProject &project,
             for (const auto &artifact : project.template_sources())
             {
                 const auto &templateSource = artifact.value();
-                auto function = to_template_function(templateSource);
+                auto function = to_template_function(templateSource, artifact.source().uri);
                 auto duplicate = std::find_if(pendingFunctions.begin(), pendingFunctions.end(),
                                               [&](const compiler::TemplateFunction &existing)
                 {

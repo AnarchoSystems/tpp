@@ -38,6 +38,7 @@ namespace tpp::compiler
         TypeRef type;
         bool recursive = false;
         Range sourceRange{};
+        std::string sourceUri;
         std::string doc; // doc comment text attached to this field (/// or /** */)
     };
 
@@ -46,6 +47,7 @@ namespace tpp::compiler
         std::string name;
         std::vector<FieldDef> fields;
         Range sourceRange{};
+        std::string sourceUri;
         std::string doc; // doc comment text attached to this struct (/// or /** */)
         std::string rawTypedefs;
     };
@@ -56,6 +58,7 @@ namespace tpp::compiler
         std::optional<TypeRef> payload;
         bool recursive = false;
         Range sourceRange{};
+        std::string sourceUri;
         std::string doc; // doc comment text attached to this variant tag (/// or /** */)
     };
 
@@ -64,6 +67,7 @@ namespace tpp::compiler
         std::string name;
         std::vector<VariantDef> variants;
         Range sourceRange{};
+        std::string sourceUri;
         std::string doc; // doc comment text attached to this enum (/// or /** */)
         std::string rawTypedefs;
     };

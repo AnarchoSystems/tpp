@@ -1,3 +1,5 @@
+#include <gtest/gtest.h>
+
 TEST(MyFeature, MyScenario)
 {
     some_step("Foo", 42);

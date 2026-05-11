@@ -61,6 +61,7 @@ struct ExprInfo
 struct EmitInstr
 {
     text : string;
+    sourceRange : optional<SourceRange>;
 }
 
 /// Emit an interpolated expression value.
@@ -68,6 +69,7 @@ struct EmitExprInstr
 {
     expr : ExprInfo;
     policy : string;
+    sourceRange : optional<SourceRange>;
 }
 
 /// Begin capturing a block for deferred output.
@@ -96,6 +98,7 @@ struct ForInstr
     precededBy : optional<string>;
     policy : string;
     alignSpec : optional<string>;
+    sourceRange : optional<SourceRange>;
 }
 
 struct CaseBinding
@@ -112,6 +115,7 @@ struct CaseInstr
     payloadType : optional<TypeKind>;
     payloadIsRecursive : bool;
     body : list<Instruction>;
+    sourceRange : optional<SourceRange>;
     variantIndex : int;
 }
 
@@ -123,6 +127,7 @@ struct IfInstr
     negated : bool;
     thenBody : list<Instruction>;
     elseBody : list<Instruction>;
+    sourceRange : optional<SourceRange>;
 }
 
 /// Switch on a variant expression.
@@ -131,6 +136,7 @@ struct SwitchInstr
     expr : ExprInfo;
     cases : list<CaseInstr>;
     policy : string;
+    sourceRange : optional<SourceRange>;
 }
 
 /// Direct function call.
@@ -139,6 +145,7 @@ struct CallInstr
     functionName : string;
     functionIndex : int;
     arguments : list<ExprInfo>;
+    sourceRange : optional<SourceRange>;
 }
 
 enum Instruction
@@ -170,6 +177,7 @@ struct FunctionDef
     policy : string;
     doc : string;
     sourceRange : optional<SourceRange>;
+    sourceUri : optional<string>;
 }
 
 // ── Schema types (for type generation) ──────────────────────────────────────

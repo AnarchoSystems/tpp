@@ -1,0 +1,23 @@
+{
+    "types": [
+        "types_a.tpp",
+        "types_b.tpp"
+    ],
+    "templates": [
+        "helper.tpp",
+        "template.tpp"
+    ],
+    "previews": [
+        {
+            "template": "main",
+            "input": [
+                [
+                    {"label": "a"},
+                    {"label": "b"},
+                    {"label": "c"}
+                ]
+            ],
+            "name": "default"
+        }
+    ]
+}

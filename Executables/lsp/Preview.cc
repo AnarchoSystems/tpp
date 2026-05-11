@@ -70,6 +70,7 @@ nlohmann::json renderPreview(const nlohmann::json &params, WorkspaceProject *pro
     for (const auto &m : mappings)
     {
         mappingsJson.push_back({
+            {"sourceUri", m.sourceUri},
             {"sourceRange", {
                 {"start", {{"line", m.sourceRange.start.line}, {"character", m.sourceRange.start.character}}},
                 {"end",   {{"line", m.sourceRange.end.line},   {"character", m.sourceRange.end.character}}}
@@ -79,7 +80,13 @@ nlohmann::json renderPreview(const nlohmann::json &params, WorkspaceProject *pro
         });
     }
 
-    return {{"output", output}, {"mappings", mappingsJson}};
+    nlohmann::json response{{"output", output}, {"mappings", mappingsJson}};
+    if (preview.contains("language") && preview["language"].is_string())
+        response["language"] = preview["language"].get<std::string>();
+    if (preview.contains("fileExtension") && preview["fileExtension"].is_string())
+        response["fileExtension"] = preview["fileExtension"].get<std::string>();
+
+    return response;
 }
 
 } // namespace tpp

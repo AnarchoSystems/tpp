@@ -55,13 +55,14 @@ configure_file(TestCases.h.in ${CMAKE_CURRENT_BINARY_DIR}/TestCases.h @ONLY)
 # `lsp-test.json` is a test artifact checked into individual TestCases/
 # directories. Configure-time discovery only records which cases provide each
 # LSP section; the full JSON is still loaded at runtime in LspTest.cc.
-# Supported sections are `semantic_tokens`, `folding_ranges`, and
-# `go_to_definition`. Keep the schemas in sync with
+# Supported sections are `semantic_tokens`, `folding_ranges`, `go_to_definition`,
+# and `hover`. Keep the schemas in sync with
 # `.github/skills/add-acceptance-test/references/expected-formats.md`.
 
 set(LSP_TOKEN_CASE_NAMES "")
 set(LSP_FOLDING_CASE_NAMES "")
 set(LSP_DEFINITION_CASE_NAMES "")
+set(LSP_HOVER_CASE_NAMES "")
 
 file(GLOB _lsp_case_dirs LIST_DIRECTORIES true
      ${CMAKE_CURRENT_SOURCE_DIR}/TestCases/*)
@@ -90,6 +91,11 @@ foreach(_dir IN LISTS _lsp_case_dirs)
     string(JSON _nd ERROR_VARIABLE _err LENGTH "${_lsp_json}" "go_to_definition")
     if(NOT _err AND _nd GREATER 0)
         string(APPEND LSP_DEFINITION_CASE_NAMES "    \"${_tc}\",\n")
+    endif()
+
+    string(JSON _nd ERROR_VARIABLE _err LENGTH "${_lsp_json}" "hover")
+    if(NOT _err AND _nd GREATER 0)
+        string(APPEND LSP_HOVER_CASE_NAMES "    \"${_tc}\",\n")
     endif()
 endforeach()
 
@@ -367,7 +373,7 @@ if(JAVA_COMPILER)
         COMMAND "${JAVA_COMPILER}" -cp "${ORG_JSON_JAR}" -d "${java_runner_dir}" "${java_runner_src}"
         DEPENDS "${java_runner_src}" "${ORG_JSON_JAR}"
         COMMENT "javac aggregated Java tests")
-    add_custom_target(java_tests_build DEPENDS "${java_class}")
+    add_custom_target(java_tests_build ALL DEPENDS "${java_class}")
     add_dependencies(java_tests_build tpp tpp2java make-java-test)
     add_dependencies(java_tests java_tests_build)
 endif()
@@ -379,7 +385,7 @@ if(SWIFT_COMPILER)
         COMMAND "${SWIFT_COMPILER}" -parse-as-library -o "${swift_bin}" "${swift_runner_src}"
         DEPENDS "${swift_runner_src}"
         COMMENT "swiftc aggregated Swift tests")
-    add_custom_target(swift_tests_build DEPENDS "${swift_bin}")
+    add_custom_target(swift_tests_build ALL DEPENDS "${swift_bin}")
     add_dependencies(swift_tests_build tpp tpp2swift make-swift-test)
     add_dependencies(swift_tests swift_tests_build)
 endif()

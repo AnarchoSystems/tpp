@@ -114,13 +114,14 @@ Notes:
 
 ## lsp-test.json (LSP expectations)
 
-Used by the LSP integration tests to verify semantic tokens, folding ranges, and go-to-definition behavior.
+Used by the LSP integration tests to verify semantic tokens, folding ranges, go-to-definition behavior, and hover content.
 
 Top-level sections:
 
 - `semantic_tokens`
 - `folding_ranges`
 - `go_to_definition`
+- `hover`
 
 All sections are optional. Include only the behaviors the test case is meant to verify.
 
@@ -185,3 +186,26 @@ Notes:
 - `file` is relative to the test-case directory
 - Positions are 0-based
 - To assert that no definition result should exist, omit `expected_file`
+
+### hover
+
+Schema:
+```json
+{
+    "hover": [
+        {
+            "name": "field_hover",
+            "file": "template.tpp",
+            "line": 3,
+            "character": 12,
+            "expected_contains": ["string", "field docs"]
+        }
+    ]
+}
+```
+
+Notes:
+- `name` is only a test-label for readable failure output
+- `file` is relative to the test-case directory
+- Positions are 0-based
+- `expected_contains` lists substrings that must appear somewhere in the returned hover markdown

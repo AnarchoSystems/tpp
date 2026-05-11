@@ -150,6 +150,9 @@ nlohmann::json LspServer::handle(const std::string &rawMessage)
     if (method == "textDocument/definition")
         return makeResponse(id, onDefinition(params));
 
+    if (method == "textDocument/hover")
+        return makeResponse(id, onHover(params));
+
     if (method == "textDocument/completion")
         return makeResponse(id, onCompletion(params));
 
@@ -190,6 +193,7 @@ nlohmann::json LspServer::onInitialize(const nlohmann::json &params)
             }},
             {"foldingRangeProvider", true},
             {"definitionProvider", true},
+            {"hoverProvider", true},
             {"completionProvider", {
                 {"triggerCharacters", nlohmann::json::array({"@", "."})}
             }}
@@ -557,6 +561,16 @@ nlohmann::json LspServer::onDefinition(const nlohmann::json &params)
     int line = params.at("position").at("line").get<int>();
     int character = params.at("position").at("character").get<int>();
     return jumpToDefinition(uri, line, character, *proj);
+}
+
+nlohmann::json LspServer::onHover(const nlohmann::json &params)
+{
+    std::string uri = uriDecode(params.at("textDocument").at("uri").get<std::string>());
+    WorkspaceProject *proj = projectFor(uri);
+    if (!proj) return nullptr;
+    int line = params.at("position").at("line").get<int>();
+    int character = params.at("position").at("character").get<int>();
+    return hoverAtPosition(uri, line, character, *proj);
 }
 
 nlohmann::json LspServer::onCompletion(const nlohmann::json &params)

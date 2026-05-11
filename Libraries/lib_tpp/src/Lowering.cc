@@ -368,11 +368,14 @@ namespace tpp::compiler
                                                                   const std::vector<TemplateFunction> &functions,
                                                                   const std::optional<ResolvedCallArgument> &wholeEnumArgument,
                                                                   const std::string &policy,
-                                                                  int &syntheticCounter)
+                                                                  int &syntheticCounter,
+                                                                  const Range &sourceRange,
+                                                                  bool includeSourceRanges)
     {
         auto switchInstr = std::make_unique<tpp::SwitchInstr>();
         switchInstr->expr = std::move(expr);
         switchInstr->policy = policy;
+        switchInstr->sourceRange = tpp::to_public_range(sourceRange, includeSourceRanges);
 
         auto cases = std::make_unique<std::vector<tpp::CaseInstr>>();
         for (size_t variantIndex = 0; variantIndex < enumDef.variants.size(); ++variantIndex)
@@ -413,7 +416,8 @@ namespace tpp::compiler
     static std::vector<tpp::Instruction> lowerRenderViaNode(const RenderViaNode &node,
                                                             const TypeEnv &env,
                                                             const std::vector<TemplateFunction> &functions,
-                                                            int &syntheticCounter)
+                                                            int &syntheticCounter,
+                                                            bool includeSourceRanges)
     {
         std::vector<tpp::Instruction> out;
         ResolvedExpr collectionExpr = resolvePublicExpr(node.collectionExpr, env);
@@ -431,6 +435,7 @@ namespace tpp::compiler
             forInstr->varName = itemName;
             forInstr->collection = lowerPublicExpr(collectionExpr);
             forInstr->elementType = std::make_unique<tpp::TypeKind>(tpp::to_public_type(renderElemType));
+            forInstr->sourceRange = tpp::to_public_range(node.sourceRange, includeSourceRanges);
 
             std::vector<tpp::Instruction> body;
             if (renderEnum && !wholeEnumOverload)
@@ -444,7 +449,9 @@ namespace tpp::compiler
                                                                                                                     functions,
                                                                                                                     std::nullopt,
                                                                                                                     "",
-                                                                                                                    syntheticCounter)}});
+                                                                                                                    syntheticCounter,
+                                                                                                                    node.sourceRange,
+                                                                                                                    includeSourceRanges)}});
             }
             else
             {
@@ -474,7 +481,7 @@ namespace tpp::compiler
                                                         renderElemType,
                                                         resolvedExpr.isRecursive,
                                                         resolvedExpr.isOptional};
-            out.push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<5>, lowerRenderViaSwitch(std::move(expr), *renderEnum, node.functionName, functions, wholeEnumArgument, node.policy, syntheticCounter)}});
+            out.push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<5>, lowerRenderViaSwitch(std::move(expr), *renderEnum, node.functionName, functions, wholeEnumArgument, node.policy, syntheticCounter, node.sourceRange, includeSourceRanges)}});
         }
         else
         {
@@ -498,12 +505,14 @@ namespace tpp::compiler
     static std::vector<tpp::Instruction> lowerPublicNodes(const std::vector<ASTNode> &nodes,
                                                           TypeEnv &env,
                                                           const std::vector<TemplateFunction> &functions,
-                                                          int &syntheticCounter);
+                                                          int &syntheticCounter,
+                                                          bool includeSourceRanges);
 
     static std::vector<tpp::Instruction> lowerPublicNodes(const std::vector<ASTNode> &nodes,
                                                           TypeEnv &env,
                                                           const std::vector<TemplateFunction> &functions,
-                                                          int &syntheticCounter)
+                                                          int &syntheticCounter,
+                                                          bool includeSourceRanges)
     {
         std::vector<tpp::Instruction> out;
         for (const auto &node : nodes)
@@ -513,16 +522,32 @@ namespace tpp::compiler
                 using T = std::decay_t<decltype(arg)>;
                 if constexpr (std::is_same_v<T, TextNode>)
                 {
-                    if (!out.empty() && std::holds_alternative<tpp::EmitInstr>(out.back().value))
+                    if (!out.empty() &&
+                        std::holds_alternative<tpp::EmitInstr>(out.back().value) &&
+                        !arg.sourceRange.start.line && !arg.sourceRange.start.character &&
+                        !arg.sourceRange.end.line && !arg.sourceRange.end.character &&
+                        !std::get<tpp::EmitInstr>(out.back().value).sourceRange.has_value())
+                    {
                         std::get<tpp::EmitInstr>(out.back().value).text += arg.text;
+                    }
                     else
-                        out.push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<0>, tpp::EmitInstr{arg.text}}});
+                    {
+                        tpp::EmitInstr emitInstr;
+                        emitInstr.text = arg.text;
+                        if (arg.sourceRange.start.line != 0 || arg.sourceRange.start.character != 0 ||
+                            arg.sourceRange.end.line != 0 || arg.sourceRange.end.character != 0)
+                        {
+                            emitInstr.sourceRange = tpp::to_public_range(arg.sourceRange, includeSourceRanges);
+                        }
+                        out.push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<0>, std::move(emitInstr)}});
+                    }
                 }
                 else if constexpr (std::is_same_v<T, InterpolationNode>)
                 {
                     tpp::EmitExprInstr exprInstr;
                     exprInstr.expr = lowerPublicExpr(arg.expr, env);
                     exprInstr.policy = arg.policy;
+                    exprInstr.sourceRange = tpp::to_public_range(arg.sourceRange, includeSourceRanges);
                     out.push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<1>, std::move(exprInstr)}});
                 }
                 else if constexpr (std::is_same_v<T, AlignmentCellNode>)
@@ -534,7 +559,7 @@ namespace tpp::compiler
                 }
                 else if constexpr (std::is_same_v<T, std::shared_ptr<IndentNode>>)
                 {
-                    auto body = lowerPublicNodes(arg->body, env, functions, syntheticCounter);
+                    auto body = lowerPublicNodes(arg->body, env, functions, syntheticCounter, includeSourceRanges);
 
                     if (arg->wrapSingleForBody &&
                         body.size() == 1 &&
@@ -568,7 +593,7 @@ namespace tpp::compiler
                     if (!arg->enumeratorName.empty())
                         env.push(arg->enumeratorName, TypeRef{IntType{}});
 
-                    auto body = lowerPublicNodes(arg->body, env, functions, syntheticCounter);
+                    auto body = lowerPublicNodes(arg->body, env, functions, syntheticCounter, includeSourceRanges);
 
                     if (!arg->enumeratorName.empty())
                         env.pop();
@@ -585,6 +610,7 @@ namespace tpp::compiler
                     forInstr->precededBy = lowerOptionalString(arg->precededBy);
                     forInstr->policy = arg->policy;
                     forInstr->alignSpec = arg->alignSpec;
+                    forInstr->sourceRange = tpp::to_public_range(arg->sourceRange, includeSourceRanges);
                     out.push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<3>, std::move(forInstr)}});
                 }
                 else if constexpr (std::is_same_v<T, std::shared_ptr<IfNode>>)
@@ -593,10 +619,11 @@ namespace tpp::compiler
                     ifInstr->condExpr = lowerPublicExpr(arg->condExpr, env);
                     ifInstr->conditionKind = lowerPublicConditionKind(resolveExprType(arg->condExpr, env));
                     ifInstr->negated = arg->negated;
-                    auto thenBody = lowerPublicNodes(arg->thenBody, env, functions, syntheticCounter);
-                    auto elseBody = lowerPublicNodes(arg->elseBody, env, functions, syntheticCounter);
+                    auto thenBody = lowerPublicNodes(arg->thenBody, env, functions, syntheticCounter, includeSourceRanges);
+                    auto elseBody = lowerPublicNodes(arg->elseBody, env, functions, syntheticCounter, includeSourceRanges);
                     ifInstr->thenBody = std::make_unique<std::vector<tpp::Instruction>>(std::move(thenBody));
                     ifInstr->elseBody = std::make_unique<std::vector<tpp::Instruction>>(std::move(elseBody));
+                    ifInstr->sourceRange = tpp::to_public_range(arg->sourceRange, includeSourceRanges);
                     out.push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<4>, std::move(ifInstr)}});
                 }
                 else if constexpr (std::is_same_v<T, std::shared_ptr<SwitchNode>>)
@@ -606,6 +633,7 @@ namespace tpp::compiler
 
                     auto switchInstr = std::make_unique<tpp::SwitchInstr>();
                     switchInstr->expr = lowerPublicExpr(arg->expr, env);
+                    switchInstr->sourceRange = tpp::to_public_range(arg->sourceRange, includeSourceRanges);
                     auto cases = std::make_unique<std::vector<tpp::CaseInstr>>();
 
                     std::map<std::string, const CaseNode *> explicitCases;
@@ -628,6 +656,13 @@ namespace tpp::compiler
                             const CaseNode *sourceCase = explicitCaseIt == explicitCases.end()
                                 ? nullptr
                                 : explicitCaseIt->second;
+                            const CaseNode *mappedCase = sourceCase
+                                ? sourceCase
+                                : (arg->defaultCase ? &*arg->defaultCase : nullptr);
+
+                            caseInstr.sourceRange = mappedCase
+                                ? tpp::to_public_range(mappedCase->sourceRange, includeSourceRanges)
+                                : std::nullopt;
 
                             std::vector<tpp::Instruction> loweredCaseBody;
 
@@ -654,7 +689,7 @@ namespace tpp::compiler
                             {
                                 if (sourceCase->bindingName.empty())
                                 {
-                                                            loweredCaseBody = lowerPublicNodes(sourceCase->body, env, functions, syntheticCounter);
+                                                            loweredCaseBody = lowerPublicNodes(sourceCase->body, env, functions, syntheticCounter, includeSourceRanges);
                                 }
                                 else if (variant.payload.has_value())
                                 {
@@ -663,17 +698,17 @@ namespace tpp::compiler
                                              *variant.payload,
                                              false,
                                              isOptionalTypeRef(*variant.payload));
-                                                            loweredCaseBody = lowerPublicNodes(sourceCase->body, env, functions, syntheticCounter);
+                                                            loweredCaseBody = lowerPublicNodes(sourceCase->body, env, functions, syntheticCounter, includeSourceRanges);
                                     env.pop();
                                 }
                                 else
                                 {
-                                                            loweredCaseBody = lowerPublicNodes(sourceCase->body, env, functions, syntheticCounter);
+                                                            loweredCaseBody = lowerPublicNodes(sourceCase->body, env, functions, syntheticCounter, includeSourceRanges);
                                 }
                             }
                             else if (arg->defaultCase)
                             {
-                                                        loweredCaseBody = lowerPublicNodes(arg->defaultCase->body, env, functions, syntheticCounter);
+                                                        loweredCaseBody = lowerPublicNodes(arg->defaultCase->body, env, functions, syntheticCounter, includeSourceRanges);
                             }
 
                                                     caseInstr.body = std::make_unique<std::vector<tpp::Instruction>>(std::move(loweredCaseBody));
@@ -697,11 +732,14 @@ namespace tpp::compiler
                                              resolvedArgument.isRecursive,
                                              resolvedArgument.isOptional});
                     }
-                    out.push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<6>, lowerResolvedCall(arg->functionName, arguments, functions)}});
+
+                    tpp::CallInstr callInstr = lowerResolvedCall(arg->functionName, arguments, functions);
+                    callInstr.sourceRange = tpp::to_public_range(arg->sourceRange, includeSourceRanges);
+                    out.push_back(tpp::Instruction{tpp::Instruction::Value{std::in_place_index<6>, std::move(callInstr)}});
                 }
                 else if constexpr (std::is_same_v<T, std::shared_ptr<RenderViaNode>>)
                 {
-                    auto lowered = lowerRenderViaNode(*arg, env, functions, syntheticCounter);
+                    auto lowered = lowerRenderViaNode(*arg, env, functions, syntheticCounter, includeSourceRanges);
                     out.insert(out.end(), std::make_move_iterator(lowered.begin()), std::make_move_iterator(lowered.end()));
                 }
             }, node);
@@ -737,10 +775,12 @@ namespace tpp::compiler
                 paramDef.type = std::make_unique<tpp::TypeKind>(tpp::to_public_type(param.type));
                 functionDef.params.push_back(std::move(paramDef));
             }
-            functionDef.body = std::make_unique<std::vector<tpp::Instruction>>(lowerPublicNodes(fn.body, env, functions, syntheticCounter));
+            functionDef.body = std::make_unique<std::vector<tpp::Instruction>>(lowerPublicNodes(fn.body, env, functions, syntheticCounter, includeSourceRanges));
             functionDef.policy = fn.policy;
             functionDef.doc = fn.doc;
             functionDef.sourceRange = tpp::to_public_range(fn.sourceRange, includeSourceRanges);
+            if (includeSourceRanges && !fn.sourceUri.empty())
+                functionDef.sourceUri = fn.sourceUri;
 
             out.push_back(std::move(functionDef));
         }

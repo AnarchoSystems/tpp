@@ -605,11 +605,13 @@ The live preview panel renders a named template with sample input and updates au
     {
       "name": "Default",
       "template": "main",
+      "language": "cpp",
       "input": { "name": "World" }
     },
     {
       "name": "From file",
       "template": "main",
+      "fileExtension": ".swift",
       "input": "samples/hello.json"
     }
   ]
@@ -617,3 +619,5 @@ The live preview panel renders a named template with sample input and updates au
 ```
 
 Open a template file and run the **tpp: Open Render Preview** command from the Command Palette (`⌘⇧P` / `Ctrl+Shift+P`). The rendered output updates live as you type.
+
+Set `language` when you know the target highlighter name and want to force it. Set `fileExtension` when the generated output is easier to describe by filename suffix, such as `.cpp` or `.json`. If both are present, `language` takes precedence.

@@ -1,4 +1,6 @@
 template main(feature: Feature)
+#include <gtest/gtest.h>
+
 @for scenario in feature.scenarios | sep="\n"@
 TEST(@feature.name@, @scenario.name@)
 {

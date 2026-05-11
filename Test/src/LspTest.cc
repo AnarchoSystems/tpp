@@ -11,6 +11,7 @@
 //   LspTokenTest        — expected tokens are present at exact positions
 //   LspFoldingTest      — folding ranges match exactly
 //   LspDefinitionTest   — go-to-definition returns the expected location
+//   LspHoverTest        — hover returns expected markdown fragments
 
 #include "LspClient.h"
 #include "TestUtils.h"
@@ -54,11 +55,21 @@ struct LspDefinitionSpec {
     int expected_line = -1, expected_character = -1;
 };
 
+struct LspHoverSpec {
+    std::string name;
+    std::string testCase;
+    std::string file;
+    int line = 0, character = 0;
+    std::vector<std::string> expected_contains;
+};
+
 static void PrintTo(const LspTokenSpec &s, std::ostream *os)
     { *os << s.testCase << "/" << s.file; }
 static void PrintTo(const LspFoldingSpec &s, std::ostream *os)
     { *os << s.testCase << "/" << s.file; }
 static void PrintTo(const LspDefinitionSpec &s, std::ostream *os)
+    { *os << s.testCase << " '" << s.name << "'"; }
+static void PrintTo(const LspHoverSpec &s, std::ostream *os)
     { *os << s.testCase << " '" << s.name << "'"; }
 
 // ── Runtime LSP spec loaders ──────────────────────────────────────────────────
@@ -127,6 +138,28 @@ static std::vector<LspDefinitionSpec> GetLspDefinitionSpecs()
     return v;
 }
 
+static std::vector<LspHoverSpec> GetLspHoverSpecs()
+{
+    std::vector<LspHoverSpec> v;
+    for (const char* const* p = tpp_test::kLspHoverCaseNames; *p; ++p)
+    {
+        auto j = loadLspJson(*p);
+        for (const auto &h : j["hover"])
+        {
+            LspHoverSpec spec;
+            spec.name      = h["name"];
+            spec.testCase  = *p;
+            spec.file      = h["file"];
+            spec.line      = h["line"];
+            spec.character = h["character"];
+            for (const auto &entry : h["expected_contains"])
+                spec.expected_contains.push_back(entry.get<std::string>());
+            v.push_back(std::move(spec));
+        }
+    }
+    return v;
+}
+
 // ── Free helpers ─────────────────────────────────────────────────────────────
 
 static std::string fileUri(const std::filesystem::path &p)
@@ -152,6 +185,33 @@ static void writeFileStr(const std::filesystem::path &p, const std::string &cont
 static std::string srcUri(const std::string &relUrl)
 {
     return fileUri(std::filesystem::weakly_canonical("TestCases/" + relUrl));
+}
+
+static std::string hoverText(const nlohmann::json &result)
+{
+    if (!result.contains("contents"))
+        return {};
+
+    const auto &contents = result["contents"];
+    if (contents.is_string())
+        return contents.get<std::string>();
+    if (contents.is_object() && contents.contains("value") && contents["value"].is_string())
+        return contents["value"].get<std::string>();
+    if (contents.is_array())
+    {
+        std::string combined;
+        for (const auto &entry : contents)
+        {
+            if (!combined.empty())
+                combined += "\n";
+            if (entry.is_string())
+                combined += entry.get<std::string>();
+            else if (entry.is_object() && entry.contains("value") && entry["value"].is_string())
+                combined += entry["value"].get<std::string>();
+        }
+        return combined;
+    }
+    return {};
 }
 
 // ── Diagnostic comparison helpers ─────────────────────────────────────────────
@@ -282,6 +342,171 @@ TEST_P(LspPreviewTest, RenderMatchesExpected)
         << "tpp/renderPreview error: " << result.value("error", "") << "\nTest: " << loaded_.name;
     EXPECT_EQ(result.value("output", ""), loaded_.expectedOutput)
         << "Test: " << loaded_.name;
+
+    if (loaded_.name == "basic_struct")
+    {
+        ASSERT_TRUE(result.contains("mappings"))
+            << "tpp/renderPreview missing 'mappings' field\nTest: " << loaded_.name;
+        ASSERT_TRUE(result["mappings"].is_array())
+            << "tpp/renderPreview 'mappings' field is not an array\nTest: " << loaded_.name;
+        EXPECT_EQ(result.value("language", ""), "cpp")
+            << "Expected basic_struct preview to return its configured language hint";
+
+        bool foundFooMapping = false;
+        bool foundFieldTypeMapping = false;
+        for (const auto &mapping : result["mappings"])
+        {
+            if (mapping["sourceRange"]["start"]["line"] == 1 &&
+                mapping["outStart"] == 7 &&
+                mapping["outEnd"] == 10)
+            {
+                foundFooMapping = true;
+            }
+
+            if (mapping["sourceRange"]["start"]["line"] == 4 &&
+                mapping["outStart"] == 17 &&
+                mapping["outEnd"] == 20)
+            {
+                foundFieldTypeMapping = true;
+            }
+        }
+
+        EXPECT_TRUE(foundFooMapping)
+            << "Expected a precise preview mapping for the top-level @def.name@ interpolation in basic_struct";
+        EXPECT_TRUE(foundFieldTypeMapping)
+            << "Expected a precise preview mapping for the first @field.type@ emission inside the captured loop body";
+    }
+
+    if (loaded_.name == "basic_variant")
+    {
+        ASSERT_TRUE(result.contains("mappings"))
+            << "tpp/renderPreview missing 'mappings' field\nTest: " << loaded_.name;
+        ASSERT_TRUE(result["mappings"].is_array())
+            << "tpp/renderPreview 'mappings' field is not an array\nTest: " << loaded_.name;
+        EXPECT_EQ(result.value("fileExtension", ""), ".cpp")
+            << "Expected basic_variant preview to return its configured file-extension hint";
+
+        const std::string output = result.value("output", "");
+        bool foundDocStringCaseMapping = false;
+        bool foundDataTableLiteralMapping = false;
+        bool foundDataTableVectorMapping = false;
+        for (const auto &mapping : result["mappings"])
+        {
+            const int outStart = mapping["outStart"].get<int>();
+            const int outEnd = mapping["outEnd"].get<int>();
+            const std::string mappedText = output.substr(static_cast<size_t>(outStart),
+                                                         static_cast<size_t>(outEnd - outStart));
+
+            if (mapping["sourceRange"]["start"]["line"] == 11 &&
+                mappedText == "    some_other_step(\"DocString\");\n")
+            {
+                foundDocStringCaseMapping = true;
+            }
+
+            if (mapping["sourceRange"]["start"]["line"] == 15 &&
+                mappedText == "    {")
+            {
+                foundDataTableLiteralMapping = true;
+            }
+
+            if (mapping["sourceRange"]["start"]["line"] == 16 &&
+                mappedText == "        std::vector<TableRow> table = {")
+            {
+                foundDataTableVectorMapping = true;
+            }
+        }
+
+        EXPECT_TRUE(foundDocStringCaseMapping)
+            << "Expected a preview mapping for the active @case DocString(docStr)@ branch in basic_variant";
+        EXPECT_TRUE(foundDataTableLiteralMapping)
+            << "Expected a preview mapping for literal-only output inside a switch case body in basic_variant";
+        EXPECT_TRUE(foundDataTableVectorMapping)
+            << "Expected preview literal mappings inside a switch case body to use file-relative line numbers";
+    }
+
+    if (loaded_.name == "direct_function_call_zero_args")
+    {
+        ASSERT_TRUE(result.contains("mappings"))
+            << "tpp/renderPreview missing 'mappings' field\nTest: " << loaded_.name;
+        ASSERT_TRUE(result["mappings"].is_array())
+            << "tpp/renderPreview 'mappings' field is not an array\nTest: " << loaded_.name;
+
+        bool foundCallSiteMapping = false;
+        bool foundCalleeLiteralMapping = false;
+        for (const auto &mapping : result["mappings"])
+        {
+            if (mapping["sourceRange"]["start"]["line"] == 5 &&
+                mapping["outStart"] == 0 &&
+                mapping["outEnd"] == 11)
+            {
+                foundCallSiteMapping = true;
+            }
+
+            if (mapping["sourceRange"]["start"]["line"] == 1 &&
+                mapping["outStart"] == 0 &&
+                mapping["outEnd"] == 11)
+            {
+                foundCalleeLiteralMapping = true;
+            }
+        }
+
+        EXPECT_TRUE(foundCallSiteMapping)
+            << "Expected a preview mapping for the top-level @footer()@ call site";
+        EXPECT_TRUE(foundCalleeLiteralMapping)
+            << "Expected preview mappings to retain the callee template output span for footer()";
+    }
+
+    if (loaded_.name == "hello_world")
+    {
+        ASSERT_TRUE(result.contains("mappings"))
+            << "tpp/renderPreview missing 'mappings' field\nTest: " << loaded_.name;
+        ASSERT_TRUE(result["mappings"].is_array())
+            << "tpp/renderPreview 'mappings' field is not an array\nTest: " << loaded_.name;
+
+        ASSERT_EQ(result["mappings"].size(), 1U)
+            << "Expected one precise preview mapping for the top-level literal text in hello_world";
+
+        const auto &mapping = result["mappings"][0];
+        EXPECT_EQ(mapping["sourceRange"]["start"]["line"], 1);
+        EXPECT_EQ(mapping["outStart"], 0);
+        EXPECT_EQ(mapping["outEnd"], 13);
+    }
+
+    if (loaded_.name == "lsp_multi_file_sources")
+    {
+        namespace fs = std::filesystem;
+        const std::string templateUri = fileUri(fs::weakly_canonical("TestCases/lsp_multi_file_sources/template.tpp"));
+        const std::string helperUri = fileUri(fs::weakly_canonical("TestCases/lsp_multi_file_sources/helper.tpp"));
+
+        ASSERT_TRUE(result.contains("mappings"))
+            << "tpp/renderPreview missing 'mappings' field\nTest: " << loaded_.name;
+        ASSERT_TRUE(result["mappings"].is_array())
+            << "tpp/renderPreview 'mappings' field is not an array\nTest: " << loaded_.name;
+
+        bool foundForDirectiveMapping = false;
+        bool foundHelperMapping = false;
+        for (const auto &mapping : result["mappings"])
+        {
+            if (mapping.value("sourceUri", "") == templateUri &&
+                mapping["sourceRange"]["start"]["line"] == 1 &&
+                mapping["outStart"] == 0 &&
+                mapping["outEnd"] == 11)
+            {
+                foundForDirectiveMapping = true;
+            }
+
+            if (mapping.value("sourceUri", "") == helperUri &&
+                mapping["sourceRange"]["start"]["line"] == 2)
+            {
+                foundHelperMapping = true;
+            }
+        }
+
+        EXPECT_TRUE(foundForDirectiveMapping)
+            << "Expected a preview mapping for the @for@ directive covering the full rendered loop output";
+        EXPECT_TRUE(foundHelperMapping)
+            << "Expected preview mappings to retain the helper template URI for output rendered from helper.tpp";
+    }
 }
 
 INSTANTIATE_TEST_SUITE_P(LspTests, LspPreviewTest,
@@ -601,4 +826,50 @@ TEST_P(LspDefinitionTest, TargetLocation)
 INSTANTIATE_TEST_SUITE_P(LspTests, LspDefinitionTest,
                          ::testing::ValuesIn(GetLspDefinitionSpecs()),
                          [](const testing::TestParamInfo<LspDefinitionTest::ParamType> &info)
+                         { return info.param.name; });
+
+class LspHoverTest : public LspParamFixture<LspHoverSpec>
+{
+protected:
+    std::string getTestCaseName() const override { return spec_.testCase; }
+    void additionalSetUp() override
+    {
+        namespace fs = std::filesystem;
+        for (const auto &entry : fs::directory_iterator(tcDir))
+        {
+            if (!entry.is_regular_file())
+                continue;
+            if (entry.path().extension() == ".tpp")
+                client_->didOpen(fileUri(entry.path()), readFileStr(entry.path()));
+        }
+    }
+};
+
+TEST_P(LspHoverTest, ContainsExpectedText)
+{
+    namespace fs = std::filesystem;
+    std::string uri = fileUri(fs::weakly_canonical(
+        std::string("TestCases/") + spec_.testCase + "/" + spec_.file));
+
+    auto result = client_->request("textDocument/hover", {{"textDocument", {{"uri", uri}}},
+                                                           {"position", {{"line", spec_.line}, {"character", spec_.character}}}});
+    ASSERT_FALSE(result.contains("error"))
+        << "hover error: " << result.value("error", "");
+    ASSERT_FALSE(result.is_null())
+        << "Expected hover content but got null";
+
+    const std::string contents = hoverText(result);
+    ASSERT_FALSE(contents.empty())
+        << "Expected non-empty hover content";
+
+    for (const auto &expected : spec_.expected_contains)
+    {
+        EXPECT_NE(contents.find(expected), std::string::npos)
+            << "Missing hover fragment: '" << expected << "'\nHover: " << contents;
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(LspTests, LspHoverTest,
+                         ::testing::ValuesIn(GetLspHoverSpecs()),
+                         [](const testing::TestParamInfo<LspHoverTest::ParamType> &info)
                          { return info.param.name; });

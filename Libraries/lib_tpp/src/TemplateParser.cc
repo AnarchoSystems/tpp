@@ -862,7 +862,7 @@ namespace tpp::compiler
                 if (!s.isDirective)
                 {
                     if (!s.text.empty())
-                        sub.push_back(TextNode{s.text});
+                        sub.push_back(TextNode{s.text, makeTextRange(lineIndex, s.startCol, s.endCol)});
                     ++pos;
                 }
                 else if (auto *d = std::get_if<ExprDirective>(&s.info))
@@ -1300,7 +1300,7 @@ namespace tpp::compiler
                         if (!seg.isDirective)
                         {
                             if (!seg.text.empty())
-                                nodes.push_back(TextNode{seg.text});
+                                nodes.push_back(TextNode{seg.text, makeTextRange((int)pos, seg.startCol, seg.endCol)});
                         }
                         else if (auto *d = std::get_if<FunctionCallDirective>(&seg.info))
                         {

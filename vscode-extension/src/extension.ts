@@ -14,6 +14,29 @@ import { findTppConfigs } from './configScanner';
 let client: LanguageClient | undefined;
 let outputChannel: vscode.OutputChannel | undefined;
 const DEFAULT_LSP_PATH = 'build/bin/tpp-lsp';
+type PreviewMode = 'editor' | 'webview';
+
+function getCurrentPreviewMode(): PreviewMode {
+  const configuredMode = vscode.workspace.getConfiguration('tpp').get<string>('previewMode');
+  return configuredMode === 'webview' ? 'webview' : 'editor';
+}
+
+async function updatePreviewMode(nextMode: PreviewMode): Promise<void> {
+  const configuration = vscode.workspace.getConfiguration('tpp');
+  const inspected = configuration.inspect<string>('previewMode');
+
+  if (inspected?.workspaceFolderValue !== undefined && vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+    await configuration.update('previewMode', nextMode, vscode.ConfigurationTarget.WorkspaceFolder);
+    return;
+  }
+
+  if (inspected?.workspaceValue !== undefined) {
+    await configuration.update('previewMode', nextMode, vscode.ConfigurationTarget.Workspace);
+    return;
+  }
+
+  await configuration.update('previewMode', nextMode, vscode.ConfigurationTarget.Global);
+}
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   outputChannel = vscode.window.createOutputChannel('tpp Language Server');
@@ -91,7 +114,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     // If there's only one config with one preview, open it directly.
     if (configs.length === 1 && configs[0].previews && configs[0].previews.length === 1) {
-      PreviewPanel.createOrShow(context, client!, configs[0], 0);
+      await PreviewPanel.createOrShow(context, client!, configs[0], 0);
       return;
     }
 
@@ -123,22 +146,48 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         const previewName = cfg.previews[i].name || cfg.previews[i].template;
         const folderName = path.basename(path.dirname(cfg.configPath));
         if (`${folderName}/${previewName}` === picked.label) {
-          PreviewPanel.createOrShow(context, client!, cfg, i);
+          await PreviewPanel.createOrShow(context, client!, cfg, i);
           return;
         }
       }
     }
   });
 
+  const togglePreviewModeCmd = vscode.commands.registerCommand('tpp.togglePreviewMode', async () => {
+    const currentMode = getCurrentPreviewMode();
+    const nextMode: PreviewMode = currentMode === 'editor' ? 'webview' : 'editor';
+    await updatePreviewMode(nextMode);
+    await PreviewPanel.reopenCurrent();
+    vscode.window.showInformationMessage(`tpp: Preview mode switched to ${nextMode}.`);
+  });
+
+  const previewModeChangeDisposable = vscode.workspace.onDidChangeConfiguration(async e => {
+    if (!e.affectsConfiguration('tpp.previewMode')) {
+      return;
+    }
+
+    await PreviewPanel.reopenCurrent();
+  });
+
   // ── Track cursor for preview highlight ────────────────────────────────────
   const cursorChangeDisposable = vscode.window.onDidChangeTextEditorSelection(e => {
     if (PreviewPanel.currentPanel) {
-      const pos = e.selections[0]?.active;
-      if (pos) PreviewPanel.currentPanel.onCursorMove(e.textEditor.document.uri.toString(), pos);
+      const document = e.textEditor.document;
+      const isTemplateDocument = document.languageId === 'tpp' ||
+        document.languageId === 'tpp-types' ||
+        document.uri.path.endsWith('.tpp') ||
+        document.uri.path.endsWith('.tpp.types');
+
+      if (!isTemplateDocument || e.selections.length === 0) {
+        PreviewPanel.currentPanel.clearHighlights();
+        return;
+      }
+
+      PreviewPanel.currentPanel.onSelectionChange(document.uri.toString(true), e.selections);
     }
   });
 
-  context.subscriptions.push(openPreviewCmd, cursorChangeDisposable);
+  context.subscriptions.push(openPreviewCmd, togglePreviewModeCmd, previewModeChangeDisposable, cursorChangeDisposable);
 }
 
 export async function deactivate(): Promise<void> {

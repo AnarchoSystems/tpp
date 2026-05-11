@@ -110,9 +110,10 @@ Emit literal text.
 struct EmitInstr
 {
     std::string text;
+    std::optional<SourceRange> sourceRange;
     static std::string tpp_typedefs() noexcept
     {
-        return "/// Emit literal text.\nstruct EmitInstr\n{\n    text : string;\n}";
+        return "/// Emit literal text.\nstruct EmitInstr\n{\n    text : string;\n    sourceRange : optional<SourceRange>;\n}";
     }
 };
 /**
@@ -122,9 +123,10 @@ struct EmitExprInstr
 {
     ExprInfo expr;
     std::string policy;
+    std::optional<SourceRange> sourceRange;
     static std::string tpp_typedefs() noexcept
     {
-        return "/// Emit an interpolated expression value.\nstruct EmitExprInstr\n{\n    expr : ExprInfo;\n    policy : string;\n}";
+        return "/// Emit an interpolated expression value.\nstruct EmitExprInstr\n{\n    expr : ExprInfo;\n    policy : string;\n    sourceRange : optional<SourceRange>;\n}";
     }
 };
 /**
@@ -160,9 +162,10 @@ struct ForInstr
     std::optional<std::string> precededBy;
     std::string policy;
     std::optional<std::string> alignSpec;
+    std::optional<SourceRange> sourceRange;
     static std::string tpp_typedefs() noexcept
     {
-        return "/// For loop over a collection.\nstruct ForInstr\n{\n    varName : string;\n    enumeratorName : optional<string>;\n    collection : ExprInfo;\n    elementType : TypeKind;\n    body : list<Instruction>;\n    sep : optional<string>;\n    followedBy : optional<string>;\n    precededBy : optional<string>;\n    policy : string;\n    alignSpec : optional<string>;\n}";
+        return "/// For loop over a collection.\nstruct ForInstr\n{\n    varName : string;\n    enumeratorName : optional<string>;\n    collection : ExprInfo;\n    elementType : TypeKind;\n    body : list<Instruction>;\n    sep : optional<string>;\n    followedBy : optional<string>;\n    precededBy : optional<string>;\n    policy : string;\n    alignSpec : optional<string>;\n    sourceRange : optional<SourceRange>;\n}";
     }
 };
 struct CaseBinding
@@ -184,10 +187,11 @@ struct CaseInstr
     std::unique_ptr<TypeKind> payloadType;
     bool payloadIsRecursive;
     std::unique_ptr<std::vector<Instruction>> body;
+    std::optional<SourceRange> sourceRange;
     int variantIndex;
     static std::string tpp_typedefs() noexcept
     {
-        return "/// One case branch in a switch.\nstruct CaseInstr\n{\n    tag : string;\n    bindingName : optional<CaseBinding>;\n    payloadType : optional<TypeKind>;\n    payloadIsRecursive : bool;\n    body : list<Instruction>;\n    variantIndex : int;\n}";
+        return "/// One case branch in a switch.\nstruct CaseInstr\n{\n    tag : string;\n    bindingName : optional<CaseBinding>;\n    payloadType : optional<TypeKind>;\n    payloadIsRecursive : bool;\n    body : list<Instruction>;\n    sourceRange : optional<SourceRange>;\n    variantIndex : int;\n}";
     }
 };
 /**
@@ -200,9 +204,10 @@ struct IfInstr
     bool negated;
     std::unique_ptr<std::vector<Instruction>> thenBody;
     std::unique_ptr<std::vector<Instruction>> elseBody;
+    std::optional<SourceRange> sourceRange;
     static std::string tpp_typedefs() noexcept
     {
-        return "/// Conditional.\nstruct IfInstr\n{\n    condExpr : ExprInfo;\n    conditionKind : IfConditionKind;\n    negated : bool;\n    thenBody : list<Instruction>;\n    elseBody : list<Instruction>;\n}";
+        return "/// Conditional.\nstruct IfInstr\n{\n    condExpr : ExprInfo;\n    conditionKind : IfConditionKind;\n    negated : bool;\n    thenBody : list<Instruction>;\n    elseBody : list<Instruction>;\n    sourceRange : optional<SourceRange>;\n}";
     }
 };
 /**
@@ -213,9 +218,10 @@ struct SwitchInstr
     ExprInfo expr;
     std::unique_ptr<std::vector<CaseInstr>> cases;
     std::string policy;
+    std::optional<SourceRange> sourceRange;
     static std::string tpp_typedefs() noexcept
     {
-        return "/// Switch on a variant expression.\nstruct SwitchInstr\n{\n    expr : ExprInfo;\n    cases : list<CaseInstr>;\n    policy : string;\n}";
+        return "/// Switch on a variant expression.\nstruct SwitchInstr\n{\n    expr : ExprInfo;\n    cases : list<CaseInstr>;\n    policy : string;\n    sourceRange : optional<SourceRange>;\n}";
     }
 };
 /**
@@ -226,9 +232,10 @@ struct CallInstr
     std::string functionName;
     int functionIndex;
     std::vector<ExprInfo> arguments;
+    std::optional<SourceRange> sourceRange;
     static std::string tpp_typedefs() noexcept
     {
-        return "/// Direct function call.\nstruct CallInstr\n{\n    functionName : string;\n    functionIndex : int;\n    arguments : list<ExprInfo>;\n}";
+        return "/// Direct function call.\nstruct CallInstr\n{\n    functionName : string;\n    functionIndex : int;\n    arguments : list<ExprInfo>;\n    sourceRange : optional<SourceRange>;\n}";
     }
 };
 struct ParamDef
@@ -248,9 +255,10 @@ struct FunctionDef
     std::string policy;
     std::string doc;
     std::optional<SourceRange> sourceRange;
+    std::optional<std::string> sourceUri;
     static std::string tpp_typedefs() noexcept
     {
-        return "struct FunctionDef\n{\n    name : string;\n    params : list<ParamDef>;\n    body : list<Instruction>;\n    policy : string;\n    doc : string;\n    sourceRange : optional<SourceRange>;\n}";
+        return "struct FunctionDef\n{\n    name : string;\n    params : list<ParamDef>;\n    body : list<Instruction>;\n    policy : string;\n    doc : string;\n    sourceRange : optional<SourceRange>;\n    sourceUri : optional<string>;\n}";
     }
 };
 struct FieldDef
@@ -592,22 +600,26 @@ inline void to_json(nlohmann::json& j, const ExprInfo& v)
 inline void from_json(const nlohmann::json& j, EmitInstr& v)
 {
     v.text = j.at("text").get<std::string>();
+    if (j.contains("sourceRange") && !j.at("sourceRange").is_null()) v.sourceRange = j.at("sourceRange").get<SourceRange>();
 }
 inline void to_json(nlohmann::json& j, const EmitInstr& v)
 {
     j = nlohmann::json{};
     j["text"] = v.text;
+    if (v.sourceRange.has_value()) j["sourceRange"] = *v.sourceRange;
 }
 inline void from_json(const nlohmann::json& j, EmitExprInstr& v)
 {
     v.expr = j.at("expr").get<ExprInfo>();
     v.policy = j.at("policy").get<std::string>();
+    if (j.contains("sourceRange") && !j.at("sourceRange").is_null()) v.sourceRange = j.at("sourceRange").get<SourceRange>();
 }
 inline void to_json(nlohmann::json& j, const EmitExprInstr& v)
 {
     j = nlohmann::json{};
     j["expr"] = v.expr;
     j["policy"] = v.policy;
+    if (v.sourceRange.has_value()) j["sourceRange"] = *v.sourceRange;
 }
 inline void from_json(const nlohmann::json& j, BeginCapturedBlockInstr& v)
 {
@@ -630,6 +642,7 @@ inline void from_json(const nlohmann::json& j, ForInstr& v)
     if (j.contains("precededBy") && !j.at("precededBy").is_null()) v.precededBy = j.at("precededBy").get<std::string>();
     v.policy = j.at("policy").get<std::string>();
     if (j.contains("alignSpec") && !j.at("alignSpec").is_null()) v.alignSpec = j.at("alignSpec").get<std::string>();
+    if (j.contains("sourceRange") && !j.at("sourceRange").is_null()) v.sourceRange = j.at("sourceRange").get<SourceRange>();
 }
 inline void to_json(nlohmann::json& j, const ForInstr& v)
 {
@@ -644,6 +657,7 @@ inline void to_json(nlohmann::json& j, const ForInstr& v)
     if (v.precededBy.has_value()) j["precededBy"] = *v.precededBy;
     j["policy"] = v.policy;
     if (v.alignSpec.has_value()) j["alignSpec"] = *v.alignSpec;
+    if (v.sourceRange.has_value()) j["sourceRange"] = *v.sourceRange;
 }
 inline void from_json(const nlohmann::json& j, CaseBinding& v)
 {
@@ -663,6 +677,7 @@ inline void from_json(const nlohmann::json& j, CaseInstr& v)
     if (j.contains("payloadType") && !j.at("payloadType").is_null()) v.payloadType = std::make_unique<TypeKind>(j.at("payloadType").get<TypeKind>());
     v.payloadIsRecursive = j.at("payloadIsRecursive").get<bool>();
     v.body = std::make_unique<std::vector<Instruction>>(j.at("body").get<std::vector<Instruction>>());
+    if (j.contains("sourceRange") && !j.at("sourceRange").is_null()) v.sourceRange = j.at("sourceRange").get<SourceRange>();
     v.variantIndex = j.at("variantIndex").get<int>();
 }
 inline void to_json(nlohmann::json& j, const CaseInstr& v)
@@ -673,6 +688,7 @@ inline void to_json(nlohmann::json& j, const CaseInstr& v)
     if (v.payloadType) j["payloadType"] = *v.payloadType;
     j["payloadIsRecursive"] = v.payloadIsRecursive;
     j["body"] = *v.body;
+    if (v.sourceRange.has_value()) j["sourceRange"] = *v.sourceRange;
     j["variantIndex"] = v.variantIndex;
 }
 inline void from_json(const nlohmann::json& j, IfInstr& v)
@@ -682,6 +698,7 @@ inline void from_json(const nlohmann::json& j, IfInstr& v)
     v.negated = j.at("negated").get<bool>();
     v.thenBody = std::make_unique<std::vector<Instruction>>(j.at("thenBody").get<std::vector<Instruction>>());
     v.elseBody = std::make_unique<std::vector<Instruction>>(j.at("elseBody").get<std::vector<Instruction>>());
+    if (j.contains("sourceRange") && !j.at("sourceRange").is_null()) v.sourceRange = j.at("sourceRange").get<SourceRange>();
 }
 inline void to_json(nlohmann::json& j, const IfInstr& v)
 {
@@ -691,12 +708,14 @@ inline void to_json(nlohmann::json& j, const IfInstr& v)
     j["negated"] = v.negated;
     j["thenBody"] = *v.thenBody;
     j["elseBody"] = *v.elseBody;
+    if (v.sourceRange.has_value()) j["sourceRange"] = *v.sourceRange;
 }
 inline void from_json(const nlohmann::json& j, SwitchInstr& v)
 {
     v.expr = j.at("expr").get<ExprInfo>();
     v.cases = std::make_unique<std::vector<CaseInstr>>(j.at("cases").get<std::vector<CaseInstr>>());
     v.policy = j.at("policy").get<std::string>();
+    if (j.contains("sourceRange") && !j.at("sourceRange").is_null()) v.sourceRange = j.at("sourceRange").get<SourceRange>();
 }
 inline void to_json(nlohmann::json& j, const SwitchInstr& v)
 {
@@ -704,12 +723,14 @@ inline void to_json(nlohmann::json& j, const SwitchInstr& v)
     j["expr"] = v.expr;
     j["cases"] = *v.cases;
     j["policy"] = v.policy;
+    if (v.sourceRange.has_value()) j["sourceRange"] = *v.sourceRange;
 }
 inline void from_json(const nlohmann::json& j, CallInstr& v)
 {
     v.functionName = j.at("functionName").get<std::string>();
     v.functionIndex = j.at("functionIndex").get<int>();
     v.arguments = j.at("arguments").get<std::vector<ExprInfo>>();
+    if (j.contains("sourceRange") && !j.at("sourceRange").is_null()) v.sourceRange = j.at("sourceRange").get<SourceRange>();
 }
 inline void to_json(nlohmann::json& j, const CallInstr& v)
 {
@@ -717,6 +738,7 @@ inline void to_json(nlohmann::json& j, const CallInstr& v)
     j["functionName"] = v.functionName;
     j["functionIndex"] = v.functionIndex;
     j["arguments"] = v.arguments;
+    if (v.sourceRange.has_value()) j["sourceRange"] = *v.sourceRange;
 }
 inline void from_json(const nlohmann::json& j, ParamDef& v)
 {
@@ -737,6 +759,7 @@ inline void from_json(const nlohmann::json& j, FunctionDef& v)
     v.policy = j.at("policy").get<std::string>();
     v.doc = j.at("doc").get<std::string>();
     if (j.contains("sourceRange") && !j.at("sourceRange").is_null()) v.sourceRange = j.at("sourceRange").get<SourceRange>();
+    if (j.contains("sourceUri") && !j.at("sourceUri").is_null()) v.sourceUri = j.at("sourceUri").get<std::string>();
 }
 inline void to_json(nlohmann::json& j, const FunctionDef& v)
 {
@@ -747,6 +770,7 @@ inline void to_json(nlohmann::json& j, const FunctionDef& v)
     j["policy"] = v.policy;
     j["doc"] = v.doc;
     if (v.sourceRange.has_value()) j["sourceRange"] = *v.sourceRange;
+    if (v.sourceUri.has_value()) j["sourceUri"] = *v.sourceUri;
 }
 inline void from_json(const nlohmann::json& j, FieldDef& v)
 {

@@ -20,4 +20,9 @@ static const char* const kLspDefinitionCaseNames[] = {
 @LSP_DEFINITION_CASE_NAMES@    nullptr
 };
 
+// Test cases that have a "hover" array in their lsp-test.json.
+static const char* const kLspHoverCaseNames[] = {
+@LSP_HOVER_CASE_NAMES@    nullptr
+};
+
 } // namespace tpp_test

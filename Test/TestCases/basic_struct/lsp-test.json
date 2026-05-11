@@ -28,5 +28,14 @@
             "expected_line": 7,
             "expected_character": 7
         }
+    ],
+    "hover": [
+        {
+            "name": "def_name_type",
+            "file": "template.tpp",
+            "line": 1,
+            "character": 12,
+            "expected_contains": ["string"]
+        }
     ]
 }

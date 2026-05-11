@@ -610,7 +610,7 @@ END
 template emit_switch(s: SwitchData)
 switch (@s.expr.path@._tag) {
 @for c in s.cases@
-case @c.tagLit@:
+case @c.tagLit@: {
     @if c.bindingName@
     @if c.payloadType@
     @java_type(c.payloadType)@ @c.bindingName@ = @s.expr.path@.get@c.tag@();
@@ -622,6 +622,7 @@ case @c.tagLit@:
     @end for@
     @end if@
     break;
+}
 @end for@
 }
 END

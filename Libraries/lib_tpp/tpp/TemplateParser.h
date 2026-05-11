@@ -165,6 +165,12 @@ namespace tpp::compiler
             return {{(int)(bodyStartLine + lineIndex), seg.startCol - 1},
                     {(int)(bodyStartLine + lineIndex), seg.endCol + 1}};
         }
+
+        Range makeTextRange(int lineIndex, int startCol, int endCol) const
+        {
+            return {{(int)(bodyStartLine + lineIndex), startCol},
+                    {(int)(bodyStartLine + lineIndex), endCol}};
+        }
     };
 
     // ── High-level template parsing ──

@@ -19,7 +19,7 @@ namespace tpp::compiler
 
     // ── AST nodes ──
 
-    struct TextNode            { std::string text; };
+    struct TextNode            { std::string text; Range sourceRange{}; };
     struct AlignmentCellNode  { Range sourceRange; };
     struct CommentNode        { Range startRange; Range endRange; }; // @comment@...@end comment@
     struct InterpolationNode { Expression expr; std::string policy; Range sourceRange{}; };
@@ -130,6 +130,7 @@ namespace tpp::compiler
         std::string policy;
         std::string doc;
         Range sourceRange{};
+        std::string sourceUri;
     };
 
     // ─────────────────────────────────────────────────────────────────
