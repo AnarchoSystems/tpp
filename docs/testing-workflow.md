@@ -34,7 +34,7 @@ Success cases may also include `expected_output.txt` for the rendered golden out
 
 Generated C++, Java, and Swift verification still rely on CMake-managed generation steps because those paths build generated sources as explicit targets.
 
-Those generated-language paths understand success outputs from either `expected_output.txt` or `test-case.json`. They still use configure-time discovery for the set of generated-language cases because those paths build generated sources as explicit targets, but per-case regeneration now follows exact `tpp --print-inputs` depfiles plus expectation-file dependencies instead of raw directory globs.
+Those generated-language paths understand success outputs from either `expected_output.txt` or `test-case.json`. They intentionally use configure-time discovery for the set of generated-language cases, because CMake must know generated sources and compile edges while constructing the build graph. Per-case regeneration follows exact `tpp --print-inputs` depfiles plus expectation-file dependencies instead of raw directory globs.
 
 ## Practical Workflow
 
@@ -42,12 +42,12 @@ For day-to-day compiler and LSP work:
 
 1. add or edit a case under `Test/TestCases/`
 2. update `expected_output.txt` for readable success output, and use `test-case.json` for diagnostics, render errors, LSP assertions, or a JSON-form success expectation when needed
-2. rebuild `tpp_acceptance_test`
-3. run focused GoogleTest filters for the affected suite
+3. rebuild `tpp_acceptance_test`
+4. run focused GoogleTest filters for the affected suite
 
 For codegen target changes:
 
 1. add or edit the case under `Test/TestCases/`
 2. rebuild the affected backend or generated test target; source, config, and policy edits are tracked directly from `tpp-config.json`, and case-set changes still flow through configure-time discovery
 
-The remaining test-architecture work is to replace the remaining configure-time generated-language discovery with pure runtime discovery.
+This split is intentional: acceptance/LSP suites are runtime-discovered, while generated-language suites remain configure/build-time discovered so C++/Java/Swift compilation stays explicit and deterministic under CMake.
