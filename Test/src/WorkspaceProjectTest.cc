@@ -59,6 +59,6 @@ TEST(WorkspaceProjectTest, DependsOnWatchedPathRejectsSiblingWithMatchingPrefix)
 
     EXPECT_TRUE(project.dependsOnWatchedPath(projectRoot / "nested" / "file.tpp"));
     EXPECT_FALSE(project.dependsOnWatchedPath(siblingRoot / "nested" / "file.tpp"));
-    EXPECT_FALSE(project.dependsOnWatchedPath(siblingRoot / "nested" / "file.tpp.types"));
+    EXPECT_FALSE(project.dependsOnWatchedPath(siblingRoot / "nested" / "file.txt"));
     EXPECT_FALSE(project.dependsOnWatchedPath(siblingRoot / "nested" / "file.json"));
 }

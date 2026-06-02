@@ -366,7 +366,7 @@ Compiler-model headers such as `AST.h`, `Types.h`, and `SemanticModel.h` are int
 #include <tpp/Compiler.h>
 
 tpp::TppProject project;
-project.add_type_source(typeSource, "types.tpp.types");
+project.add_type_source(typeSource, "types.tpp");
 project.add_template_source(templateSource, "template.tpp");
 project.add_policy_source(policyText, "escape-html.policy.json");
 
@@ -563,11 +563,11 @@ void example(const myns::Item& item) {
 
 ## VS Code Extension
 
-The `tpp-language-support` extension provides a language-aware editing experience for `.tpp`, `.tpp.types`, and `tpp-config.json` files.
+The `tpp-language-support` extension provides a language-aware editing experience for `.tpp`, `.tpp`, and `tpp-config.json` files.
 
 ### Features
 
-- **Syntax highlighting** for `.tpp` template files and `.tpp.types` type definition files
+- **Syntax highlighting** for `.tpp` template files and `.tpp` type definition files
 - **LSP-powered diagnostics** — type errors, missing fields, undefined types, policy violations — shown as red underlines as you type
 - **Live preview panel** (`tpp: Open Render Preview`) — renders a template with sample input defined in `tpp-config.json` and updates the view in real time as you edit
 - **JSON schema validation** for `tpp-config.json` — autocompletion and error highlighting in the config file

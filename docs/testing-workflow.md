@@ -23,7 +23,7 @@ Current runtime-discovered suites include:
 Each case directory is self-contained and always includes:
 
 - `tpp-config.json`
-- one or more `.tpp` or `.tpp.types` sources
+- one or more `.tpp` or `.tpp` sources
 - `test-case.json`
 
 Success cases may also include `expected_output.txt` for the rendered golden output.

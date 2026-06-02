@@ -10,7 +10,7 @@ static nlohmann::json makeRange(int startLine, int endLine, std::string kind = "
     return {{"startLine", startLine}, {"endLine", endLine}, {"kind", kind}};
 }
 
-// ── .tpp.types fold ranges ────────────────────────────────────────────────────
+// ── .tpp fold ranges ────────────────────────────────────────────────────
 static nlohmann::json foldsForTypes(const WorkspaceProject &project)
 {
     nlohmann::json result = nlohmann::json::array();

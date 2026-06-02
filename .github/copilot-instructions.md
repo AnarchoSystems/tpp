@@ -67,7 +67,7 @@ Keep this section as a pointer only. The authoritative workflow lives in `.githu
 - `error_` prefix in directory name signals an expected failure test.
 - `test-case.json` carries structured expectations such as diagnostics, runtime errors, and optional LSP assertions. Success outputs may live either in `expected_output.txt` or in `test-case.json` via `expected_output`.
 
-Use `.github/instructions/tpp-language.instructions.md` for the authoritative syntax reference when editing `.tpp` or `.tpp.types` files. Use `docs/language.md` for user-facing explanation and examples.
+Use `.github/instructions/tpp-language.instructions.md` for the authoritative syntax reference when editing `.tpp` or `.tpp` files. Use `docs/language.md` for user-facing explanation and examples.
 
 ## Key Pitfalls
 

@@ -86,7 +86,7 @@ add_custom_target(update-ir-types
           -DOUT=${CMAKE_SOURCE_DIR}/Libraries/lib_tpp/include/tpp/IR.h
           -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
   DEPENDS tpp tpp2cpp
-  COMMENT "Regenerating IR.h from Libraries/lib_tpp/ir.tpp.types"
+  COMMENT "Regenerating IR.h from Libraries/lib_tpp/ir.tpp"
   VERBATIM
 )
 

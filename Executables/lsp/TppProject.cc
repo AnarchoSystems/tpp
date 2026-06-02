@@ -10,12 +10,6 @@ namespace tpp
 
     namespace fs = std::filesystem;
 
-    static bool hasSuffix(const std::string &value, const std::string &suffix)
-    {
-        return value.size() >= suffix.size() &&
-               value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
-    }
-
     static bool isUnescapedFileUriChar(unsigned char ch)
     {
         return std::isalnum(ch) || ch == '-' || ch == '_' || ch == '.' || ch == '~' ||
@@ -234,10 +228,8 @@ namespace tpp
         if (!isPathWithinRoot(normalizedPath, normalizedRoot))
             return false;
 
-        std::string fileName = normalizedPath.filename().string();
         return normalizedPath.extension() == ".tpp" ||
-               normalizedPath.extension() == ".json" ||
-               hasSuffix(fileName, ".tpp.types");
+             normalizedPath.extension() == ".json";
     }
 
     std::optional<size_t> WorkspaceProject::typeFileIndex(const std::string &uri) const

@@ -4,7 +4,7 @@
         "runtime.tpp"
     ],
     "types": [
-        "../../../Libraries/lib_tpp/ir.tpp.types",
-        "../codegen/codegen.tpp.types"
+        "../../../Libraries/lib_tpp/ir.tpp",
+        "../codegen/codegen.tpp"
     ]
 }

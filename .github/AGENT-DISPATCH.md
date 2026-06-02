@@ -13,7 +13,7 @@ Use this file when you know the task category but do not yet know which repo ass
 
 ## Common Tasks
 
-### I need to edit a `.tpp` or `.tpp.types` file
+### I need to edit a `.tpp` or `.tpp` file
 
 1. Read `.github/copilot-instructions.md` for repo rules and pitfalls.
 2. Use `.github/instructions/tpp-language.instructions.md` as the authoritative syntax reference.

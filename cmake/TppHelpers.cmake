@@ -3,7 +3,7 @@
 #
 # Usage:
 #   tpp_add(<target>
-#       SOURCE_DIR <dir>           # directory containing .tpp and .tpp.types files
+#       SOURCE_DIR <dir>           # directory containing .tpp and .tpp files
 #       NAME <name>                # unique prefix for generated output files
 #       [NAMESPACE <name>]         # C++ namespace to wrap generated code in
 #       [EXTRA_INCLUDES <file>...] # additional -i <file> flags passed to tpp2cpp

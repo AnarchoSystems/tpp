@@ -13,7 +13,7 @@ Because the frontend has already parsed, validated, and typed the source languag
 
 ## The IR Schema Is Also Authored In tpp
 
-Before diving into the field-by-field schema, it is worth knowing that the IR definition is not maintained separately by hand in each target language. The canonical IR schema lives in [Libraries/lib_tpp/ir.tpp.types](/Users/markus/Documents/C++/tpp/Libraries/lib_tpp/ir.tpp.types), and you can compile that directory to produce JSON-serializable host-language IR types directly.
+Before diving into the field-by-field schema, it is worth knowing that the IR definition is not maintained separately by hand in each target language. The canonical IR schema lives in [Libraries/lib_tpp/ir.tpp](/Users/markus/Documents/C++/tpp/Libraries/lib_tpp/ir.tpp), and you can compile that directory to produce JSON-serializable host-language IR types directly.
 
 Examples:
 

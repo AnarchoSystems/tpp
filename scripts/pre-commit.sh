@@ -31,14 +31,14 @@ need_ir_check=0
 need_codegen_check=0
 
 if staged_touches \
-    "$REPO_ROOT/Libraries/lib_tpp/ir.tpp.types" \
+    "$REPO_ROOT/Libraries/lib_tpp/ir.tpp" \
     "$REPO_ROOT/Libraries/lib_tpp/tpp-config.json"
 then
     need_ir_check=1
 fi
 
 if staged_touches \
-    "$REPO_ROOT/Executables/backends/codegen/codegen.tpp.types" \
+    "$REPO_ROOT/Executables/backends/codegen/codegen.tpp" \
     "$REPO_ROOT/Executables/backends/codegen/tpp-config.json"
 then
     need_codegen_check=1

@@ -46,11 +46,9 @@ namespace tpp
         return patternIndex == pattern.size();
     }
 
-    static bool hasAllowedSourceExtension(const std::string &name, bool isTypes)
+    static bool hasAllowedSourceExtension(const std::string &name, bool /*isTypes*/)
     {
         if (name.size() >= 4 && name.substr(name.size() - 4) == ".tpp")
-            return true;
-        if (isTypes && name.size() >= 10 && name.substr(name.size() - 10) == ".tpp.types")
             return true;
         return false;
     }

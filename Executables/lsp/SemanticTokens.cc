@@ -638,7 +638,7 @@ static void emitUncoveredStructuralDirectiveTokens(std::vector<RawToken> &out,
     }
 }
 
-// ── .tpp.types semantic tokens ────────────────────────────────────────────────
+// ── .tpp semantic tokens ────────────────────────────────────────────────
 static int tokenTypeForTypeSpan(TypeSourceSemanticKind kind)
 {
     switch (kind)
@@ -838,12 +838,11 @@ nlohmann::json computeSemanticTokens(const std::string &uri, const WorkspaceProj
 // ── Standalone (no project) ───────────────────────────────────────────────────
 nlohmann::json computeSemanticTokensFromText(const std::string &uri, const std::string &text)
 {
+    (void)uri;
     // Heuristic: if no "@" characters, likely a types file
     bool looksLikeTypes = text.find('@') == std::string::npos;
-    // Also check extension
-    bool hasTypesExt = uri.size() >= 10 && uri.substr(uri.size() - 10) == ".tpp.types";
 
-    if (looksLikeTypes || hasTypesExt)
+    if (looksLikeTypes)
         return tokensForTypes(text);
     else
         return tokensForTemplate(text);

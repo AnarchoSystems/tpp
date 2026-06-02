@@ -390,7 +390,7 @@ export class PreviewPanel {
           return;
         }
 
-        if (uri.endsWith('.tpp') || uri.endsWith('.tpp.types')) {
+        if (uri.endsWith('.tpp')) {
           void this._refresh();
         }
       }),
@@ -728,9 +728,7 @@ export class PreviewPanel {
 
     const document = activeEditor.document;
     const isTemplateDocument = document.languageId === 'tpp' ||
-      document.languageId === 'tpp-types' ||
-      document.uri.path.endsWith('.tpp') ||
-      document.uri.path.endsWith('.tpp.types');
+      document.uri.path.endsWith('.tpp');
 
     if (!isTemplateDocument || activeEditor.selections.length === 0) {
       this.clearHighlights();

@@ -54,7 +54,7 @@ tppApp::tppApp(int argc, char *argv[])
         {
             std::cout << "Usage: tpp [options] [folder]\n"
                          "\n"
-                         "Compiles .tpp and .tpp.types files to JSON IR on stdout.\n"
+                         "Compiles .tpp and .tpp files to JSON IR on stdout.\n"
                          "The folder must contain a tpp-config.json file specifying which .tpp files\n"
                          "are type definitions and which are templates:\n"
                          "  {\"types\": [\"types.tpp\", \"types/*\"], \"templates\": [\"templates/*\"]}\n"

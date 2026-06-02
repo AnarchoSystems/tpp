@@ -77,13 +77,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   const clientOptions: LanguageClientOptions = {
     documentSelector: [
-      { scheme: 'file', language: 'tpp' },
-      { scheme: 'file', language: 'tpp-types' }
+      { scheme: 'file', language: 'tpp' }
     ],
     synchronize: {
       fileEvents: [
         vscode.workspace.createFileSystemWatcher('**/*.tpp'),
-        vscode.workspace.createFileSystemWatcher('**/*.tpp.types'),
         vscode.workspace.createFileSystemWatcher('**/*.json')
       ]
     },
@@ -174,9 +172,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     if (PreviewPanel.currentPanel) {
       const document = e.textEditor.document;
       const isTemplateDocument = document.languageId === 'tpp' ||
-        document.languageId === 'tpp-types' ||
-        document.uri.path.endsWith('.tpp') ||
-        document.uri.path.endsWith('.tpp.types');
+        document.uri.path.endsWith('.tpp');
 
       if (!isTemplateDocument || e.selections.length === 0) {
         PreviewPanel.currentPanel.clearHighlights();

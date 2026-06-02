@@ -228,7 +228,7 @@ nlohmann::json computeCompletions(const std::string &uri,
     for (const auto &func : project.output().functions)
         result.push_back(makeItem(func.name, 3 /*Function*/, {}, 1));
 
-    // Type names — only useful in .tpp.types files, not in templates
+    // Type names — only useful in .tpp files, not in templates
     if (project.isTypeUri(uri))
     {
         for (const auto &sd : project.output().structs)

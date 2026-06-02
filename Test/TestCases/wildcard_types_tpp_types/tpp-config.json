@@ -1,6 +1,6 @@
 {
     "types": [
-        "types/*.tpp.types"
+        "types/*.tpp"
     ],
     "templates": [
         "template.tpp"

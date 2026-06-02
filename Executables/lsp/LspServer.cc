@@ -454,8 +454,7 @@ void LspServer::onDidOpen(const nlohmann::json &params, std::vector<nlohmann::js
         standaloneBuffer_[uri] = text;
         // Emit a warning diagnostic so the user knows why LSP features are missing
         auto ext = filePath.extension().string();
-        bool isTppFile = (ext == ".tpp") ||
-                         (filePath.filename().string().find(".tpp.types") != std::string::npos);
+        bool isTppFile = (ext == ".tpp");
         if (isTppFile)
         {
             nlohmann::json diag = {

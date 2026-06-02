@@ -89,7 +89,7 @@ Schema — `expected_diagnostics` is an array of LSP `PublishDiagnosticsParams`-
     "expect_success": false,
     "expected_diagnostics": [
         {
-            "uri": "<test-name>/typedefs.tpp.types",
+            "uri": "<test-name>/typedefs.tpp",
             "diagnostics": [
                 {
                     "range": {
@@ -107,17 +107,17 @@ Schema — `expected_diagnostics` is an array of LSP `PublishDiagnosticsParams`-
 
 Notes:
 - Only include the file(s) that actually have diagnostics (omit files with empty diagnostic arrays)
-- `uri` is exactly `<test-name>/<file>`, e.g. `error_undefined_type/typedefs.tpp.types` — this is the relative path as reported by the acceptance test harness
+- `uri` is exactly `<test-name>/<file>`, e.g. `error_undefined_type/typedefs.tpp` — this is the relative path as reported by the acceptance test harness
 - Line/character are **0-based**
 - `severity` is always the lowercase string `"error"`
 
-Example — undefined type in `typedefs.tpp.types` line 2, characters 11–22:
+Example — undefined type in `typedefs.tpp` line 2, characters 11–22:
 ```json
 {
     "expect_success": false,
     "expected_diagnostics": [
         {
-            "uri": "error_undefined_type/typedefs.tpp.types",
+            "uri": "error_undefined_type/typedefs.tpp",
             "diagnostics": [
                 {
                     "range": {

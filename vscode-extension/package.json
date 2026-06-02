@@ -1,7 +1,7 @@
 {
   "name": "tpp-language-support",
   "displayName": "tpp Template Language Support",
-  "description": "Language support for tpp template files (.tpp, .tpp.types) with LSP backend.",
+  "description": "Language support for tpp template files (.tpp) with LSP backend.",
   "version": "0.13.0",
   "author": "AnarchoSystems",
   "engines": {
@@ -26,26 +26,18 @@
         "id": "tpp",
         "aliases": [
           "tpp Template",
-          "tpp"
-        ],
-        "extensions": [
-          ".tpp"
-        ],
-        "configuration": "./language-configuration-tpp.json"
-      },
-      {
-        "id": "tpp-types",
-        "aliases": [
+          "tpp",
           "tpp Types",
           "tpp.types"
         ],
         "extensions": [
-          ".tpp.types"
+          ".tpp"
         ],
-        "filenamePatterns": [
-          "*.tpp.types"
-        ],
-        "configuration": "./language-configuration-tpp-types.json"
+        "icon": {
+          "light": "./icon.svg",
+          "dark": "./icon.svg"
+        },
+        "configuration": "./language-configuration-tpp.json"
       }
     ],
     "grammars": [],

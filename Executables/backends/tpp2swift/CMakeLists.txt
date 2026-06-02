@@ -1,8 +1,8 @@
 project(tpp2swift)
 
 set(SHARED_TYPES
-    "${CMAKE_CURRENT_SOURCE_DIR}/../codegen/codegen.tpp.types"
-    "${CMAKE_SOURCE_DIR}/Libraries/lib_tpp/ir.tpp.types")
+    "${CMAKE_CURRENT_SOURCE_DIR}/../codegen/codegen.tpp"
+    "${CMAKE_SOURCE_DIR}/Libraries/lib_tpp/ir.tpp")
 
 add_executable(tpp2swift Main.cc)
 target_link_libraries(tpp2swift PRIVATE tpp_codegen)

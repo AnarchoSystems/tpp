@@ -55,13 +55,13 @@ TEST(TppCliTest, PrintInputsEmitsResolvedSourcesAndPoliciesInStableOrder)
 {
     TemporaryProjectDirectory project;
     writeFile(project.path / "tpp-config.json", R"json({
-  "types": ["types/*.tpp.types"],
+  "types": ["types/*.tpp"],
   "templates": ["templates/*.tpp"],
   "replacement-policies": ["policies/*.policy.json"]
 })json");
 
-    writeFile(project.path / "types/beta.tpp.types", "struct Beta { value: int }");
-    writeFile(project.path / "types/alpha.tpp.types", "struct Alpha { value: int }");
+    writeFile(project.path / "types/beta.tpp", "struct Beta { value: int }");
+    writeFile(project.path / "types/alpha.tpp", "struct Alpha { value: int }");
     writeFile(project.path / "templates/zeta.tpp", "zeta");
     writeFile(project.path / "templates/alpha.tpp", "alpha");
     writeFile(project.path / "policies/beta.policy.json", "[]");
@@ -75,8 +75,8 @@ TEST(TppCliTest, PrintInputsEmitsResolvedSourcesAndPoliciesInStableOrder)
 
     const std::vector<std::string> expected = {
         (project.path / "tpp-config.json").lexically_normal().string(),
-        (project.path / "types/alpha.tpp.types").lexically_normal().string(),
-        (project.path / "types/beta.tpp.types").lexically_normal().string(),
+        (project.path / "types/alpha.tpp").lexically_normal().string(),
+        (project.path / "types/beta.tpp").lexically_normal().string(),
         (project.path / "templates/alpha.tpp").lexically_normal().string(),
         (project.path / "templates/zeta.tpp").lexically_normal().string(),
         (project.path / "policies/alpha.policy.json").lexically_normal().string(),

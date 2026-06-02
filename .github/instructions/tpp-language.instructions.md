@@ -1,6 +1,6 @@
 ---
-description: "Use when writing or editing tpp template files (.tpp), type definition files (.tpp.types), or acceptance test cases. Covers the full tpp template language: directives, type definitions, expressions, for loops (including alignment and policies), if/else, switch/case, render_via, direct function calls, comments, policies, escaping, and tpp-config.json."
-applyTo: "**/*.tpp,**/*.tpp.types"
+description: "Use when writing or editing tpp template and type definition files (.tpp), or acceptance test cases. Covers the full tpp template language: directives, type definitions, expressions, for loops (including alignment and policies), if/else, switch/case, render_via, direct function calls, comments, policies, escaping, and tpp-config.json."
+applyTo: "**/*.tpp"
 ---
 
 # tpp Language Reference
