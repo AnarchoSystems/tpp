@@ -1,4 +1,5 @@
 #include "TppProject.h"
+#include "tpp/ToolingCompile.h"
 #include <fstream>
 #include <sstream>
 #include <algorithm>
@@ -100,6 +101,8 @@ namespace tpp
         reloadConfig();
     }
 
+    WorkspaceProject::~WorkspaceProject() = default;
+
     bool WorkspaceProject::reloadConfig()
     {
         typeFiles_.clear();
@@ -144,7 +147,8 @@ namespace tpp
     {
         project_.clear();
         diagnostics_.clear();
-        semanticModel_ = {};
+        namedTypeLocations_.clear();
+        structFieldLocations_.clear();
         output_ = {};
 
         // Process type files
@@ -171,14 +175,23 @@ namespace tpp
         CompileOptions options;
         options.includeSourceRanges = true;
         std::vector<DiagnosticLSPMessage> diagnostics;
-        LexedProject lexed;
-        ParsedProject parsed;
-        const bool success = tpp::lex(project_, lexed, diagnostics, options) &&
-                     tpp::parse(lexed, parsed, diagnostics, options) &&
-                     tpp::compile(parsed, output_, diagnostics, options, &semanticModel_);
+        ToolingSymbolIndex symbolIndex;
+        const bool success = tpp::compile_for_tooling(project_, output_, diagnostics, symbolIndex, options);
 
         for (const auto &message : diagnostics)
             diagnostics_[message.uri] = message.diagnostics;
+
+        namedTypeLocations_.clear();
+        for (const auto &[name, location] : symbolIndex.namedTypeLocations)
+            namedTypeLocations_[name] = {location.uri, location.range};
+
+        structFieldLocations_.clear();
+        for (const auto &[structName, fieldLocations] : symbolIndex.structFieldLocations)
+        {
+            auto &projectFieldLocations = structFieldLocations_[structName];
+            for (const auto &[fieldName, location] : fieldLocations)
+                projectFieldLocations[fieldName] = {location.uri, location.range};
+        }
 
         return success;
     }
@@ -320,6 +333,79 @@ namespace tpp
         if (it != dirtyBuffer_.end())
             return it->second;
         return readFile(uriToPath(uri));
+    }
+
+    const StructDef *WorkspaceProject::find_struct(std::string_view name) const noexcept
+    {
+        for (const auto &structDef : output_.structs)
+        {
+            if (structDef.name == name)
+                return &structDef;
+        }
+        return nullptr;
+    }
+
+    const EnumDef *WorkspaceProject::find_enum(std::string_view name) const noexcept
+    {
+        for (const auto &enumDef : output_.enums)
+        {
+            if (enumDef.name == name)
+                return &enumDef;
+        }
+        return nullptr;
+    }
+
+    const FieldDef *WorkspaceProject::find_struct_field(std::string_view structName,
+                                                        std::string_view fieldName) const noexcept
+    {
+        const auto *structDef = find_struct(structName);
+        if (!structDef)
+            return nullptr;
+
+        for (const auto &field : structDef->fields)
+        {
+            if (field.name == fieldName)
+                return &field;
+        }
+        return nullptr;
+    }
+
+    std::vector<const FunctionDef *> WorkspaceProject::find_template_overloads(std::string_view name) const
+    {
+        std::vector<const FunctionDef *> overloads;
+        for (const auto &function : output_.functions)
+        {
+            if (function.name == name)
+                overloads.push_back(&function);
+        }
+        return overloads;
+    }
+
+    bool WorkspaceProject::has_named_type(std::string_view name) const noexcept
+    {
+        return find_struct(name) != nullptr || find_enum(name) != nullptr;
+    }
+
+    std::optional<ProjectSourceLocation> WorkspaceProject::find_named_type_location(std::string_view name) const
+    {
+        auto it = namedTypeLocations_.find(std::string(name));
+        if (it == namedTypeLocations_.end())
+            return std::nullopt;
+        return it->second;
+    }
+
+    std::optional<ProjectSourceLocation> WorkspaceProject::find_struct_field_location(std::string_view structName,
+                                                                                      std::string_view fieldName) const
+    {
+        auto structIt = structFieldLocations_.find(std::string(structName));
+        if (structIt == structFieldLocations_.end())
+            return std::nullopt;
+
+        auto fieldIt = structIt->second.find(std::string(fieldName));
+        if (fieldIt == structIt->second.end())
+            return std::nullopt;
+
+        return fieldIt->second;
     }
 
 } // namespace tpp

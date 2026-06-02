@@ -1,0 +1,7 @@
+{
+    "expect_success": false,
+    "expected_errors": {
+        "getFunctionError": "",
+        "renderError": "aligned cells must be single-line"
+    }
+}

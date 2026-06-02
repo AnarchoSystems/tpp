@@ -1,10 +1,10 @@
 #include <tpp/Compiler.h>
 #include <tpp/IR.h>
+#include <tpp/ProjectConfigResolver.h>
 #include <nlohmann/json.hpp>
 #include <iostream>
 #include <fstream>
 #include <filesystem>
-#include <algorithm>
 
 namespace fs = std::filesystem;
 using namespace tpp;
@@ -30,84 +30,11 @@ static bool hasDiagnostics(const std::vector<tpp::DiagnosticLSPMessage> &message
 // if not successful, print diagnostics to stderr in a format that vscode's problem matcher gcc can understand it.
 // if successful, serialize the IR to stdout as JSON.
 
-// Returns true if the string matches the glob pattern (supports '*' wildcard only).
-static bool matchGlob(const std::string &pattern, const std::string &text)
-{
-    size_t pi = 0, ti = 0, starPos = std::string::npos, matchPos = 0;
-    while (ti < text.size())
-    {
-        if (pi < pattern.size() && (pattern[pi] == '?' || pattern[pi] == text[ti]))
-        {
-            ++pi; ++ti;
-        }
-        else if (pi < pattern.size() && pattern[pi] == '*')
-        {
-            starPos = pi++;
-            matchPos = ti;
-        }
-        else if (starPos != std::string::npos)
-        {
-            pi = starPos + 1;
-            ti = ++matchPos;
-        }
-        else
-        {
-            return false;
-        }
-    }
-    while (pi < pattern.size() && pattern[pi] == '*')
-        ++pi;
-    return pi == pattern.size();
-}
-
-static bool hasAllowedSourceExtension(const std::string &name, bool isTypes)
-{
-    if (name.size() >= 4 && name.substr(name.size() - 4) == ".tpp")
-        return true;
-    if (isTypes && name.size() >= 10 && name.substr(name.size() - 10) == ".tpp.types")
-        return true;
-    return false;
-}
-
-// Expands a single config pattern to a sorted list of .tpp file paths.
-// If the pattern contains no '*', returns the single path directly.
-// If it contains '*', scans the parent directory and returns matching .tpp files.
-static std::vector<fs::path> expandPattern(const fs::path &baseDir,
-                                          const std::string &pattern,
-                                          bool isTypes)
-{
-    fs::path patPath(pattern);
-    std::string filename = patPath.filename().string();
-    fs::path parentDir = baseDir / patPath.parent_path();
-
-    if (filename.find('*') == std::string::npos)
-    {
-        // Literal path — return as-is (file may or may not exist; errors surface later)
-        return {baseDir / pattern};
-    }
-
-    std::vector<fs::path> results;
-    if (fs::is_directory(parentDir))
-    {
-        for (const auto &entry : fs::directory_iterator(parentDir))
-        {
-            if (!entry.is_regular_file())
-                continue;
-            auto name = entry.path().filename().string();
-            if (!hasAllowedSourceExtension(name, isTypes))
-                continue;
-            if (matchGlob(filename, name))
-                results.push_back(entry.path());
-        }
-        std::sort(results.begin(), results.end());
-    }
-    return results;
-}
-
 struct tppApp
 {
     std::string inputDirectory;
     bool includeSourceRanges = false;
+    bool printInputs = false;
     tppApp(int argc, char *argv[]);
     void run();
 };
@@ -133,12 +60,17 @@ tppApp::tppApp(int argc, char *argv[])
                          "  {\"types\": [\"types.tpp\", \"types/*\"], \"templates\": [\"templates/*\"]}\n"
                          "\n"
                          "Options:\n"
-                         "  --source-ranges  Include source location info in the IR output\n";
+                         "  --source-ranges  Include source location info in the IR output\n"
+                         "  --print-inputs   Print the resolved config, source, and policy inputs\n";
             exit(0);
         }
         else if (arg == "--source-ranges")
         {
             includeSourceRanges = true;
+        }
+        else if (arg == "--print-inputs")
+        {
+            printInputs = true;
         }
         else
         {
@@ -159,27 +91,28 @@ tppApp::tppApp(int argc, char *argv[])
 
 void tppApp::run()
 {
-    // Read tpp-config.json from the input directory
-    fs::path configPath = fs::path(inputDirectory) / "tpp-config.json";
-    nlohmann::json config;
+    ResolvedProjectInputs inputs;
+    const fs::path baseDir = fs::path(inputDirectory).lexically_normal();
     {
-        std::ifstream configFile(configPath);
-        if (!configFile.is_open())
-        {
-            std::cerr << "Error: " << configPath.string() << ": tpp-config.json not found\n";
-            exit(1);
-        }
         try
         {
-            config = nlohmann::json::parse(std::string(
-                (std::istreambuf_iterator<char>(configFile)),
-                std::istreambuf_iterator<char>()));
+            inputs = load_project_inputs(baseDir);
         }
         catch (const std::exception &e)
         {
-            std::cerr << "Error: " << configPath.string() << ": invalid JSON: " << e.what() << "\n";
+            std::cerr << "Error: " << e.what() << "\n";
             exit(1);
         }
+    }
+
+    if (printInputs)
+    {
+        std::cout << inputs.configPath.string() << std::endl;
+        for (const auto &source : inputs.sourceFiles)
+            std::cout << source.path.string() << std::endl;
+        for (const auto &policyPath : inputs.policyFiles)
+            std::cout << policyPath.string() << std::endl;
+        exit(EXIT_SUCCESS);
     }
 
     // Collect file paths first so we can produce stable per-file diagnostics
@@ -190,18 +123,8 @@ void tppApp::run()
         bool isTypes;
     };
     std::vector<FileEntry> fileEntries;
-
-    fs::path baseDir(inputDirectory);
-    for (const auto &pattern : config.value("types", nlohmann::json::array()))
-    {
-        for (const auto &p : expandPattern(baseDir, pattern.get<std::string>(), true))
-            fileEntries.push_back({p.string(), true});
-    }
-    for (const auto &pattern : config.value("templates", nlohmann::json::array()))
-    {
-        for (const auto &p : expandPattern(baseDir, pattern.get<std::string>(), false))
-            fileEntries.push_back({p.string(), false});
-    }
+    for (const auto &source : inputs.sourceFiles)
+        fileEntries.push_back({source.path.string(), source.isTypes});
 
     std::vector<DiagnosticLSPMessage> diags;
     diags.reserve(fileEntries.size());
@@ -236,22 +159,16 @@ void tppApp::run()
     }
 
     // Load replacement policies
-    for (const auto &policyEntry : config.value("replacement-policies", nlohmann::json::array()))
-    {
-        fs::path policyPath = fs::path(inputDirectory) / policyEntry.get<std::string>();
+    for (const auto &policyPath : inputs.policyFiles)
         project.add_policy_source(readFile(policyPath), policyPath.string());
-    }
 
     CompileOptions options;
     options.includeSourceRanges = includeSourceRanges;
-    LexedProject lexed;
-    ParsedProject parsed;
-    IR output;
+    auto compileResult = tpp::compile(project, options);
+    IR output = std::move(compileResult.ir);
+    diags = std::move(compileResult.diagnostics);
 
-    bool success = tpp::lex(project, lexed, diags, options) &&
-                   tpp::parse(lexed, parsed, diags, options) &&
-                   tpp::compile(parsed, output, diags, options) &&
-                   !hasDiagnostics(diags);
+    bool success = compileResult && !hasDiagnostics(diags);
     if (success)
     {
         nlohmann::json j = output;

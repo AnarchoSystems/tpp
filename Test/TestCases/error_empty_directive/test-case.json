@@ -1,0 +1,18 @@
+{
+    "expect_success": false,
+    "expected_diagnostics": [
+        {
+            "uri": "error_empty_directive/template.tpp",
+            "diagnostics": [
+                {
+                    "range": {
+                        "start": {"line": 1, "character": 5},
+                        "end": {"line": 1, "character": 7}
+                    },
+                    "message": "empty directive",
+                    "severity": "error"
+                }
+            ]
+        }
+    ]
+}

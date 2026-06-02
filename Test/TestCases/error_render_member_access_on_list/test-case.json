@@ -1,0 +1,18 @@
+{
+    "expect_success": false,
+    "expected_diagnostics": [
+        {
+            "uri": "error_render_member_access_on_list/template.tpp",
+            "diagnostics": [
+                {
+                    "range": {
+                        "start": {"line": 5, "character": 0},
+                        "end": {"line": 5, "character": 46}
+                    },
+                    "message": "cannot access member 'items' on non-struct value 'data'",
+                    "severity": "error"
+                }
+            ]
+        }
+    ]
+}

@@ -1,14 +1,13 @@
-# ── Configure-time test case discovery ───────────────────────────────────────
-# Scan TestCases/ at configure time; separate success (expected_output.txt)
-# from failure (expected_diagnostics.json / expected_errors.json) cases.
-# Results are baked into TestCases.h via configure_file so that the test
-# binary does NOT need to scan the filesystem at startup.
+# ── Configure-time codegen case discovery ─────────────────────────────────────
+# Acceptance/LSP suites now discover cases at runtime. Configure-time discovery
+# remains only for generated C++/Java/Swift case targets that still need CMake
+# outputs wired up explicitly. The globs use CONFIGURE_DEPENDS so normal builds
+# auto-regenerate when the case file set changes. Structured expectations live
+# in test-case.json; readable success outputs may live in expected_output.txt.
 
 set(tpp_success_cases "")
-set(tpp_failure_cases "")
-set(tpp_diagnostic_cases "")
 
-file(GLOB test_case_dirs LIST_DIRECTORIES true
+file(GLOB test_case_dirs CONFIGURE_DEPENDS LIST_DIRECTORIES true
      ${CMAKE_CURRENT_SOURCE_DIR}/TestCases/*)
 
 foreach(test_dir IN LISTS test_case_dirs)
@@ -18,28 +17,33 @@ foreach(test_dir IN LISTS test_case_dirs)
     if(NOT EXISTS ${test_dir}/tpp-config.json)
         continue()
     endif()
+    if(NOT EXISTS ${test_dir}/test-case.json)
+        message(FATAL_ERROR "Missing test-case.json in ${test_dir}")
+    endif()
     get_filename_component(test_name ${test_dir} NAME)
+    set(_is_success_case FALSE)
+
     if(EXISTS ${test_dir}/expected_output.txt)
-        list(APPEND tpp_success_cases ${test_name})
+        set(_is_success_case TRUE)
     else()
-        list(APPEND tpp_failure_cases ${test_name})
-        if(EXISTS ${test_dir}/expected_diagnostics.json)
-            list(APPEND tpp_diagnostic_cases ${test_name})
+        file(READ ${test_dir}/test-case.json _test_case_spec_json)
+
+        string(JSON _expected_output_value ERROR_VARIABLE _expected_output_error
+            GET "${_test_case_spec_json}" expected_output)
+        if(NOT _expected_output_error)
+            set(_is_success_case TRUE)
+        else()
+        string(JSON _expect_success_value ERROR_VARIABLE _expect_success_error
+            GET "${_test_case_spec_json}" expect_success)
+            if(NOT _expect_success_error AND _expect_success_value)
+                set(_is_success_case TRUE)
+            endif()
         endif()
     endif()
-endforeach()
 
-set(TPP_SUCCESS_CASE_ENTRIES "")
-set(TPP_FAILURE_CASE_ENTRIES "")
-set(TPP_DIAGNOSTIC_CASE_ENTRIES "")
-foreach(name IN LISTS tpp_success_cases)
-    string(APPEND TPP_SUCCESS_CASE_ENTRIES "    \"${name}\",\n")
-endforeach()
-foreach(name IN LISTS tpp_failure_cases)
-    string(APPEND TPP_FAILURE_CASE_ENTRIES "    \"${name}\",\n")
-endforeach()
-foreach(name IN LISTS tpp_diagnostic_cases)
-    string(APPEND TPP_DIAGNOSTIC_CASE_ENTRIES "    \"${name}\",\n")
+    if(_is_success_case)
+        list(APPEND tpp_success_cases ${test_name})
+    endif()
 endforeach()
 
 set(tpp_codegen_cases "")
@@ -48,58 +52,6 @@ foreach(name IN LISTS tpp_success_cases)
         list(APPEND tpp_codegen_cases ${name})
     endif()
 endforeach()
-
-configure_file(TestCases.h.in ${CMAKE_CURRENT_BINARY_DIR}/TestCases.h @ONLY)
-
-# ── LSP test spec: per-case lsp-test.json → LspTestSpec.h ────────────────────
-# `lsp-test.json` is a test artifact checked into individual TestCases/
-# directories. Configure-time discovery only records which cases provide each
-# LSP section; the full JSON is still loaded at runtime in LspTest.cc.
-# Supported sections are `semantic_tokens`, `folding_ranges`, `go_to_definition`,
-# and `hover`. Keep the schemas in sync with
-# `.github/skills/add-acceptance-test/references/expected-formats.md`.
-
-set(LSP_TOKEN_CASE_NAMES "")
-set(LSP_FOLDING_CASE_NAMES "")
-set(LSP_DEFINITION_CASE_NAMES "")
-set(LSP_HOVER_CASE_NAMES "")
-
-file(GLOB _lsp_case_dirs LIST_DIRECTORIES true
-     ${CMAKE_CURRENT_SOURCE_DIR}/TestCases/*)
-
-foreach(_dir IN LISTS _lsp_case_dirs)
-    if(NOT IS_DIRECTORY ${_dir})
-        continue()
-    endif()
-    set(_spec "${_dir}/lsp-test.json")
-    if(NOT EXISTS "${_spec}")
-        continue()
-    endif()
-    get_filename_component(_tc "${_dir}" NAME)
-    file(READ "${_spec}" _lsp_json)
-
-    string(JSON _ignored ERROR_VARIABLE _err TYPE "${_lsp_json}" "semantic_tokens")
-    if(NOT _err)
-        string(APPEND LSP_TOKEN_CASE_NAMES "    \"${_tc}\",\n")
-    endif()
-
-    string(JSON _ignored ERROR_VARIABLE _err TYPE "${_lsp_json}" "folding_ranges")
-    if(NOT _err)
-        string(APPEND LSP_FOLDING_CASE_NAMES "    \"${_tc}\",\n")
-    endif()
-
-    string(JSON _nd ERROR_VARIABLE _err LENGTH "${_lsp_json}" "go_to_definition")
-    if(NOT _err AND _nd GREATER 0)
-        string(APPEND LSP_DEFINITION_CASE_NAMES "    \"${_tc}\",\n")
-    endif()
-
-    string(JSON _nd ERROR_VARIABLE _err LENGTH "${_lsp_json}" "hover")
-    if(NOT _err AND _nd GREATER 0)
-        string(APPEND LSP_HOVER_CASE_NAMES "    \"${_tc}\",\n")
-    endif()
-endforeach()
-
-configure_file(LspTestSpec.h.in ${CMAKE_CURRENT_BINARY_DIR}/LspTestSpec.h @ONLY)
 
 # ── Main acceptance test binary ───────────────────────────────────────────────
 
@@ -113,6 +65,7 @@ add_executable(tpp_acceptance_test
     src/LspClient.cc
     src/LspTest.cc
     src/WorkspaceProjectTest.cc
+    src/TppCliTest.cc
     src/Tpp2CppCliTest.cc
     src/Tpp2JavaCliTest.cc
     src/Tpp2SwiftCliTest.cc
@@ -123,6 +76,7 @@ target_link_libraries(tpp_acceptance_test PRIVATE ${TPP_GTEST_MAIN_TARGET} tpp_l
 target_include_directories(tpp_acceptance_test PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/Libraries/lib_tpp
     ${PROJECT_SOURCE_DIR}/Executables/lsp)
 
 add_dependencies(tpp_acceptance_test tpp tpp2cpp tpp2java tpp2swift render-tpp tpp-lsp)
@@ -150,8 +104,11 @@ set(cpp_generated_test_sources "")
 
 foreach(test_name IN LISTS tpp_codegen_cases)
     set(test_dir ${CMAKE_CURRENT_SOURCE_DIR}/TestCases/${test_name})
-    file(GLOB test_case_files ${test_dir}/*)
     set(out_impl ${CMAKE_CURRENT_BINARY_DIR}/${test_name}_implementation.cc)
+    set(test_expectation_deps ${test_dir}/test-case.json)
+    if(EXISTS ${test_dir}/expected_output.txt)
+        list(APPEND test_expectation_deps ${test_dir}/expected_output.txt)
+    endif()
 
     tpp_add(tpp_acceptance_test
         NAME       ${test_name}
@@ -160,14 +117,23 @@ foreach(test_name IN LISTS tpp_codegen_cases)
     )
 
     set(out_test ${CMAKE_CURRENT_BINARY_DIR}/${test_name}_test.cc)
+    set(out_test_depfile ${out_test}.d)
 
     add_custom_command(OUTPUT ${out_test}
         COMMAND ${CMAKE_COMMAND}
             -DCMD=$<TARGET_FILE:make-stat-test>
             "-DARGS=${test_dir}"
+            -DINPUT_CMD=$<TARGET_FILE:tpp>
+            "-DINPUT_ARGS=--print-inputs;${test_dir}"
             -DOUT=${out_test}
-            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
-        DEPENDS $<TARGET_FILE:make-stat-test> ${test_case_files}
+            -DDEPFILE=${out_test_depfile}
+            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFileWithDepfile.cmake
+        DEPENDS
+            $<TARGET_FILE:make-stat-test>
+            $<TARGET_FILE:tpp>
+            ${test_expectation_deps}
+            ${CMAKE_SOURCE_DIR}/cmake/StdoutToFileWithDepfile.cmake
+        DEPFILE ${out_test_depfile}
         COMMENT "make-stat-test ${test_name}"
         VERBATIM)
 
@@ -282,13 +248,17 @@ add_custom_command(
 
 foreach(test_name IN LISTS tpp_codegen_cases)
     set(test_dir ${CMAKE_CURRENT_SOURCE_DIR}/TestCases/${test_name})
-    file(GLOB test_case_files ${test_dir}/*)
     set(shared_ir "${CMAKE_CURRENT_BINARY_DIR}/${test_name}-tpp.json")
+    set(test_expectation_deps ${test_dir}/test-case.json)
+    if(EXISTS ${test_dir}/expected_output.txt)
+        list(APPEND test_expectation_deps ${test_dir}/expected_output.txt)
+    endif()
 
     set(java_namespace "Java_${test_name}")
     set(java_runner_class "JavaTest_${test_name}")
     set(java_bundle "${java_runner_dir}/${test_name}_bundle.java")
     set(java_fragment "${java_runner_dir}/${test_name}_fragment.java")
+    set(java_fragment_depfile "${java_fragment}.d")
 
     add_custom_command(
         OUTPUT "${java_bundle}"
@@ -306,9 +276,17 @@ foreach(test_name IN LISTS tpp_codegen_cases)
         COMMAND ${CMAKE_COMMAND}
             -DCMD=$<TARGET_FILE:make-java-test>
             "-DARGS=--fragment;${java_namespace};${java_runner_class};${test_dir}"
+            -DINPUT_CMD=$<TARGET_FILE:tpp>
+            "-DINPUT_ARGS=--print-inputs;${test_dir}"
             -DOUT=${java_fragment}
-            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
-        DEPENDS $<TARGET_FILE:make-java-test> ${test_case_files}
+            -DDEPFILE=${java_fragment_depfile}
+            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFileWithDepfile.cmake
+        DEPENDS
+            $<TARGET_FILE:make-java-test>
+            $<TARGET_FILE:tpp>
+            ${test_expectation_deps}
+            ${CMAKE_SOURCE_DIR}/cmake/StdoutToFileWithDepfile.cmake
+        DEPFILE "${java_fragment_depfile}"
         COMMENT "make-java-test fragment ${test_name}"
         VERBATIM)
 
@@ -319,6 +297,7 @@ foreach(test_name IN LISTS tpp_codegen_cases)
     set(swift_runner_name "SwiftTest_${test_name}")
     set(swift_bundle "${swift_runner_dir}/${test_name}_bundle.swift")
     set(swift_fragment "${swift_runner_dir}/${test_name}_fragment.swift")
+    set(swift_fragment_depfile "${swift_fragment}.d")
 
     add_custom_command(
         OUTPUT "${swift_bundle}"
@@ -336,9 +315,17 @@ foreach(test_name IN LISTS tpp_codegen_cases)
         COMMAND ${CMAKE_COMMAND}
             -DCMD=$<TARGET_FILE:make-swift-test>
             "-DARGS=--fragment;${swift_namespace};${swift_runner_name};${test_dir}"
+            -DINPUT_CMD=$<TARGET_FILE:tpp>
+            "-DINPUT_ARGS=--print-inputs;${test_dir}"
             -DOUT=${swift_fragment}
-            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
-        DEPENDS $<TARGET_FILE:make-swift-test> ${test_case_files}
+            -DDEPFILE=${swift_fragment_depfile}
+            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFileWithDepfile.cmake
+        DEPENDS
+            $<TARGET_FILE:make-swift-test>
+            $<TARGET_FILE:tpp>
+            ${test_expectation_deps}
+            ${CMAKE_SOURCE_DIR}/cmake/StdoutToFileWithDepfile.cmake
+        DEPFILE "${swift_fragment_depfile}"
         COMMENT "make-swift-test fragment ${test_name}"
         VERBATIM)
 

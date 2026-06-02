@@ -1,4 +1,0 @@
-{
-    "getFunctionError": "function 'main' is ambiguous; matching overloads: main(string), main(int)",
-    "renderError": ""
-}

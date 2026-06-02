@@ -16,10 +16,15 @@
 #include <tpp/IR.h>
 #include <CodegenHelpers.h>
 #include "java_defs_functions.h"
+#include <cstdlib>
+#include <fstream>
 #include <iostream>
-#include <map>
+#include <iterator>
+#include <string>
+#include <vector>
 
 static std::string formatJavaDocComment(const std::string &doc, const std::string &indent);
+static void printUsage();
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Build RenderFunctionsInput context from instruction IR
@@ -59,6 +64,131 @@ enum class Mode
     Bundle
 };
 
+namespace
+{
+
+struct ParsedCommandLine
+{
+    Mode mode = Mode::Source;
+    std::string inputFile;
+    std::string namespaceName;
+};
+
+static std::string readTextInputOrExit(const std::string &inputFile)
+{
+    if (!inputFile.empty())
+    {
+        std::ifstream inputStream(inputFile);
+        if (!inputStream.is_open())
+        {
+            std::cerr << "Could not open input file: " << inputFile << std::endl;
+            std::exit(EXIT_FAILURE);
+        }
+        return std::string(std::istreambuf_iterator<char>(inputStream), std::istreambuf_iterator<char>());
+    }
+
+    return std::string(std::istreambuf_iterator<char>(std::cin), std::istreambuf_iterator<char>());
+}
+
+static nlohmann::json parseJsonTextOrExit(const std::string &inputJson,
+                                          const std::string &description)
+{
+    try
+    {
+        return nlohmann::json::parse(inputJson);
+    }
+    catch (const std::exception &error)
+    {
+        std::cerr << "Failed to parse " << description << ": " << error.what() << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+}
+
+static tpp::IR loadIRInputOrExit(const std::string &inputFile)
+{
+    try
+    {
+        return parseJsonTextOrExit(readTextInputOrExit(inputFile), "input JSON").get<tpp::IR>();
+    }
+    catch (const std::exception &error)
+    {
+        std::cerr << "Failed to decode input JSON as tpp IR: " << error.what() << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+}
+
+static Mode parseModeOrExit(const std::string &command)
+{
+    if (command == "source")
+        return Mode::Source;
+    if (command == "runtime")
+        return Mode::Runtime;
+    if (command == "runtime-shared")
+        return Mode::RuntimeShared;
+    if (command == "bundle")
+        return Mode::Bundle;
+
+    std::cerr << "Unknown command: " << command << "\n\n";
+    printUsage();
+    std::exit(EXIT_FAILURE);
+}
+
+static ParsedCommandLine parseCommandLineOrExit(int argc, char *argv[])
+{
+    ParsedCommandLine result;
+
+    if (argc < 2)
+    {
+        printUsage();
+        std::exit(EXIT_FAILURE);
+    }
+
+    const std::string command = argv[1];
+    if (command == "-h" || command == "--help")
+    {
+        printUsage();
+        std::exit(EXIT_SUCCESS);
+    }
+    result.mode = parseModeOrExit(command);
+
+    for (int index = 2; index < argc; ++index)
+    {
+        const std::string arg = argv[index];
+        if (arg == "-h" || arg == "--help")
+        {
+            printUsage();
+            std::exit(EXIT_SUCCESS);
+        }
+        if (arg == "-ns")
+        {
+            if (index + 1 >= argc)
+            {
+                std::cerr << "-ns requires a namespace argument\n";
+                std::exit(EXIT_FAILURE);
+            }
+            result.namespaceName = argv[++index];
+            continue;
+        }
+        if (arg == "--input")
+        {
+            if (index + 1 >= argc)
+            {
+                std::cerr << "--input requires a file argument\n";
+                std::exit(EXIT_FAILURE);
+            }
+            result.inputFile = argv[++index];
+            continue;
+        }
+
+        std::cerr << "Unknown option: " << arg << "\nUse -h for usage info.\n";
+        std::exit(EXIT_FAILURE);
+    }
+
+    return result;
+}
+
+} // namespace
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Main
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -81,22 +211,15 @@ static void printUsage()
 
 int main(int argc, char *argv[])
 {
-    static const std::map<std::string, Mode> commands = {
-        {"source", Mode::Source},
-        {"runtime", Mode::Runtime},
-        {"runtime-shared", Mode::RuntimeShared},
-        {"bundle", Mode::Bundle},
-    };
-    auto cli = codegen::parseBackendCommandLine(argc, argv, commands, printUsage);
-
+    const auto cli = parseCommandLineOrExit(argc, argv);
     if (cli.mode == Mode::RuntimeShared || cli.mode == Mode::Runtime)
     {
         std::cout << codegen::render_java_shared_runtime() << std::endl;
         return EXIT_SUCCESS;
     }
 
+    const auto ir = loadIRInputOrExit(cli.inputFile);
     std::string namespaceName = cli.namespaceName;
-    tpp::IR ir = codegen::loadIRInputOrExit(cli.inputFile);
 
     // Function prefix: "render_" when no namespace, "" when namespace set
     std::string functionPrefix = namespaceName.empty() ? "render_" : "";

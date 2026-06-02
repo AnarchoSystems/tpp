@@ -1,67 +1,108 @@
-# Expected Result File Formats
+# Expected Result Formats
 
-## expected_output.txt (success case)
+Structured case expectations live in `test-case.json`. Readable success outputs may live in `expected_output.txt`. IR snapshots still use `expected_ir.json`.
 
-Plain text — the exact rendered output of the template. **No trailing newline.**
+## expected_output.txt (preferred success case)
+
+Contents:
+- the exact rendered output
 
 Example for `template main() Hello, world! END`:
-```
+```text
 Hello, world!
 ```
 
+Notes:
+- the file contents must match the rendered string exactly
+- this is the preferred format for human-readable golden outputs
+
 ---
 
-## expected_errors.json (runtime / get-function error)
+## test-case.json (success case, backward-compatible)
+
+Schema:
+```json
+{
+    "expected_output": "<exact rendered output>"
+}
+```
+
+Example for `template main() Hello, world! END`:
+```json
+{
+    "expected_output": "Hello, world!"
+}
+```
+
+Notes:
+- `expected_output` must match the rendered string exactly
+- represent embedded newlines as `\n` in the JSON string
+
+---
+
+## test-case.json (runtime / get-function error)
 
 Used when `tpp::get_function(...)` or `tpp::render_function(...)` returns false.
 
 Schema:
 ```json
 {
-    "getFunctionError": "<message or empty string>",
-    "renderError": "<message or empty string>"
+    "expect_success": false,
+    "expected_errors": {
+        "getFunctionError": "<message or empty string>",
+        "renderError": "<message or empty string>"
+    }
 }
 ```
 
 Example — function not found:
 ```json
 {
-    "getFunctionError": "function 'main' not found",
-    "renderError": ""
+    "expect_success": false,
+    "expected_errors": {
+        "getFunctionError": "function 'main' not found",
+        "renderError": ""
+    }
 }
 ```
 
 Example — wrong argument count:
 ```json
 {
-    "getFunctionError": "",
-    "renderError": "wrong number of arguments"
+    "expect_success": false,
+    "expected_errors": {
+        "getFunctionError": "",
+        "renderError": "wrong number of arguments"
+    }
 }
 ```
 
 ---
 
-## expected_diagnostics.json (compile / parse error)
+## test-case.json (compile / parse error)
 
 Used when the in-process compilation pipeline emits diagnostics while compiling a test case.
 
-Schema — array of LSP `PublishDiagnosticsParams`-style objects:
+Schema — `expected_diagnostics` is an array of LSP `PublishDiagnosticsParams`-style objects:
 ```json
-[
-    {
-        "uri": "<test-name>/typedefs.tpp.types",
-        "diagnostics": [
-            {
-                "range": {
-                    "start": {"line": <0-based>, "character": <0-based>},
-                    "end":   {"line": <0-based>, "character": <0-based>}
-                },
-                "message": "<human-readable error>",
-                "severity": "error"
-            }
-        ]
-    }
-]
+{
+    "expect_success": false,
+    "expected_diagnostics": [
+        {
+            "uri": "<test-name>/typedefs.tpp.types",
+            "diagnostics": [
+                {
+                    "range": {
+                        "start": {"line": <0-based>, "character": <0-based>},
+                        "end":   {"line": <0-based>, "character": <0-based>}
+                    },
+                    "message": "<human-readable error>",
+                    "severity": "error"
+                }
+            ]
+        }
+    ]
+}
 ```
 
 Notes:
@@ -72,21 +113,24 @@ Notes:
 
 Example — undefined type in `typedefs.tpp.types` line 2, characters 11–22:
 ```json
-[
-    {
-        "uri": "error_undefined_type/typedefs.tpp.types",
-        "diagnostics": [
-            {
-                "range": {
-                    "start": {"line": 2, "character": 11},
-                    "end":   {"line": 2, "character": 22}
-                },
-                "message": "undefined type 'UnknownType'",
-                "severity": "error"
-            }
-        ]
-    }
-]
+{
+    "expect_success": false,
+    "expected_diagnostics": [
+        {
+            "uri": "error_undefined_type/typedefs.tpp.types",
+            "diagnostics": [
+                {
+                    "range": {
+                        "start": {"line": 2, "character": 11},
+                        "end":   {"line": 2, "character": 22}
+                    },
+                    "message": "undefined type 'UnknownType'",
+                    "severity": "error"
+                }
+            ]
+        }
+    ]
+}
 ```
 
 ---
@@ -112,16 +156,16 @@ Notes:
 
 ---
 
-## lsp-test.json (LSP expectations)
+## test-case.json (LSP expectations)
 
 Used by the LSP integration tests to verify semantic tokens, folding ranges, go-to-definition behavior, and hover content.
 
 Top-level sections:
 
-- `semantic_tokens`
-- `folding_ranges`
-- `go_to_definition`
-- `hover`
+- `lsp.semantic_tokens`
+- `lsp.folding_ranges`
+- `lsp.go_to_definition`
+- `lsp.hover`
 
 All sections are optional. Include only the behaviors the test case is meant to verify.
 
@@ -130,11 +174,13 @@ All sections are optional. Include only the behaviors the test case is meant to 
 Schema:
 ```json
 {
-    "semantic_tokens": {
-        "file": "template.tpp",
-        "expected_tokens": [
-            {"line": 0, "character": 0, "length": 8, "type": "keyword"}
-        ]
+    "lsp": {
+        "semantic_tokens": {
+            "file": "template.tpp",
+            "expected_tokens": [
+                {"line": 0, "character": 0, "length": 8, "type": "keyword"}
+            ]
+        }
     }
 }
 ```
@@ -149,11 +195,13 @@ Notes:
 Schema:
 ```json
 {
-    "folding_ranges": {
-        "file": "template.tpp",
-        "expected": [
-            {"startLine": 0, "endLine": 7}
-        ]
+    "lsp": {
+        "folding_ranges": {
+            "file": "template.tpp",
+            "expected": [
+                {"startLine": 0, "endLine": 7}
+            ]
+        }
     }
 }
 ```
@@ -167,17 +215,19 @@ Notes:
 Schema:
 ```json
 {
-    "go_to_definition": [
-        {
-            "name": "TypeDef_ref",
-            "file": "template.tpp",
-            "line": 0,
-            "character": 22,
-            "expected_file": "typedefs.tpp",
-            "expected_line": 7,
-            "expected_character": 7
-        }
-    ]
+    "lsp": {
+        "go_to_definition": [
+            {
+                "name": "TypeDef_ref",
+                "file": "template.tpp",
+                "line": 0,
+                "character": 22,
+                "expected_file": "typedefs.tpp",
+                "expected_line": 7,
+                "expected_character": 7
+            }
+        ]
+    }
 }
 ```
 
@@ -192,15 +242,17 @@ Notes:
 Schema:
 ```json
 {
-    "hover": [
-        {
-            "name": "field_hover",
-            "file": "template.tpp",
-            "line": 3,
-            "character": 12,
-            "expected_contains": ["string", "field docs"]
-        }
-    ]
+    "lsp": {
+        "hover": [
+            {
+                "name": "field_hover",
+                "file": "template.tpp",
+                "line": 3,
+                "character": 12,
+                "expected_contains": ["string", "field docs"]
+            }
+        ]
+    }
 }
 ```
 

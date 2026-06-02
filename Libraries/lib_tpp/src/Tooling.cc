@@ -1,4 +1,5 @@
-#include <tpp/Tooling.h>
+#include "tpp/ToolingInternal.h"
+#include "tpp/ToolingFolding.h"
 #include "tpp/Tokenizer.h"
 #include "tpp/TypedefParser.h"
 #include "tpp/TemplateParser.h"
@@ -21,6 +22,11 @@ static std::string trim(std::string_view text)
 static bool startsWith(std::string_view text, std::string_view prefix)
 {
     return text.size() >= prefix.size() && text.substr(0, prefix.size()) == prefix;
+}
+
+static ToolingFoldingRange makeFoldingRange(int startLine, int endLine, std::string kind = "region")
+{
+    return {startLine, endLine, std::move(kind)};
 }
 
 static std::string stripDocCommentMarkers(std::string_view raw)
@@ -133,6 +139,164 @@ static bool advanceToNextTemplateStart(const std::string &src,
     }
 
     return false;
+}
+
+static void collectFolds(std::vector<ToolingFoldingRange> &out,
+                         const std::vector<compiler::ASTNode> &nodes);
+
+static void collectFoldNode(std::vector<ToolingFoldingRange> &out,
+                            const compiler::ASTNode &node)
+{
+    std::visit([&](auto &&arg)
+    {
+        using T = std::decay_t<decltype(arg)>;
+
+        if constexpr (std::is_same_v<T, compiler::CommentNode>)
+        {
+            if (arg.endRange.start.line > arg.startRange.start.line)
+                out.push_back(makeFoldingRange(arg.startRange.start.line,
+                                               arg.endRange.start.line,
+                                               "comment"));
+        }
+        else if constexpr (std::is_same_v<T, std::shared_ptr<compiler::IndentNode>>)
+        {
+            collectFolds(out, arg->body);
+        }
+        else if constexpr (std::is_same_v<T, std::shared_ptr<compiler::ForNode>>)
+        {
+            if (arg->sourceRange.start.line >= 0 &&
+                arg->endRange.start.line > arg->sourceRange.start.line)
+            {
+                out.push_back(makeFoldingRange(arg->sourceRange.start.line,
+                                               arg->endRange.start.line));
+            }
+            collectFolds(out, arg->body);
+        }
+        else if constexpr (std::is_same_v<T, std::shared_ptr<compiler::IfNode>>)
+        {
+            const int ifLine = arg->sourceRange.start.line;
+            const int elseLine = arg->elseRange.start.line;
+            const int endLine = arg->endRange.start.line;
+
+            if (arg->elseBody.empty())
+            {
+                if (ifLine >= 0 && endLine > ifLine)
+                    out.push_back(makeFoldingRange(ifLine, endLine));
+            }
+            else
+            {
+                if (ifLine >= 0 && elseLine > ifLine)
+                    out.push_back(makeFoldingRange(ifLine, elseLine));
+                if (elseLine >= 0 && endLine > elseLine)
+                    out.push_back(makeFoldingRange(elseLine, endLine));
+            }
+
+            collectFolds(out, arg->thenBody);
+            collectFolds(out, arg->elseBody);
+        }
+        else if constexpr (std::is_same_v<T, std::shared_ptr<compiler::SwitchNode>>)
+        {
+            if (arg->sourceRange.start.line >= 0 &&
+                arg->endRange.start.line > arg->sourceRange.start.line)
+            {
+                out.push_back(makeFoldingRange(arg->sourceRange.start.line,
+                                               arg->endRange.start.line));
+            }
+
+            std::vector<const compiler::CaseNode *> branches;
+            branches.reserve(arg->cases.size() + (arg->defaultCase ? 1 : 0));
+            for (const auto &c : arg->cases)
+                branches.push_back(&c);
+            if (arg->defaultCase)
+                branches.push_back(&*arg->defaultCase);
+
+            for (size_t i = 0; i < branches.size(); ++i)
+            {
+                const auto &c = *branches[i];
+                int caseStart = c.sourceRange.start.line;
+                int caseEnd = -1;
+                if (i + 1 < branches.size())
+                    caseEnd = branches[i + 1]->sourceRange.start.line - 1;
+                else if (arg->endRange.start.line > 0)
+                    caseEnd = arg->endRange.start.line - 1;
+
+                if (caseStart >= 0 && caseEnd > caseStart)
+                    out.push_back(makeFoldingRange(caseStart, caseEnd));
+
+                collectFolds(out, c.body);
+            }
+        }
+    }, node);
+}
+
+static void collectFolds(std::vector<ToolingFoldingRange> &out,
+                         const std::vector<compiler::ASTNode> &nodes)
+{
+    for (const auto &node : nodes)
+        collectFoldNode(out, node);
+}
+
+static bool lineIsWithinTemplate(const std::vector<std::pair<int, int>> &templateLineRanges,
+                                 int line)
+{
+    for (const auto &[startLine, endLine] : templateLineRanges)
+    {
+        if (line >= startLine && line <= endLine)
+            return true;
+    }
+    return false;
+}
+
+static void collectTopLevelCommentFolds(std::vector<ToolingFoldingRange> &out,
+                                        const std::string &src,
+                                        const std::vector<std::pair<int, int>> &templateLineRanges)
+{
+    int line = 0;
+    size_t pos = 0;
+    while (pos < src.size())
+    {
+        size_t lineEnd = src.find('\n', pos);
+        if (lineEnd == std::string::npos)
+            lineEnd = src.size();
+
+        std::string_view text(src.data() + pos, lineEnd - pos);
+        const size_t firstNonWhitespace = text.find_first_not_of(" \t\r");
+        if (firstNonWhitespace != std::string::npos && !lineIsWithinTemplate(templateLineRanges, line))
+        {
+            std::string_view trimmed = text.substr(firstNonWhitespace);
+            if (trimmed.size() >= 2 && trimmed[0] == '/' && trimmed[1] == '*')
+            {
+                size_t blockStart = pos + firstNonWhitespace;
+                size_t blockEnd = src.find("*/", blockStart + 2);
+                if (blockEnd == std::string::npos)
+                    blockEnd = src.size();
+                else
+                    blockEnd += 2;
+
+                int endLine = line;
+                for (size_t i = pos; i < blockEnd; ++i)
+                {
+                    if (src[i] == '\n')
+                        ++endLine;
+                }
+
+                if (endLine > line)
+                    out.push_back(makeFoldingRange(line, endLine, "comment"));
+
+                while (pos < blockEnd)
+                {
+                    if (src[pos] == '\n')
+                        ++line;
+                    ++pos;
+                }
+                continue;
+            }
+        }
+
+        pos = (lineEnd == src.size()) ? src.size() : lineEnd + 1;
+        if (lineEnd != src.size())
+            ++line;
+    }
 }
 
 } // namespace
@@ -360,6 +524,35 @@ bool parseTemplateSource(const std::string &src,
         templates.push_back(std::move(parsed));
     }
     return true;
+}
+
+std::vector<ToolingFoldingRange> computeTemplateFoldingRanges(const std::string &src)
+{
+    std::vector<ToolingFoldingRange> folds;
+    std::vector<ParsedTemplateSource> templates;
+    parseTemplateSource(src, templates);
+
+    std::vector<std::pair<int, int>> templateLineRanges;
+    for (const auto &tpl : templates)
+    {
+        const int headerLine = tpl.sourceRange.start.line;
+        int bodyLineCount = 0;
+        for (char c : tpl.bodyText)
+        {
+            if (c == '\n')
+                ++bodyLineCount;
+        }
+
+        const int endLine = static_cast<int>(tpl.bodyStartLine) + 1 + bodyLineCount;
+        templateLineRanges.emplace_back(headerLine, endLine);
+        if (endLine > headerLine)
+            folds.push_back(makeFoldingRange(headerLine, endLine));
+
+        collectFolds(folds, tpl.body);
+    }
+
+    collectTopLevelCommentFolds(folds, src, templateLineRanges);
+    return folds;
 }
 
 std::vector<TemplateDirectiveRange> extractTemplateDirectiveRanges(const std::string &bodyText,

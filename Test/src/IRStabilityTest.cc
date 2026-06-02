@@ -203,16 +203,10 @@ TEST(IRStability, SchemaCheck)
             for (size_t index = 0; index < loaded.policies.size(); ++index)
                 project.add_policy_source(loaded.policies[index], loaded.name + "/policy_" + std::to_string(index) + ".json");
 
-            std::vector<tpp::DiagnosticLSPMessage> diagnostics;
-            tpp::LexedProject lexed;
-            tpp::ParsedProject parsed;
-            tpp::IR output;
-            bool ok = tpp::lex(project, lexed, diagnostics) &&
-                      tpp::parse(lexed, parsed, diagnostics) &&
-                      tpp::compile(parsed, output, diagnostics);
-            ASSERT_TRUE(ok) << "Failed to compile test case: " << tc.name;
+            const auto compileResult = tpp::compile(project);
+            ASSERT_TRUE(compileResult) << "Failed to compile test case: " << tc.name;
 
-            nlohmann::json actualIR = output;
+            nlohmann::json actualIR = compileResult.ir;
 
             // Collect key paths
             std::set<std::string> expectedPaths, actualPaths;

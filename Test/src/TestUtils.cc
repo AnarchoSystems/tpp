@@ -1,5 +1,6 @@
 #include "TestUtils.h"
-#include "TestCases.h" // generated at configure time
+#include "TestCaseIO.h"
+#include <tpp/ProjectConfigResolver.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -25,65 +26,126 @@ void PrintTo(const tTestCase &testCase, std::ostream *os)
     }
 }
 
-// ── File helpers ──────────────────────────────────────────────────────────────
-
-static std::string readFile(const std::filesystem::path &path)
+struct TestCaseExpectations
 {
-    std::ifstream f(path);
-    return std::string((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-}
+    bool expectSuccess = false;
+    std::optional<std::string> expectedOutput;
+    std::vector<tpp::DiagnosticLSPMessage> expectedDiagnostics;
+    std::string getFunctionError;
+    std::string renderError;
+    std::vector<LspTokenSpec> lspTokenSpecs;
+    std::vector<LspFoldingSpec> lspFoldingSpecs;
+    std::vector<LspDefinitionSpec> lspDefinitionSpecs;
+    std::vector<LspHoverSpec> lspHoverSpecs;
+};
 
-static bool matchGlob(const std::string &pattern, const std::string &text)
+static void loadLspSpecs(const nlohmann::json &lspJson,
+                         const std::string &testCaseName,
+                         TestCaseExpectations &expectations)
 {
-    size_t pi = 0, ti = 0, starPos = std::string::npos, matchPos = 0;
-    while (ti < text.size())
+    if (lspJson.contains("semantic_tokens"))
     {
-        if (pi < pattern.size() && (pattern[pi] == '?' || pattern[pi] == text[ti]))
-            { ++pi; ++ti; }
-        else if (pi < pattern.size() && pattern[pi] == '*')
-            { starPos = pi++; matchPos = ti; }
-        else if (starPos != std::string::npos)
-            { pi = starPos + 1; ti = ++matchPos; }
-        else
-            return false;
-    }
-    while (pi < pattern.size() && pattern[pi] == '*') ++pi;
-    return pi == pattern.size();
-}
-
-static bool hasAllowedSourceExtension(const std::string &name, bool isTypes)
-{
-    if (name.size() >= 4 && name.substr(name.size() - 4) == ".tpp")
-        return true;
-    if (isTypes && name.size() >= 10 && name.substr(name.size() - 10) == ".tpp.types")
-        return true;
-    return false;
-}
-
-static std::vector<std::filesystem::path> expandPattern(const std::filesystem::path &baseDir,
-                                                        const std::string &pattern,
-                                                        bool isTypes)
-{
-    std::filesystem::path patPath(pattern);
-    std::string filename = patPath.filename().string();
-    std::filesystem::path parentDir = baseDir / patPath.parent_path();
-
-    if (filename.find('*') == std::string::npos)
-        return {baseDir / pattern};
-
-    std::vector<std::filesystem::path> results;
-    if (std::filesystem::is_directory(parentDir))
-    {
-        for (const auto &entry : std::filesystem::directory_iterator(parentDir))
+        LspTokenSpec spec;
+        spec.testCase = testCaseName;
+        spec.file = lspJson.at("semantic_tokens").at("file").get<std::string>();
+        for (const auto &token : lspJson.at("semantic_tokens").at("expected_tokens"))
         {
-            if (!entry.is_regular_file()) continue;
-            auto name = entry.path().filename().string();
-            if (!hasAllowedSourceExtension(name, isTypes)) continue;
-            if (matchGlob(filename, name)) results.push_back(entry.path());
+            spec.expected.push_back({
+                token.at("line").get<int>(),
+                token.at("character").get<int>(),
+                token.at("length").get<int>(),
+                token.at("type").get<std::string>()
+            });
         }
-        std::sort(results.begin(), results.end());
+        expectations.lspTokenSpecs.push_back(std::move(spec));
     }
-    return results;
+
+    if (lspJson.contains("folding_ranges"))
+    {
+        LspFoldingSpec spec;
+        spec.testCase = testCaseName;
+        spec.file = lspJson.at("folding_ranges").at("file").get<std::string>();
+        for (const auto &range : lspJson.at("folding_ranges").at("expected"))
+        {
+            spec.expected.push_back({
+                range.at("startLine").get<int>(),
+                range.at("endLine").get<int>()
+            });
+        }
+        expectations.lspFoldingSpecs.push_back(std::move(spec));
+    }
+
+    if (lspJson.contains("go_to_definition") && lspJson.at("go_to_definition").is_array())
+    {
+        for (const auto &definition : lspJson.at("go_to_definition"))
+        {
+            LspDefinitionSpec spec;
+            spec.name = definition.at("name").get<std::string>();
+            spec.testCase = testCaseName;
+            spec.file = definition.at("file").get<std::string>();
+            spec.line = definition.at("line").get<int>();
+            spec.character = definition.at("character").get<int>();
+            if (definition.contains("expected_file"))
+                spec.expected_file = definition.at("expected_file").get<std::string>();
+            if (definition.contains("expected_line"))
+                spec.expected_line = definition.at("expected_line").get<int>();
+            if (definition.contains("expected_character"))
+                spec.expected_character = definition.at("expected_character").get<int>();
+            expectations.lspDefinitionSpecs.push_back(std::move(spec));
+        }
+    }
+
+    if (lspJson.contains("hover") && lspJson.at("hover").is_array())
+    {
+        for (const auto &hover : lspJson.at("hover"))
+        {
+            LspHoverSpec spec;
+            spec.name = hover.at("name").get<std::string>();
+            spec.testCase = testCaseName;
+            spec.file = hover.at("file").get<std::string>();
+            spec.line = hover.at("line").get<int>();
+            spec.character = hover.at("character").get<int>();
+            for (const auto &expected : hover.at("expected_contains"))
+                spec.expected_contains.push_back(expected.get<std::string>());
+            expectations.lspHoverSpecs.push_back(std::move(spec));
+        }
+    }
+}
+
+static TestCaseExpectations loadCaseExpectations(const std::filesystem::path &path,
+                                                 const std::string &testCaseName)
+{
+    TestCaseExpectations expectations;
+    auto specJson = test_support::load_test_case_spec(path);
+
+    if (const auto expectedOutput = test_support::load_expected_output(path, specJson);
+        expectedOutput.has_value())
+    {
+        expectations.expectSuccess = true;
+        expectations.expectedOutput = *expectedOutput;
+    }
+    else
+    {
+        expectations.expectSuccess = specJson.value("expect_success", false);
+    }
+
+    if (specJson.contains("expected_diagnostics"))
+    {
+        expectations.expectedDiagnostics =
+            specJson.at("expected_diagnostics").get<std::vector<tpp::DiagnosticLSPMessage>>();
+    }
+
+    if (specJson.contains("expected_errors"))
+    {
+        const tErrors errors = specJson.at("expected_errors").get<tErrors>();
+        expectations.getFunctionError = errors.getFunctionError;
+        expectations.renderError = errors.renderError;
+    }
+
+    if (specJson.contains("lsp"))
+        loadLspSpecs(specJson.at("lsp"), testCaseName, expectations);
+
+    return expectations;
 }
 
 // ── extract() ────────────────────────────────────────────────────────────────
@@ -92,46 +154,22 @@ tLoadedTestCase tTestCase::extract() const
 {
     tLoadedTestCase loaded;
     loaded.name = name;
+    const auto expectations = loadCaseExpectations(path, name);
+    const auto inputs = tpp::load_project_inputs(path);
 
-    std::ifstream configFile(path / "tpp-config.json");
-    if (!configFile.is_open())
-        throw std::runtime_error("No tpp-config.json found in " + path.string());
-    nlohmann::json config;
-    try
+    for (const auto &source : inputs.sourceFiles)
     {
-        config = nlohmann::json::parse(std::string(
-            (std::istreambuf_iterator<char>(configFile)),
-            std::istreambuf_iterator<char>()));
+        std::string relPath = std::filesystem::relative(source.path, path).string();
+        loaded.sources.push_back({name + "/" + relPath, test_support::read_text_file(source.path), source.isTypes});
     }
-    catch (const std::exception &e)
+    for (const auto &policyPath : inputs.policyFiles)
     {
-        throw std::runtime_error("Invalid tpp-config.json in " + path.string() + ": " + e.what());
-    }
-
-    for (const auto &pattern : config.value("types", nlohmann::json::array()))
-    {
-        for (const auto &filePath : expandPattern(path, pattern.get<std::string>(), true))
-        {
-            std::string relPath = std::filesystem::relative(filePath, path).string();
-            loaded.sources.push_back({name + "/" + relPath, readFile(filePath), true});
-        }
-    }
-    for (const auto &pattern : config.value("templates", nlohmann::json::array()))
-    {
-        for (const auto &filePath : expandPattern(path, pattern.get<std::string>(), false))
-        {
-            std::string relPath = std::filesystem::relative(filePath, path).string();
-            loaded.sources.push_back({name + "/" + relPath, readFile(filePath), false});
-        }
-    }
-    for (const auto &policyEntry : config.value("replacement-policies", nlohmann::json::array()))
-    {
-        std::filesystem::path policyPath = path / policyEntry.get<std::string>();
         if (std::filesystem::is_regular_file(policyPath))
-            loaded.policies.push_back(readFile(policyPath));
+            loaded.policies.push_back(test_support::read_text_file(policyPath));
     }
 
     // Preview selection: read template/signature/input from previews[0].
+    const auto &config = inputs.config;
     if (config.contains("previews") && config["previews"].is_array() &&
         !config["previews"].empty())
     {
@@ -153,33 +191,12 @@ tLoadedTestCase tTestCase::extract() const
         loaded.input = nlohmann::json::object();
     }
 
-    std::ifstream expectedOutputFile(path / "expected_output.txt");
-    if (expectedOutputFile.is_open())
-    {
-        loaded.expectSuccess = true;
-        loaded.expectedOutput = std::string(
-            (std::istreambuf_iterator<char>(expectedOutputFile)), std::istreambuf_iterator<char>());
-    }
-    else
-    {
-        loaded.expectSuccess = false;
-        std::ifstream diagFile(path / "expected_diagnostics.json");
-        if (diagFile.is_open())
-        {
-            auto j = nlohmann::json::parse(std::string(
-                (std::istreambuf_iterator<char>(diagFile)), std::istreambuf_iterator<char>()));
-            loaded.expectedDiagnostics = j.get<std::vector<tpp::DiagnosticLSPMessage>>();
-        }
-        std::ifstream errFile(path / "expected_errors.json");
-        if (errFile.is_open())
-        {
-            auto j = nlohmann::json::parse(std::string(
-                (std::istreambuf_iterator<char>(errFile)), std::istreambuf_iterator<char>()));
-            tErrors errs = j.get<tErrors>();
-            loaded.getFunctionError = errs.getFunctionError;
-            loaded.renderError = errs.renderError;
-        }
-    }
+    loaded.expectSuccess = expectations.expectSuccess;
+    if (expectations.expectedOutput.has_value())
+        loaded.expectedOutput = *expectations.expectedOutput;
+    loaded.expectedDiagnostics = expectations.expectedDiagnostics;
+    loaded.getFunctionError = expectations.getFunctionError;
+    loaded.renderError = expectations.renderError;
 
     if (loaded.sources.empty())
         throw std::runtime_error("No .tpp source files found in " + path.string());
@@ -189,41 +206,131 @@ tLoadedTestCase tTestCase::extract() const
 
 // ── Test case discovery ───────────────────────────────────────────────────────
 
-static std::vector<tTestCase> parseCaseList(const char* const names[], bool expectSuccess)
+static std::vector<tTestCase> scanTestCases()
 {
     std::vector<tTestCase> cases;
-    for (size_t i = 0; names[i] != nullptr; ++i)
+    const std::filesystem::path root = "TestCases";
+    if (!std::filesystem::is_directory(root))
+        return cases;
+
+    for (const auto &entry : std::filesystem::directory_iterator(root))
     {
-        tTestCase tc;
-        tc.name = names[i];
-        tc.path = std::filesystem::path("TestCases") / names[i];
-        tc.expectSuccess = expectSuccess;
-        cases.push_back(std::move(tc));
+        if (!entry.is_directory())
+            continue;
+
+        const auto path = entry.path();
+        if (!std::filesystem::exists(path / "tpp-config.json"))
+            continue;
+
+        tTestCase testCase;
+        testCase.name = path.filename().string();
+        testCase.path = path;
+        testCase.expectSuccess = loadCaseExpectations(path, testCase.name).expectSuccess;
+        cases.push_back(std::move(testCase));
     }
+
+    std::sort(cases.begin(), cases.end(), [](const tTestCase &left, const tTestCase &right)
+    {
+        return left.name < right.name;
+    });
+    return cases;
+}
+
+static const std::vector<tTestCase> &allTestCases()
+{
+    static const std::vector<tTestCase> cases = scanTestCases();
     return cases;
 }
 
 std::vector<tTestCase> GetTestCases()
 {
-    auto all = parseCaseList(kTppSuccessCases, true);
-    auto failures = parseCaseList(kTppFailureCases, false);
-    all.insert(all.end(), failures.begin(), failures.end());
-    return all;
+    return allTestCases();
 }
 
 std::vector<tTestCase> GetDiagnosticTestCases()
 {
-    return parseCaseList(kTppDiagnosticCases, false);
+    std::vector<tTestCase> cases;
+    for (const auto &testCase : allTestCases())
+    {
+        const auto expectations = loadCaseExpectations(testCase.path, testCase.name);
+        if (!expectations.expectSuccess && !expectations.expectedDiagnostics.empty())
+            cases.push_back(testCase);
+    }
+    return cases;
 }
 
 std::vector<tTestCase> GetNegativeTestCases()
 {
-    return parseCaseList(kTppFailureCases, false);
+    std::vector<tTestCase> cases;
+    for (const auto &testCase : allTestCases())
+    {
+        if (!testCase.expectSuccess)
+            cases.push_back(testCase);
+    }
+    return cases;
 }
 
 std::vector<tTestCase> GetPositiveTestCases()
 {
-    return parseCaseList(kTppSuccessCases, true);
+    std::vector<tTestCase> cases;
+    for (const auto &testCase : allTestCases())
+    {
+        if (testCase.expectSuccess)
+            cases.push_back(testCase);
+    }
+    return cases;
+}
+
+std::vector<LspTokenSpec> GetLspTokenSpecs()
+{
+    std::vector<LspTokenSpec> specs;
+    for (const auto &testCase : allTestCases())
+    {
+        auto expectations = loadCaseExpectations(testCase.path, testCase.name);
+        specs.insert(specs.end(),
+                     expectations.lspTokenSpecs.begin(),
+                     expectations.lspTokenSpecs.end());
+    }
+    return specs;
+}
+
+std::vector<LspFoldingSpec> GetLspFoldingSpecs()
+{
+    std::vector<LspFoldingSpec> specs;
+    for (const auto &testCase : allTestCases())
+    {
+        auto expectations = loadCaseExpectations(testCase.path, testCase.name);
+        specs.insert(specs.end(),
+                     expectations.lspFoldingSpecs.begin(),
+                     expectations.lspFoldingSpecs.end());
+    }
+    return specs;
+}
+
+std::vector<LspDefinitionSpec> GetLspDefinitionSpecs()
+{
+    std::vector<LspDefinitionSpec> specs;
+    for (const auto &testCase : allTestCases())
+    {
+        auto expectations = loadCaseExpectations(testCase.path, testCase.name);
+        specs.insert(specs.end(),
+                     expectations.lspDefinitionSpecs.begin(),
+                     expectations.lspDefinitionSpecs.end());
+    }
+    return specs;
+}
+
+std::vector<LspHoverSpec> GetLspHoverSpecs()
+{
+    std::vector<LspHoverSpec> specs;
+    for (const auto &testCase : allTestCases())
+    {
+        auto expectations = loadCaseExpectations(testCase.path, testCase.name);
+        specs.insert(specs.end(),
+                     expectations.lspHoverSpecs.begin(),
+                     expectations.lspHoverSpecs.end());
+    }
+    return specs;
 }
 
 // ── CLI runner ────────────────────────────────────────────────────────────────

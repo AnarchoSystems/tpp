@@ -6,6 +6,7 @@
 #include <sstream>
 #include <algorithm>
 #include <array>
+#include <optional>
 #include <string>
 #include <vector>
 #include <nlohmann/json.hpp>
@@ -60,6 +61,50 @@ struct tErrors
     NLOHMANN_DEFINE_TYPE_INTRUSIVE(tErrors, getFunctionError, renderError)
 };
 
+struct LspExpectedToken
+{
+    int line = 0;
+    int character = 0;
+    int length = 0;
+    std::string type;
+};
+
+struct LspTokenSpec
+{
+    std::string testCase;
+    std::string file;
+    std::vector<LspExpectedToken> expected;
+};
+
+struct LspFoldingSpec
+{
+    std::string testCase;
+    std::string file;
+    std::vector<std::pair<int, int>> expected; // {startLine, endLine}
+};
+
+struct LspDefinitionSpec
+{
+    std::string name;
+    std::string testCase;
+    std::string file;
+    int line = 0;
+    int character = 0;
+    std::optional<std::string> expected_file; // absent = expect no result
+    int expected_line = -1;
+    int expected_character = -1;
+};
+
+struct LspHoverSpec
+{
+    std::string name;
+    std::string testCase;
+    std::string file;
+    int line = 0;
+    int character = 0;
+    std::vector<std::string> expected_contains;
+};
+
 // ── CLI helpers ───────────────────────────────────────────────────────────────
 
 struct tCLIOutput
@@ -73,9 +118,13 @@ tCLIOutput runCommand(const std::string &command);
 tCLIOutput runCommandDirect(const std::vector<std::string> &argv);
 tCLIOutput runCommandDirect(const std::vector<std::string> &argv, const std::string &stdinData);
 
-// ── Test case discovery (driven by configure-time compile definitions) ────────
+// ── Test case discovery (runtime filesystem scan) ─────────────────────────────
 
 std::vector<tTestCase> GetTestCases();
 std::vector<tTestCase> GetPositiveTestCases();
 std::vector<tTestCase> GetNegativeTestCases();
 std::vector<tTestCase> GetDiagnosticTestCases();
+std::vector<LspTokenSpec> GetLspTokenSpecs();
+std::vector<LspFoldingSpec> GetLspFoldingSpecs();
+std::vector<LspDefinitionSpec> GetLspDefinitionSpecs();
+std::vector<LspHoverSpec> GetLspHoverSpecs();

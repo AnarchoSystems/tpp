@@ -32,9 +32,9 @@ For the full multi-file sync rules, use `.github/MAINTENANCE-CHECKLIST.md`.
 | Template parsing | `TemplateParser.cc` | Builds the template AST |
 | Rendering | `Rendering.cc` | Executes the AST against a `RenderContext`; handles alignment and policy scopes |
 | IR bridge | `Compiler.cc`, `PublicIRConverter.h`, `IRAssembler.h` | Converts the internal compiler model into the public IR consumed by backends and the runtime renderer |
-| Public API | `Libraries/lib_tpp/include/tpp/` | `Compiler.h`, `IR.h`, `Types.h`, `AST.h`, `Policy.h`, `Diagnostic.h`, etc. |
+| Public API | `Libraries/lib_tpp/include/tpp/` | `Compiler.h`, `IR.h`, `Policy.h`, `Diagnostic.h`, `Runtime.h`, `Tooling.h`, `Writer.h`, `ArgType.h`, `RenderMapping.h` |
 | Internal headers | `tpp/` | `TypedefParser.h`, `TemplateParser.h`, `Tokenizer.h`, `Parser.h` |
-| Compiler CLI | `Executables/tpp/Main.cc` | Command-line entry point; reads tpp-config.json, emits JSON to stdout |
+| Compiler CLI | `Executables/tpp/Main.cc` | Command-line entry point; reads `tpp-config.json`, emits JSON IR, and can print resolved project inputs for build tooling |
 | tpp2cpp CLI | `Executables/backends/tpp2cpp/Main.cc` | Generates C++ types/functions/impl from intermediate representation JSON |
 | render-tpp CLI | `Executables/backends/render-tpp/Main.cc` | Renders a named template with JSON input from stdin |
 | `tpp_add` macro | `cmake/TppHelpers.cmake` | CMake helper: automates three-step tpp2cpp code generation |
@@ -62,10 +62,10 @@ Keep this section as a pointer only. The authoritative workflow lives in `.githu
 
 **Quick reference:**
 - Each test is a self-contained directory under `Test/TestCases/<name>/`.
-- Required files: a `tpp-config.json`, at least one template file, and one expected-result file. Runtime input lives in `tpp-config.json` under `previews[0].input`.
+- Required files: a `tpp-config.json`, at least one template file, and a `test-case.json`. Runtime input lives in `tpp-config.json` under `previews[0].input`. Success cases may also store their golden output in `expected_output.txt`.
 - No test registration needed — the test runner auto-discovers subdirectories.
 - `error_` prefix in directory name signals an expected failure test.
-- **No trailing newline** in `expected_output.txt` — `Program::run()` strips the final newline.
+- `test-case.json` carries structured expectations such as diagnostics, runtime errors, and optional LSP assertions. Success outputs may live either in `expected_output.txt` or in `test-case.json` via `expected_output`.
 
 Use `.github/instructions/tpp-language.instructions.md` for the authoritative syntax reference when editing `.tpp` or `.tpp.types` files. Use `docs/language.md` for user-facing explanation and examples.
 
@@ -76,6 +76,6 @@ Use `.github/instructions/tpp-language.instructions.md` for the authoritative sy
 - **Block indentation:** Leading whitespace of the first non-empty line in a block body is the "zero marker" — all body lines are de-indented by that amount, then re-indented at the insertion column.
 - **Recursive types:** `FieldDef`/`VariantDef` carry `bool recursive = false`; `tpp2cpp` generates `std::unique_ptr<T>` for recursive fields.
 - **`replace_string_in_file` non-breaking spaces:** The tool can inject U+00A0 in `| ` separator positions. Use `hexdump` to diagnose if tpp reports unexpected key errors.
-- **`file(GLOB …)` in CMakeLists.txt:** After adding new source files, re-run `cmake ..` to reconfigure before building.
+- **Generated-test discovery vs rebuilds:** Test-case discovery still uses `CONFIGURE_DEPENDS`, so a normal build auto-regenerates when the case set changes. Per-case generated rebuilds now come from exact `tpp --print-inputs` depfiles rather than raw directory globs.
 - **Policy scope propagation:** A policy declared on a `@for@`, `@render … via@`, or `@switch@` scope propagates through *all* function calls made from within that scope. A callee does not need to re-declare the policy. Use `policy="none"` on a specific interpolation to opt out.
 - **Alignment spec length:** The `align="spec"` string length must equal the number of `@&@` separators in the loop body plus one. Too-short spec is a compile error.

@@ -1,0 +1,18 @@
+{
+    "expect_success": false,
+    "expected_diagnostics": [
+        {
+            "uri": "error_switch_extraneous_options/template.tpp",
+            "diagnostics": [
+                {
+                    "range": {
+                        "start": {"line": 1, "character": 1},
+                        "end": {"line": 1, "character": 4}
+                    },
+                    "message": "unknown option 'foo'",
+                    "severity": "error"
+                }
+            ]
+        }
+    ]
+}

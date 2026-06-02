@@ -11,17 +11,10 @@ tpp::IR compile_ir(const std::string &templateSrc)
     tpp::TppProject project;
     project.add_template_source(templateSrc, "memory://lookup/template.tpp");
 
-    tpp::LexedProject lexed;
-    tpp::ParsedProject parsed;
-    tpp::IR ir;
-    std::vector<tpp::DiagnosticLSPMessage> diagnostics;
+    auto compileResult = tpp::compile(project);
 
-    const bool ok = tpp::lex(project, lexed, diagnostics) &&
-                    tpp::parse(lexed, parsed, diagnostics) &&
-                    tpp::compile(parsed, ir, diagnostics);
-
-    EXPECT_TRUE(ok) << nlohmann::json(diagnostics).dump(2);
-    return ir;
+    EXPECT_TRUE(compileResult) << nlohmann::json(compileResult.diagnostics).dump(2);
+    return std::move(compileResult.ir);
 }
 
 const char *kOverloadedMain =

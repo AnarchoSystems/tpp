@@ -384,7 +384,7 @@ When the compiler is invoked with source range tracking (used by the language se
 
 Source locations are optional metadata. Consumers that do not need editor features or source mapping can ignore them safely.
 
-`SourceRange` itself is intentionally line/character-only. Template-file identity for runtime/editor features is carried separately on `FunctionDef.sourceUri`, while schema-definition file identity remains in the compiler semantic model used by the language server.
+`SourceRange` itself is intentionally line/character-only. Template-file identity for runtime/editor features is carried separately on `FunctionDef.sourceUri`. Schema-definition file identity is not part of the public IR contract; editor features recover exact declaring files through workspace queries backed by compiler metadata.
 
 ### SourceRange
 
@@ -431,7 +431,7 @@ Backends consume it:
 tpp2cpp types < ir.json       # Generate C++ types
 tpp2cpp functions < ir.json   # Generate C++ function declarations
 tpp2cpp impl < ir.json        # Generate C++ function implementations
-render-tpp main < ir.json     # Render the 'main' template with JSON input
+render-tpp main '{}' < ir.json # Render the 'main' template with JSON input
 ```
 
 The C++ library (`lib_tpp`) can also produce and consume the IR programmatically — see the [Usage Guide](usage.md) for details.

@@ -2,10 +2,19 @@
 
 #include <tpp/IR.h>
 #include <tpp/Policy.h>
-#include <tpp/Types.h>
+#include "tpp/Types.h"
+
+namespace tpp::compiler
+{
+    class SemanticModel;
+}
 
 namespace tpp
 {
+    bool assemble_public_ir(const compiler::SemanticModel &semanticModel,
+                            IR &output,
+                            bool includeRanges,
+                            bool includeRawTypedefs);
     std::optional<SourceRange> to_public_range(const Range &range, bool include);
     TypeKind to_public_type(const compiler::TypeRef &type);
     std::vector<StructDef> to_public_structs(const std::vector<compiler::StructDef> &defs,

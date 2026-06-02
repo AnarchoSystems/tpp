@@ -3,16 +3,23 @@
 #include <tpp/Compiler.h>
 #include <tpp/IR.h>
 #include <tpp/Diagnostic.h>
-#include <nlohmann/json.hpp>
 #include <string>
+#include <string_view>
 #include <vector>
 #include <map>
 #include <set>
+#include <memory>
 #include <filesystem>
 #include <optional>
 
 namespace tpp
 {
+    struct ProjectSourceLocation
+    {
+        std::string uri;
+        Range range;
+    };
+
     // One WorkspaceProject corresponds to one tpp-config.json on disk.
     // It owns the project inputs, compilation artifacts, and an in-memory dirty buffer
     // for open files that have unsaved changes.
@@ -20,6 +27,7 @@ namespace tpp
     {
     public:
         explicit WorkspaceProject(std::filesystem::path configPath);
+        ~WorkspaceProject();
 
         // Re-read the config file and re-resolve file lists.
         // Returns false if the config file can't be parsed.
@@ -40,7 +48,15 @@ namespace tpp
         const std::map<std::string, std::vector<Diagnostic>> &diagnostics() const { return diagnostics_; }
 
         const IR &output() const { return output_; }
-        const compiler::SemanticModel &semantic_model() const { return semanticModel_; }
+        const StructDef *find_struct(std::string_view name) const noexcept;
+        const EnumDef *find_enum(std::string_view name) const noexcept;
+        const FieldDef *find_struct_field(std::string_view structName,
+                                          std::string_view fieldName) const noexcept;
+        std::vector<const FunctionDef *> find_template_overloads(std::string_view name) const;
+        bool has_named_type(std::string_view name) const noexcept;
+        std::optional<ProjectSourceLocation> find_named_type_location(std::string_view name) const;
+        std::optional<ProjectSourceLocation> find_struct_field_location(std::string_view structName,
+                                        std::string_view fieldName) const;
         const std::filesystem::path &configPath() const { return configPath_; }
         const std::filesystem::path &root() const { return root_; }
 
@@ -73,9 +89,10 @@ namespace tpp
         std::map<std::string, std::string> dirtyBuffer_; // URI -> text
 
         TppProject project_;
-            compiler::SemanticModel semanticModel_;  // Built during compile() for LSP queries
-            IR output_;
-            std::map<std::string, std::vector<Diagnostic>> diagnostics_;
+        std::map<std::string, ProjectSourceLocation> namedTypeLocations_;
+        std::map<std::string, std::map<std::string, ProjectSourceLocation>> structFieldLocations_;
+        IR output_;
+        std::map<std::string, std::vector<Diagnostic>> diagnostics_;
 
         std::string readFile(const std::filesystem::path &path) const;
         std::string pathToUri(const std::filesystem::path &path) const;

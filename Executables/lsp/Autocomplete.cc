@@ -1,6 +1,6 @@
 #include "Autocomplete.h"
-#include <tpp/IR.h>
-#include <tpp/AST.h>
+#include "tpp/ToolingInternal.h"
+#include "tpp/AST.h"
 #include <map>
 #include <string>
 
@@ -13,7 +13,6 @@ using TypeRef          = compiler::TypeRef;
 using NamedType        = compiler::NamedType;
 using ListType         = compiler::ListType;
 using OptionalType     = compiler::OptionalType;
-using SemanticModel    = compiler::SemanticModel;
 using TemplateFunction = compiler::TemplateFunction;
 using ASTNode          = compiler::ASTNode;
 using Variable         = compiler::Variable;
@@ -24,30 +23,33 @@ using SwitchNode       = compiler::SwitchNode;
 
 using Scope = std::map<std::string, TypeRef>;
 
-// Returns the TypeRef for a named type, or nullopt if not found.
-[[maybe_unused]] static std::optional<TypeRef> resolveNamed(const std::string &name, const SemanticModel &model)
-{
-    if (!model.find_type_entry(name)) return {};
-    return NamedType{name};
-}
-
 // Collect all fields of a TypeRef if it's a named struct.
-static std::vector<compiler::FieldDef> fieldsOf(const TypeRef &type, const SemanticModel &model)
+static std::vector<const tpp::FieldDef *> fieldsOf(const TypeRef &type, const WorkspaceProject &project)
 {
-    return std::visit([&](auto &&arg) -> std::vector<compiler::FieldDef>
+    return std::visit([&](auto &&arg) -> std::vector<const tpp::FieldDef *>
     {
         using T = std::decay_t<decltype(arg)>;
         if constexpr (std::is_same_v<T, NamedType>)
         {
-            if (const auto *sd = model.find_struct(arg.name))
-                return sd->fields;
+            if (const auto *sd = project.find_struct(arg.name))
+            {
+                std::vector<const tpp::FieldDef *> fields;
+                fields.reserve(sd->fields.size());
+                for (const auto &field : sd->fields)
+                    fields.push_back(&field);
+                return fields;
+            }
         }
         else if constexpr (std::is_same_v<T, std::shared_ptr<ListType>>)
         {
             // list element fields (for for-loop var)
-            return fieldsOf(arg->elementType, model);
+            return arg ? fieldsOf(arg->elementType, project) : std::vector<const tpp::FieldDef *>{};
         }
-        return {};
+        else if constexpr (std::is_same_v<T, std::shared_ptr<OptionalType>>)
+        {
+            return arg ? fieldsOf(arg->innerType, project) : std::vector<const tpp::FieldDef *>{};
+        }
+        return std::vector<const tpp::FieldDef *>{};
     }, type);
 }
 
@@ -63,7 +65,7 @@ static std::optional<TypeRef> elementType(const TypeRef &type)
 // indicating whether cursor is immediately after a '.' in a variable expression.
 // We also detect the ForNode varName type for inner scopes.
 static bool walkForScope(const std::vector<ASTNode> &nodes, int line, int character,
-                         Scope &scope, const SemanticModel &model)
+                         Scope &scope, const WorkspaceProject &project)
 {
     for (const auto &node : nodes)
     {
@@ -72,7 +74,7 @@ static bool walkForScope(const std::vector<ASTNode> &nodes, int line, int charac
             using T = std::decay_t<decltype(arg)>;
             if constexpr (std::is_same_v<T, std::shared_ptr<IndentNode>>)
             {
-                return walkForScope(arg->body, line, character, scope, model);
+                return walkForScope(arg->body, line, character, scope, project);
             }
             if constexpr (std::is_same_v<T, std::shared_ptr<ForNode>>)
             {
@@ -87,21 +89,21 @@ static bool walkForScope(const std::vector<ASTNode> &nodes, int line, int charac
                     auto et = elementType(it->second);
                     if (et) scope[arg->varName] = *et;
                 }
-                return walkForScope(arg->body, line, character, scope, model);
+                return walkForScope(arg->body, line, character, scope, project);
             }
             else if constexpr (std::is_same_v<T, std::shared_ptr<IfNode>>)
             {
                 if (arg->sourceRange.start.line > line) return false;
-                if (walkForScope(arg->thenBody, line, character, scope, model)) return true;
-                return walkForScope(arg->elseBody, line, character, scope, model);
+                if (walkForScope(arg->thenBody, line, character, scope, project)) return true;
+                return walkForScope(arg->elseBody, line, character, scope, project);
             }
             else if constexpr (std::is_same_v<T, std::shared_ptr<SwitchNode>>)
             {
                 if (arg->sourceRange.start.line > line) return false;
                 for (const auto &c : arg->cases)
-                    if (walkForScope(c.body, line, character, scope, model)) return true;
+                    if (walkForScope(c.body, line, character, scope, project)) return true;
                 if (arg->defaultCase)
-                    return walkForScope(arg->defaultCase->body, line, character, scope, model);
+                    return walkForScope(arg->defaultCase->body, line, character, scope, project);
             }
             return false;
         }, node);
@@ -172,12 +174,15 @@ nlohmann::json computeCompletions(const std::string &uri,
                                   const WorkspaceProject &project)
 {
     nlohmann::json result = nlohmann::json::array();
-    const auto &model = project.semantic_model();
 
     // Build initial scope from the function that contains (line, character)
     Scope scope;
-    const TemplateFunction *enclosingFunc = nullptr;
-    for (const auto &func : model.functions())
+    std::string content = project.getContent(uri);
+    std::vector<ParsedTemplateSource> templates;
+    parseTemplateSource(content, templates);
+
+    const ParsedTemplateSource *enclosingFunc = nullptr;
+    for (const auto &func : templates)
     {
         if (func.sourceRange.start.line <= line)
         {
@@ -189,10 +194,9 @@ nlohmann::json computeCompletions(const std::string &uri,
     }
 
     if (enclosingFunc)
-        walkForScope(enclosingFunc->body, line, character, scope, model);
+        walkForScope(enclosingFunc->body, line, character, scope, project);
 
     // Detect context: after '.'?
-    std::string content = project.getContent(uri);
     char prev = charBefore(content, line, character);
 
     if (prev == '.')
@@ -202,14 +206,14 @@ nlohmann::json computeCompletions(const std::string &uri,
         auto it = scope.find(varName);
         if (it != scope.end())
         {
-            auto fields = fieldsOf(it->second, model);
+            auto fields = fieldsOf(it->second, project);
             for (const auto &f : fields)
-                result.push_back(makeItem(f.name, 5 /*Field*/));
+                result.push_back(makeItem(f->name, 5 /*Field*/));
         }
         // Also try all struct fields as fallback
         if (result.empty())
         {
-            for (const auto &sd : model.structs_view())
+            for (const auto &sd : project.output().structs)
                 for (const auto &f : sd.fields)
                     result.push_back(makeItem(f.name, 5 /*Field*/, sd.name + "." + f.name));
         }
@@ -221,15 +225,15 @@ nlohmann::json computeCompletions(const std::string &uri,
         result.push_back(makeItem(name, 6 /*Variable*/, {}, 0));
 
     // Function names (medium priority)
-    for (const auto &func : model.functions())
+    for (const auto &func : project.output().functions)
         result.push_back(makeItem(func.name, 3 /*Function*/, {}, 1));
 
     // Type names — only useful in .tpp.types files, not in templates
     if (project.isTypeUri(uri))
     {
-        for (const auto &sd : model.structs_view())
+        for (const auto &sd : project.output().structs)
             result.push_back(makeItem(sd.name, 7 /*Class*/, {}, 2));
-        for (const auto &ed : model.enums_view())
+        for (const auto &ed : project.output().enums)
             result.push_back(makeItem(ed.name, 13 /*Enum*/, {}, 2));
     }
 

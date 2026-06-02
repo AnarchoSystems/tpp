@@ -4,6 +4,8 @@ This guide covers the tpp compiler toolchain as a whole: how source files become
 
 For the template language itself, see the [Language Reference](language.md).
 
+For repo architecture and workflow rules, see [architecture.md](architecture.md), [backend-architecture.md](backend-architecture.md), [testing-workflow.md](testing-workflow.md), and [versioning-and-ir.md](versioning-and-ir.md).
+
 ---
 
 ## Design Philosophy
@@ -52,7 +54,7 @@ In practice, that gives tpp a very wide range. It can sit in a build pipeline, a
 ### Synopsis
 
 ```
-tpp [folder]
+tpp [options] [folder]
 ```
 
 If `folder` is omitted, the current working directory is used.
@@ -62,6 +64,7 @@ If `folder` is omitted, the current working directory is used.
 | Option | Short | Description |
 |---|---|---|
 | `--help` | `-h` | Print usage information and exit |
+| `--print-inputs` | — | Print the resolved `tpp-config.json`, source, and policy inputs one per line and exit |
 | `--source-ranges` | — | Include `sourceRange` fields in the emitted IR for source mapping and IDE features |
 
 ### How It Works
@@ -73,6 +76,22 @@ If `folder` is omitted, the current working directory is used.
 5. The compiler validates all types, checks template field accesses, and builds the AST.
 6. **On success:** the `IR` JSON is written to stdout.
 7. **On failure:** diagnostics are written to stderr in GCC format — compatible with VS Code's problem matcher and most CI log parsers.
+
+### Input Listing Mode
+
+`--print-inputs` stops after project resolution and prints the exact file set the compiler would read:
+
+```
+tpp --print-inputs .
+```
+
+The output is newline-separated and stable:
+
+1. `tpp-config.json`
+2. resolved type and template sources in config order, with wildcard matches sorted alphabetically
+3. resolved replacement policy files, with wildcard matches sorted alphabetically
+
+This mode exists for build tooling. CMake uses it to generate depfiles so per-project rebuilds follow the compiler's exact input set instead of broad directory globs.
 
 ### Output
 
@@ -105,20 +124,36 @@ Exit code is `0` on success, non-zero on failure.
 ### Synopsis
 
 ```
-render-tpp <template-name> <input-json>
+render-tpp [--input <file>] <template-name> <input-json> [signature...]
 ```
 
 | Argument | Description |
 |---|---|
 | `<template-name>` | The name of the template function to render (e.g. `main`) |
 | `<input-json>` | The input data as a JSON string |
+| `[signature...]` | Optional parameter type names used to select a specific overload |
 
-The intermediate representation JSON is read from stdin.
+| Option | Description |
+|---|---|
+| `--input <file>` | Read intermediate representation from `<file>` instead of stdin |
+
+The intermediate representation JSON is read from stdin unless `--input` is provided.
+
+If a template name is overloaded, append the exact parameter type names after the input JSON. For example, a one-argument string overload can be selected with:
+
+```bash
+tpp . | render-tpp main '"Ada"' string
+```
 
 ### Example
 
 ```bash
 tpp . | render-tpp main '{"name": "World"}'
+```
+
+```bash
+tpp . > project.ir.json
+render-tpp --input project.ir.json main '{"name": "World"}'
 ```
 
 This is useful in shell pipelines, test scripts, and CI workflows where you want the compiled template behavior immediately, without generating or compiling host-language bindings first.
@@ -317,13 +352,13 @@ This backend is used by the Swift acceptance-test pipeline in `Test/MakeSwiftTes
 | `<tpp/Compiler.h>` | Compile type definitions, templates, and policies |
 | `<tpp/IR.h>` | Compiled template IR (types, functions, policies) |
 | `<tpp/Runtime.h>` | Render template functions from the IR |
-| `<tpp/Types.h>` | Type definitions (`StructDef`, `EnumDef`, `TypeRef`) |
-| `<tpp/SemanticModel.h>` | Retained semantic model plus lookup/query helpers used by compiler and tooling |
 | `<tpp/Policy.h>` | Policy data model and registry |
 | `<tpp/RenderMapping.h>` | Source-to-output range tracking |
-| `<tpp/Tooling.h>` | Public source-analysis helpers used by IDE and tooling integrations |
+| `<tpp/Tooling.h>` | Public tokenization and source-analysis helpers used by IDE and tooling integrations |
 | `<tpp/Diagnostic.h>` | Diagnostic and Position types (LSP-compatible) |
 | `<tpp/ArgType.h>` | C++ type mapping helpers for `get_function<Args…>()` |
+
+Compiler-model headers such as `AST.h`, `Types.h`, and `SemanticModel.h` are internal implementation details under `Libraries/lib_tpp/tpp/`. Ordinary integrations should stay on the public project-level `tpp::compile(...)` API from `<tpp/Compiler.h>`, the public IR in `<tpp/IR.h>`, and the tooling helpers in `<tpp/Tooling.h>`.
 
 ### Compiling Templates
 
@@ -338,14 +373,13 @@ project.add_policy_source(policyText, "escape-html.policy.json");
 tpp::CompileOptions options;
 options.includeSourceRanges = true;
 
-std::vector<tpp::DiagnosticLSPMessage> diagnostics;
-tpp::LexedProject lexed;
-tpp::ParsedProject parsed;
-tpp::IR output;
+tpp::CompileResult result = tpp::compile(project, options);
+const std::vector<tpp::DiagnosticLSPMessage> &diagnostics = result.diagnostics;
+const tpp::IR &output = result.ir;
 
-bool ok = tpp::lex(project, lexed, diagnostics, options) &&
-          tpp::parse(lexed, parsed, diagnostics, options) &&
-          tpp::compile(parsed, output, diagnostics, options);
+if (!result) {
+  // inspect diagnostics
+}
 ```
 
 #### Compile From a Generated Type
@@ -486,7 +520,7 @@ target_link_libraries(mylib PRIVATE lib_tpp)
 
 The implementation `.cc` is added as a private source to `<target>`. The generated headers are accessible via the target's include directories — no extra `target_include_directories()` call needed.
 
-All four custom commands re-run automatically whenever any file in `SOURCE_DIR` changes.
+The compile-to-IR step tracks the resolved config, source, and policy inputs reported by `tpp --print-inputs`. The downstream codegen steps depend on that IR plus the generated headers, so edits to referenced project inputs rebuild the generated files without broad directory-glob dependencies.
 
 ### `tpp_java_add()`
 
@@ -499,7 +533,7 @@ tpp_java_add(<target>
 )
 ```
 
-It runs `tpp`, then `tpp2java source`, then `make-java-test`, and finally `javac` to compile the generated Java sources.
+It runs `tpp`, then `tpp2java runtime-shared`, then `tpp2java source`, then `make-java-test`, and finally `javac` to compile the shared runtime, generated Java source, and test harness together.
 
 ### `tpp_swift_add()`
 
@@ -512,7 +546,7 @@ tpp_swift_add(<target>
 )
 ```
 
-It runs `tpp`, then `tpp2swift source`, then `make-swift-test`, and finally `swiftc` to compile the generated Swift sources.
+It runs `tpp`, then `tpp2swift runtime-shared`, then `tpp2swift source`, then `make-swift-test`, and finally `swiftc` to compile the shared runtime, generated Swift source, and test harness together.
 
 ### Using Generated Code
 

@@ -1,10 +1,9 @@
 #include <tpp/Compiler.h>
 
-#include <tpp/IRAssembler.h>
-#include <tpp/Lowering.h>
-
+#include "tpp/CompilerPipeline.h"
 #include "tpp/PublicIRConverter.h"
 #include "tpp/TemplateParser.h"
+#include "tpp/ToolingCompile.h"
 #include "tpp/TypedefParser.h"
 
 #include <algorithm>
@@ -45,6 +44,24 @@ namespace
                                 std::string message)
     {
         diagnostics_for(messages, kProjectDiagnosticUri).push_back(makeErrorDiagnostic(std::move(message)));
+    }
+
+    void rebuild_tooling_symbol_index(const compiler::SemanticModel &semanticModel,
+                                      ToolingSymbolIndex &symbolIndex)
+    {
+        symbolIndex = {};
+
+        for (const auto &structDef : semanticModel.structs_view())
+        {
+            symbolIndex.namedTypeLocations[structDef.name] = {structDef.sourceUri, structDef.sourceRange};
+
+            auto &fieldLocations = symbolIndex.structFieldLocations[structDef.name];
+            for (const auto &field : structDef.fields)
+                fieldLocations[field.name] = {field.sourceUri, field.sourceRange};
+        }
+
+        for (const auto &enumDef : semanticModel.enums_view())
+            symbolIndex.namedTypeLocations[enumDef.name] = {enumDef.sourceUri, enumDef.sourceRange};
     }
 
     TokKind to_internal_kind(TypeSourceTokenKind kind)
@@ -599,6 +616,52 @@ bool parse(const LexedProject &project,
     return !has_any_diagnostics(diagnostics);
 }
 
+bool compile(const TppProject &project,
+             IR &output,
+             std::vector<DiagnosticLSPMessage> &diagnostics,
+             CompileOptions options) noexcept
+{
+    return compile(project, output, diagnostics, options, nullptr);
+}
+
+CompileResult compile(const TppProject &project,
+                      CompileOptions options) noexcept
+{
+    CompileResult result;
+    result.success = compile(project, result.ir, result.diagnostics, options, nullptr);
+    return result;
+}
+
+bool compile_for_tooling(const TppProject &project,
+                         IR &output,
+                         std::vector<DiagnosticLSPMessage> &diagnostics,
+                         ToolingSymbolIndex &symbolIndex,
+                         CompileOptions options) noexcept
+{
+    compiler::SemanticModel semanticModel;
+    const bool success = compile(project, output, diagnostics, options, &semanticModel);
+    rebuild_tooling_symbol_index(semanticModel, symbolIndex);
+    return success;
+}
+
+bool compile(const TppProject &project,
+             IR &output,
+             std::vector<DiagnosticLSPMessage> &diagnostics,
+             CompileOptions options,
+             compiler::SemanticModel *semanticModelOut) noexcept
+{
+    output = {};
+    if (semanticModelOut != nullptr)
+        *semanticModelOut = {};
+
+    LexedProject lexed;
+    ParsedProject parsed;
+
+    return lex(project, lexed, diagnostics, options) &&
+           parse(lexed, parsed, diagnostics, options) &&
+           compile(parsed, output, diagnostics, options, semanticModelOut);
+}
+
 bool compile(const ParsedProject &project,
              IR &output,
              std::vector<DiagnosticLSPMessage> &diagnostics,
@@ -743,29 +806,14 @@ bool compile(const ParsedProject &project,
         // COMPILE PHASE: Lower semantic model to IR
         // ─────────────────────────────────────────────────────────────────
 
-        std::vector<FunctionDef> functions;
-        if (!compiler::lowerToFunctions(semanticModel.functions(),
-                                        semanticModel,
-                                        functions,
-                                        options.includeSourceRanges))
+        if (!assemble_public_ir(semanticModel,
+                                output,
+                                options.includeSourceRanges,
+                                options.includeRawTypedefs))
         {
             add_project_diagnostic(diagnostics, "failed to lower templates to IR");
             return false;
         }
-
-        auto structs = to_public_structs(semanticModel.structs_view(),
-                        options.includeSourceRanges,
-                        options.includeRawTypedefs);
-        auto enums = to_public_enums(semanticModel.enums_view(),
-                         options.includeSourceRanges,
-                         options.includeRawTypedefs);
-        auto policies = to_public_policies(semanticModel.policies());
-
-        output = assemble_ir(std::move(structs),
-                             std::move(enums),
-                             std::move(functions),
-                             std::move(policies),
-                             options.includeSourceRanges);
     }
 
     catch (const std::exception &error)

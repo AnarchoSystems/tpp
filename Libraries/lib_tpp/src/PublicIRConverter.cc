@@ -1,6 +1,19 @@
 #include "tpp/PublicIRConverter.h"
 
+#include "tpp/AST.h"
+#include "tpp/SemanticModel.h"
+
+#include <tpp/IRAssembler.h>
+
 #include <cctype>
+
+namespace tpp::compiler
+{
+    bool lowerToFunctions(const std::vector<TemplateFunction> &functions,
+                          const SemanticModel &semanticModel,
+                          std::vector<tpp::FunctionDef> &out,
+                          bool includeSourceRanges);
+}
 
 namespace tpp
 {
@@ -18,6 +31,37 @@ std::string policy_identifier(const std::string &tag)
 }
 
 } // namespace
+
+bool assemble_public_ir(const compiler::SemanticModel &semanticModel,
+                        IR &output,
+                        bool includeRanges,
+                        bool includeRawTypedefs)
+{
+    std::vector<FunctionDef> functions;
+    if (!compiler::lowerToFunctions(semanticModel.functions(),
+                                    semanticModel,
+                                    functions,
+                                    includeRanges))
+    {
+        output = {};
+        return false;
+    }
+
+    auto structs = to_public_structs(semanticModel.structs_view(),
+                                     includeRanges,
+                                     includeRawTypedefs);
+    auto enums = to_public_enums(semanticModel.enums_view(),
+                                 includeRanges,
+                                 includeRawTypedefs);
+    auto policies = to_public_policies(semanticModel.policies());
+
+    output = assemble_ir(std::move(structs),
+                         std::move(enums),
+                         std::move(functions),
+                         std::move(policies),
+                         includeRanges);
+    return true;
+}
 
 std::optional<SourceRange> to_public_range(const Range &range, bool include)
 {

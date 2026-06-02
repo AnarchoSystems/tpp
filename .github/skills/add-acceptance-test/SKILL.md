@@ -23,7 +23,9 @@ The test runner (`Acceptance.cc`) discovers all subdirectories automatically —
 |---|---|
 | `tpp-config.json` | Declares types, templates, and preview input data used by the test harness. |
 | `template.tpp` | Template source. Must contain a `template main(...)` function ending with `END`. |
-| `expected_output.txt` **or** `expected_errors.json` **or** `expected_diagnostics.json` | The expected result — see [formats reference](./references/expected-formats.md). |
+| `test-case.json` | Normalized structured expectations for diagnostics, runtime errors, optional LSP assertions, and success metadata — see [formats reference](./references/expected-formats.md). |
+
+For readable success goldens, add `expected_output.txt` alongside `test-case.json`.
 
 **Multiple source files are allowed.** List type files under `"types"` and template files under `"templates"` in `tpp-config.json`. Files are processed in the order they appear in the config (types before templates). This lets you split types or templates across several files.
 
@@ -104,12 +106,13 @@ Put the runtime input for the test in `previews[0].input`. Use `{}` when `main` 
 
 The acceptance harness reads the first preview entry, so keep the test input in `previews[0]`.
 
-### Step 6 — Write the expected result file
-Choose **exactly one** of the three formats:
+### Step 6 — Write `test-case.json`
+Choose the expectation shape that matches the scenario:
 
-- **Success** → `expected_output.txt`: the rendered string, **no trailing newline**
-- **Compiler/parse diagnostic** → `expected_diagnostics.json`: LSP diagnostic array
-- **Runtime or get-function error** → `expected_errors.json`: `{"getFunctionError": "...", "renderError": ""}`
+- **Success** → prefer `expected_output.txt` with the exact rendered output; alternatively keep `{"expected_output": "..."}` in `test-case.json`
+- **Compiler/parse diagnostic** → `{"expect_success": false, "expected_diagnostics": [...]}`
+- **Runtime or get-function error** → `{"expect_success": false, "expected_errors": {"getFunctionError": "...", "renderError": ""}}`
+- **LSP assertions** → add an optional `"lsp"` object alongside the primary expectation data
 
 See [expected formats reference](./references/expected-formats.md) for schemas and examples.
 
@@ -118,10 +121,11 @@ Use the `test` skill to build and verify:
 1. `Build_CMakeTools` — compile
 2. `RunCtest_CMakeTools` — confirm only the new test (and all others) pass
 
-If the test fails, compare actual vs expected and fix the expected output file or the template.
+If the test fails, compare actual vs expected and fix `expected_output.txt`, `test-case.json`, or the template.
 
 ## Key Rules
-- `expected_output.txt` must **not** end with a newline — the compiler strips the trailing `\n`
+- `expected_output.txt` must match the rendered string exactly
+- If you keep success output in `test-case.json`, represent embedded newlines with `\n` inside the JSON string
 - For diagnostics, `uri` is exactly `<test-name>/<filename>` — the relative path of the file that emitted the error (e.g. `error_undefined_type/typedefs.tpp` or `my_test/template.tpp`)
 - `severity` in diagnostics must be the string `"error"` (lowercase)
 - Line and character numbers in diagnostic ranges are **0-based**

@@ -1,0 +1,7 @@
+{
+    "expect_success": false,
+    "expected_errors": {
+        "getFunctionError": "",
+        "renderError": "Expected 1 argument for function 'main', got 2"
+    }
+}

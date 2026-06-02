@@ -26,13 +26,10 @@ protected:
         for (size_t index = 0; index < testCase.policies.size(); ++index)
             project.add_policy_source(testCase.policies[index], testCase.name + "/policy_" + std::to_string(index) + ".json");
 
-        tpp::LexedProject lexed;
-        tpp::ParsedProject parsed;
-        diagnostics.clear();
-        output = {};
-        compileSuccess = tpp::lex(project, lexed, diagnostics) &&
-                 tpp::parse(lexed, parsed, diagnostics) &&
-                 tpp::compile(parsed, output, diagnostics);
+        auto compileResult = tpp::compile(project);
+        diagnostics = std::move(compileResult.diagnostics);
+        output = std::move(compileResult.ir);
+        compileSuccess = compileResult.success;
     }
 };
 

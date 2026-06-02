@@ -4,3 +4,7 @@ tpp_add(make-java-test
     NAME       make_java_test
     SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}
 )
+
+target_include_directories(make-java-test PRIVATE
+    ${CMAKE_SOURCE_DIR}/Libraries/lib_tpp
+    ${CMAKE_SOURCE_DIR}/Test/include)

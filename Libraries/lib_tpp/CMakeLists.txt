@@ -3,6 +3,8 @@ add_library(lib_tpp
     src/TypedefParser.cc
     src/TemplateParser.cc
     src/TemplateSemantics.cc
+    src/ProjectConfigResolver.cc
+    src/IRInterpreter.cc
     src/Rendering.cc
     src/PolicyParser.cc
     src/Lowering.cc

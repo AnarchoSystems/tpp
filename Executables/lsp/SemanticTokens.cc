@@ -1,6 +1,7 @@
 #include "SemanticTokens.h"
 #include "LspDefinitions.h"
 #include <tpp/Tooling.h>
+#include "tpp/ToolingInternal.h"
 #include <algorithm>
 #include <string_view>
 #include <vector>
@@ -37,7 +38,6 @@ using IfNode            = compiler::IfNode;
 using SwitchNode        = compiler::SwitchNode;
 using RenderViaNode     = compiler::RenderViaNode;
 using CompilerParamDef  = compiler::ParamDef;
-using TemplateFunction  = compiler::TemplateFunction;
 
 // Each raw token: {line, startChar, length, tokenType, modifiers}
 using RawToken = std::tuple<int, int, int, int, int>;
@@ -777,9 +777,6 @@ static nlohmann::json tokensForTypes(const std::string &src,
     return encodeTokens(out);
 }
 
-static nlohmann::json tokensForTemplate(const std::string &src,
-                                        const std::vector<TemplateFunction> *semanticFunctions);
-
 // ── .tpp template semantic tokens ────────────────────────────────────────────
 // Parse the raw source text of a template file and emit tokens including:
 // - "template" keyword, function name, param punctuation
@@ -788,35 +785,26 @@ static nlohmann::json tokensForTemplate(const std::string &src,
 // - END as keyword
 static nlohmann::json tokensForTemplate(const std::string &src)
 {
-    return tokensForTemplate(src, nullptr);
-}
-
-static nlohmann::json tokensForTemplate(const std::string &src,
-                                        const std::vector<TemplateFunction> *semanticFunctions)
-{
     std::vector<RawToken> out;
     std::vector<ParsedTemplateSource> templates;
     parseTemplateSource(src, templates);
     std::vector<std::pair<int, int>> templateLineRanges;
-    const bool useSemanticModel = semanticFunctions && semanticFunctions->size() == templates.size();
 
     for (size_t index = 0; index < templates.size(); ++index)
     {
         const auto &tpl = templates[index];
-        const auto *semanticFunction = useSemanticModel ? &(*semanticFunctions)[index] : nullptr;
         int bodyLineCount = 0;
         for (char c : tpl.bodyText) if (c == '\n') ++bodyLineCount;
         int endLine = (int)tpl.bodyStartLine + 1 + bodyLineCount;
-        const int startLine = semanticFunction ? semanticFunction->sourceRange.start.line
-                                               : tpl.sourceRange.start.line;
+        const int startLine = tpl.sourceRange.start.line;
         templateLineRanges.emplace_back(startLine, endLine);
 
         emitTemplateHeader(out,
-                           semanticFunction ? semanticFunction->name : tpl.name,
-                           semanticFunction ? semanticFunction->params : tpl.params,
+                           tpl.name,
+                           tpl.params,
                            tpl.headerText,
                            startLine);
-        walkNodes(out, semanticFunction ? semanticFunction->body : tpl.body);
+        walkNodes(out, tpl.body);
         emitUncoveredStructuralDirectiveTokens(out, tpl.bodyText, static_cast<int>(tpl.bodyStartLine));
 
         out.push_back({endLine, 0, 3, TT_KEYWORD, 0});
@@ -837,18 +825,13 @@ nlohmann::json computeSemanticTokens(const std::string &uri, const WorkspaceProj
     {
         // Get the source for this specific file
         std::string src = project.getContent(uri);
-        if (auto typeFileIndex = project.typeFileIndex(uri))
-        {
-            const auto &typeSourceFiles = project.semantic_model().type_source_files();
-            if (*typeFileIndex < typeSourceFiles.size())
-                return tokensForTypes(src, &typeSourceFiles[*typeFileIndex]);
-        }
-        return tokensForTypes(src, nullptr);
+        auto spans = classifyTypeSource(src);
+        return tokensForTypes(src, &spans);
     }
     else
     {
         std::string src = project.getContent(uri);
-        return tokensForTemplate(src, &project.semantic_model().functions());
+        return tokensForTemplate(src);
     }
 }
 

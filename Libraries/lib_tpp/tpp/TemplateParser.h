@@ -1,8 +1,8 @@
 #pragma once
 
-#include <tpp/AST.h>
+#include "tpp/AST.h"
 #include <tpp/Policy.h>
-#include <tpp/SemanticModel.h>
+#include "tpp/SemanticModel.h"
 #include <tpp/Tokenizer.h>
 #include <tpp/Diagnostic.h>
 #include <string>

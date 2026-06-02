@@ -1,8 +1,5 @@
 #include <tpp/Compiler.h>
 #include <tpp/IR.h>
-#include <tpp/IRAssembler.h>
-#include "tpp/PublicIRConverter.h"
-#include <tpp/Lowering.h>
 #include <tpp/Tooling.h>
 #include <tpp/TemplateParser.h>
 #include <tpp/TypedefParser.h>

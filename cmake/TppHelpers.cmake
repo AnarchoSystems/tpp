@@ -45,12 +45,10 @@ function(tpp_add target_name)
 
     set(out_prefix "${TPP_NAME}")
     set(out_json  "${CMAKE_CURRENT_BINARY_DIR}/${out_prefix}-tpp.json")
+    set(out_json_depfile "${out_json}.d")
     set(out_types "${CMAKE_CURRENT_BINARY_DIR}/${out_prefix}_types.h")
     set(out_funs  "${CMAKE_CURRENT_BINARY_DIR}/${out_prefix}_functions.h")
     set(out_impl  "${CMAKE_CURRENT_BINARY_DIR}/${out_prefix}_implementation.cc")
-
-    # Collect all source files so custom commands rebuild on any change
-    file(GLOB tpp_source_files "${TPP_SOURCE_DIR}/*")
 
     # Optional namespace flag
     set(ns_args "")
@@ -70,9 +68,13 @@ function(tpp_add target_name)
         COMMAND ${CMAKE_COMMAND}
             -DCMD=$<TARGET_FILE:tpp>
             "-DARGS=${TPP_SOURCE_DIR}"
+            -DINPUT_CMD=$<TARGET_FILE:tpp>
+            "-DINPUT_ARGS=--print-inputs;${TPP_SOURCE_DIR}"
             -DOUT=${out_json}
-            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
-        DEPENDS $<TARGET_FILE:tpp> ${tpp_source_files}
+            -DDEPFILE=${out_json_depfile}
+            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFileWithDepfile.cmake
+        DEPENDS $<TARGET_FILE:tpp> ${CMAKE_SOURCE_DIR}/cmake/StdoutToFileWithDepfile.cmake
+        DEPFILE "${out_json_depfile}"
         COMMENT "tpp ${out_prefix}"
         VERBATIM
     )
@@ -123,7 +125,12 @@ function(tpp_add target_name)
     # Listing the headers as sources makes CMake enforce their generation
     # before any compilation in the target (no separate custom_target needed).
     target_sources(${target_name} PRIVATE "${out_impl}" "${out_types}" "${out_funs}")
-    target_include_directories(${target_name} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
-    target_link_libraries(${target_name} PRIVATE lib_tpp)
-    add_dependencies(${target_name} tpp tpp2cpp)
+
+    get_target_property(_tpp_add_initialized ${target_name} TPP_ADD_INITIALIZED)
+    if(NOT _tpp_add_initialized)
+        target_include_directories(${target_name} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+        target_link_libraries(${target_name} PRIVATE lib_tpp)
+        add_dependencies(${target_name} tpp tpp2cpp)
+        set_target_properties(${target_name} PROPERTIES TPP_ADD_INITIALIZED TRUE)
+    endif()
 endfunction()

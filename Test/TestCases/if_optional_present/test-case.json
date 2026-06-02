@@ -1,0 +1,16 @@
+{
+    "expect_success": true,
+    "lsp": {
+        "hover": [
+            {
+                "name": "optional_condition_hover_type",
+                "file": "template.tpp",
+                "line": 1,
+                "character": 6,
+                "expected_contains": [
+                    "optional<string>"
+                ]
+            }
+        ]
+    }
+}

@@ -1,0 +1,7 @@
+{
+    "expect_success": false,
+    "expected_errors": {
+        "getFunctionError": "",
+        "renderError": "[policy require-digit] value does not match required pattern"
+    }
+}

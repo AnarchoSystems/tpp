@@ -12,6 +12,13 @@ The important point is that tpp is not just a string templating syntax. It is a 
 
 That makes tpp useful in two very different modes: as a **static codegen pipeline** for strongly typed builds, and as a **runtime template engine** with the same semantics and diagnostics.
 
+Authoritative repo architecture and workflow docs:
+
+- [docs/architecture.md](docs/architecture.md)
+- [docs/backend-architecture.md](docs/backend-architecture.md)
+- [docs/testing-workflow.md](docs/testing-workflow.md)
+- [docs/versioning-and-ir.md](docs/versioning-and-ir.md)
+
 ---
 
 ## Core Concepts
@@ -179,10 +186,18 @@ tpp . | render-tpp main '[{"name": "Apples", "count": 4}, {"name": "Figs", "coun
 ```
 
 Output:
-```
+```text
 - Apples (4)
 - Figs (1) — fresh
 ```
+
+If you need the exact files a project resolves through `tpp-config.json`, `tpp` can print them directly:
+
+```bash
+tpp --print-inputs .
+```
+
+That prints the resolved `tpp-config.json` path first, followed by the concrete type, template, and policy inputs in the order the compiler will read them.
 
 **5. Or generate C++**:
 

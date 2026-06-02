@@ -2,8 +2,12 @@
 #include <tpp/Runtime.h>
 #include <CodegenHelpers.h>
 #include "defs.h"
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <iterator>
+#include <string>
+#include <vector>
 
 // usage: tpp2cpp <command> [options]
 // commands:
@@ -23,20 +27,191 @@ enum Mode
     Implementation
 };
 
-struct tpp2cpp
+void printUsage();
+static const tpp::IR &mainIR();
+static nlohmann::json to_render_cpp_type_input(const tpp::IR &iRep,
+                                               const std::vector<std::string> &includes,
+                                               const std::string &namespaceName);
+static nlohmann::json to_render_cpp_functions_input(const tpp::IR &iRep,
+                                                    const std::vector<std::string> &includes,
+                                                    const std::string &namespaceName);
+static codegen::RenderFunctionsInput buildFunctionsContext(
+    const tpp::IR &ir, const std::string &functionPrefix,
+    const std::vector<std::string> &includes,
+    const std::string &namespaceName);
+
+namespace
 {
-    std::string namespaceName;
+
+struct ParsedCommandLine
+{
     Mode mode = Mode::None;
+    std::string inputFile;
+    std::string namespaceName;
     std::vector<std::string> includes;
-    tpp::IR input;
-    tpp2cpp(int argc, char *argv[]);
-    void run();
 };
+
+static std::string readTextInputOrExit(const std::string &inputFile)
+{
+    if (!inputFile.empty())
+    {
+        std::ifstream inputStream(inputFile);
+        if (!inputStream.is_open())
+        {
+            std::cerr << "Could not open input file: " << inputFile << std::endl;
+            std::exit(EXIT_FAILURE);
+        }
+        return std::string(std::istreambuf_iterator<char>(inputStream), std::istreambuf_iterator<char>());
+    }
+
+    return std::string(std::istreambuf_iterator<char>(std::cin), std::istreambuf_iterator<char>());
+}
+
+static nlohmann::json parseJsonTextOrExit(const std::string &inputJson,
+                                          const std::string &description)
+{
+    try
+    {
+        return nlohmann::json::parse(inputJson);
+    }
+    catch (const std::exception &error)
+    {
+        std::cerr << "Failed to parse " << description << ": " << error.what() << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+}
+
+static tpp::IR loadIRInputOrExit(const std::string &inputFile)
+{
+    try
+    {
+        return parseJsonTextOrExit(readTextInputOrExit(inputFile), "input JSON").get<tpp::IR>();
+    }
+    catch (const std::exception &error)
+    {
+        std::cerr << "Failed to decode input JSON as tpp IR: " << error.what() << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+}
+
+static Mode parseModeOrExit(const std::string &command)
+{
+    if (command == "types")
+        return Mode::Types;
+    if (command == "functions")
+        return Mode::Functions;
+    if (command == "impl")
+        return Mode::Implementation;
+
+    std::cerr << "Unknown command: " << command << "\n\n";
+    printUsage();
+    std::exit(EXIT_FAILURE);
+}
+
+static ParsedCommandLine parseCommandLineOrExit(int argc, char *argv[])
+{
+    ParsedCommandLine result;
+
+    if (argc < 2)
+    {
+        printUsage();
+        std::exit(EXIT_FAILURE);
+    }
+
+    const std::string command = argv[1];
+    if (command == "-h" || command == "--help")
+    {
+        printUsage();
+        std::exit(EXIT_SUCCESS);
+    }
+    result.mode = parseModeOrExit(command);
+
+    for (int index = 2; index < argc; ++index)
+    {
+        const std::string arg = argv[index];
+        if (arg == "-h" || arg == "--help")
+        {
+            printUsage();
+            std::exit(EXIT_SUCCESS);
+        }
+        if (arg == "-ns")
+        {
+            if (index + 1 >= argc)
+            {
+                std::cerr << "-ns requires a namespace argument\n";
+                std::exit(EXIT_FAILURE);
+            }
+            result.namespaceName = argv[++index];
+            continue;
+        }
+        if (arg == "--input")
+        {
+            if (index + 1 >= argc)
+            {
+                std::cerr << "--input requires a file argument\n";
+                std::exit(EXIT_FAILURE);
+            }
+            result.inputFile = argv[++index];
+            continue;
+        }
+        if (arg == "-i")
+        {
+            if (index + 1 >= argc)
+            {
+                std::cerr << "-i requires a file argument\n";
+                std::exit(EXIT_FAILURE);
+            }
+            result.includes.push_back(argv[++index]);
+            continue;
+        }
+
+        std::cerr << "Unknown option: " << arg << "\nUse -h for usage info.\n";
+        std::exit(EXIT_FAILURE);
+    }
+
+    return result;
+}
+
+} // namespace
 
 int main(int argc, char *argv[])
 {
-    tpp2cpp app(argc, argv);
-    app.run();
+    const auto cli = parseCommandLineOrExit(argc, argv);
+    const auto input = loadIRInputOrExit(cli.inputFile);
+    const auto &iRep = mainIR();
+
+    auto renderFunction = [&](const std::string &fnName, const nlohmann::json &ctx) {
+        const tpp::FunctionDef *fn = nullptr;
+        std::string error, output;
+        if (!(tpp::get_function(iRep, fnName, fn, error) && tpp::render_function(iRep, *fn, ctx, output, error)))
+        {
+            std::cerr << "defs.tpp: error: Failed to render " << fnName << ": " << error << std::endl;
+            std::exit(EXIT_FAILURE);
+        }
+        return output;
+    };
+
+    std::string output;
+    switch (cli.mode)
+    {
+    case Mode::None:
+        printUsage();
+        return EXIT_FAILURE;
+    case Mode::Types:
+        output = renderFunction("render_cpp_types", to_render_cpp_type_input(input, cli.includes, cli.namespaceName));
+        break;
+    case Mode::Functions:
+        output = renderFunction("render_cpp_functions", to_render_cpp_functions_input(input, cli.includes, cli.namespaceName));
+        break;
+    case Mode::Implementation:
+    {
+        auto ctx = buildFunctionsContext(input, "", cli.includes, cli.namespaceName);
+        output = renderFunction("render_cpp_native_implementation", nlohmann::json(ctx));
+        break;
+    }
+    }
+
+    std::cout << output << std::endl;
     return EXIT_SUCCESS;
 }
 
@@ -56,33 +231,6 @@ void printUsage()
                  "  -h, --help        Print this message\n";
 }
 
-tpp2cpp::tpp2cpp(int argc, char *argv[])
-{
-    static const std::map<std::string, Mode> commands = {
-        {"types", Mode::Types},
-        {"functions", Mode::Functions},
-        {"impl", Mode::Implementation}
-    };
-    auto cli = codegen::parseBackendCommandLine(argc, argv, commands, printUsage, true);
-    namespaceName = std::move(cli.namespaceName);
-    mode = cli.mode;
-    includes = std::move(cli.includes);
-    input = codegen::loadIRInputOrExit(cli.inputFile);
-}
-
-static nlohmann::json to_render_cpp_type_input(const tpp::IR &iRep,
-                                               const std::vector<std::string> &includes,
-                                               const std::string &namespaceName);
-
-static nlohmann::json to_render_cpp_functions_input(const tpp::IR &iRep,
-                                                    const std::vector<std::string> &includes,
-                                                    const std::string &namespaceName);
-
-static codegen::RenderFunctionsInput buildFunctionsContext(
-    const tpp::IR &ir, const std::string &functionPrefix,
-    const std::vector<std::string> &includes,
-    const std::string &namespaceName);
-
 static std::string toCppStringLiteral(const std::string &s);
 static void qualifyNamedTypeJson(nlohmann::json &typeJson);
 
@@ -91,45 +239,6 @@ static const tpp::IR &mainIR()
     static const tpp::IR result =
         nlohmann::json::parse(defs_ir_json).get<tpp::IR>();
     return result;
-}
-
-void tpp2cpp::run()
-{
-    const auto &iRep = mainIR();
-
-    auto renderFunction = [&](const std::string &fnName, const nlohmann::json &ctx) {
-        const tpp::FunctionDef *fn = nullptr;
-        std::string error, output;
-        if (!(tpp::get_function(iRep, fnName, fn, error) && tpp::render_function(iRep, *fn, ctx, output, error)))
-        {
-            std::cerr << "defs.tpp: error: Failed to render " << fnName << ": " << error << std::endl;
-            exit(EXIT_FAILURE);
-        }
-        return output;
-    };
-
-    std::string output;
-    switch (mode)
-    {
-    case Mode::None:
-        printUsage();
-        exit(EXIT_FAILURE);
-        break;
-    case Mode::Types:
-        output = renderFunction("render_cpp_types", to_render_cpp_type_input(input, includes, namespaceName));
-        break;
-    case Mode::Functions:
-        output = renderFunction("render_cpp_functions", to_render_cpp_functions_input(input, includes, namespaceName));
-        break;
-    case Mode::Implementation:
-    {
-        auto ctx = buildFunctionsContext(input, "", includes, namespaceName);
-        output = renderFunction("render_cpp_native_implementation", nlohmann::json(ctx));
-        break;
-    }
-    }
-
-    std::cout << output << std::endl;
 }
 
 static std::string toCppStringLiteral(const std::string &s)

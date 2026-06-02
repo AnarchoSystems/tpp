@@ -1,5 +1,6 @@
-#include <tpp/Lowering.h>
+#include "tpp/AST.h"
 #include "tpp/PublicIRConverter.h"
+#include "tpp/SemanticModel.h"
 #include <map>
 #include <stdexcept>
 

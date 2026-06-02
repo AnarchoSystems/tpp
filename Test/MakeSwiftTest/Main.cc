@@ -7,73 +7,15 @@
 
 #include <tpp/Compiler.h>
 #include <tpp/IR.h>
+#include <tpp/ProjectConfigResolver.h>
 #include <tpp/Runtime.h>
 #include <nlohmann/json.hpp>
 #include <filesystem>
-#include <fstream>
 #include <iostream>
-#include <algorithm>
 
+#include "TestCaseIO.h"
 #include "make_swift_test_types.h"
 #include "make_swift_test_functions.h"
-
-static std::string readFile(const std::filesystem::path &path)
-{
-    std::ifstream f(path);
-    return std::string(std::istreambuf_iterator<char>(f),
-                       std::istreambuf_iterator<char>());
-}
-
-static bool matchGlob(const std::string &pattern, const std::string &text)
-{
-    size_t pi = 0, ti = 0, starPos = std::string::npos, matchPos = 0;
-    while (ti < text.size())
-    {
-        if (pi < pattern.size() && (pattern[pi] == '?' || pattern[pi] == text[ti]))
-            { ++pi; ++ti; }
-        else if (pi < pattern.size() && pattern[pi] == '*')
-            { starPos = pi++; matchPos = ti; }
-        else if (starPos != std::string::npos)
-            { pi = starPos + 1; ti = ++matchPos; }
-        else
-            return false;
-    }
-    while (pi < pattern.size() && pattern[pi] == '*') ++pi;
-    return pi == pattern.size();
-}
-
-static bool hasAllowedSourceExtension(const std::string &name, bool isTypes)
-{
-    if (name.size() >= 4 && name.substr(name.size() - 4) == ".tpp")
-        return true;
-    if (isTypes && name.size() >= 10 && name.substr(name.size() - 10) == ".tpp.types")
-        return true;
-    return false;
-}
-
-static std::vector<std::filesystem::path> expandPattern(const std::filesystem::path &baseDir,
-                                                        const std::string &pattern,
-                                                        bool isTypes)
-{
-    std::filesystem::path patPath(pattern);
-    std::string filename = patPath.filename().string();
-    std::filesystem::path parentDir = baseDir / patPath.parent_path();
-    if (filename.find('*') == std::string::npos)
-        return {baseDir / pattern};
-    std::vector<std::filesystem::path> results;
-    if (std::filesystem::is_directory(parentDir))
-    {
-        for (const auto &entry : std::filesystem::directory_iterator(parentDir))
-        {
-            if (!entry.is_regular_file()) continue;
-            auto name = entry.path().filename().string();
-            if (!hasAllowedSourceExtension(name, isTypes)) continue;
-            if (matchGlob(filename, name)) results.push_back(entry.path());
-        }
-        std::sort(results.begin(), results.end());
-    }
-    return results;
-}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TypeRef → Swift type name
@@ -171,53 +113,40 @@ int main(int argc, char *argv[])
     std::filesystem::path testDir(argv[argIndex]);
     std::string testName = testDir.filename().string();
 
-    // Read and parse tpp-config.json
-    std::filesystem::path configPath = testDir / "tpp-config.json";
-    nlohmann::json config;
-    try { config = nlohmann::json::parse(readFile(configPath)); }
+    // Read and resolve tpp-config.json
+    tpp::ResolvedProjectInputs inputs;
+    try { inputs = tpp::load_project_inputs(testDir); }
     catch (const std::exception &e)
     {
-        std::cerr << configPath.string() << ": error: " << e.what() << std::endl;
+        std::cerr << testDir.string() << ": error: " << e.what() << std::endl;
         return EXIT_FAILURE;
     }
+    const auto &config = inputs.config;
+    const auto &configPath = inputs.configPath;
 
     // Compile the test case
-    struct FileEntry { std::filesystem::path path; bool isTypes; };
-    std::vector<FileEntry> fileEntries;
-    for (const auto &p : config.value("types", nlohmann::json::array()))
-        for (const auto &f : expandPattern(testDir, p.get<std::string>(), true))
-            fileEntries.push_back({f, true});
-    for (const auto &p : config.value("templates", nlohmann::json::array()))
-        for (const auto &f : expandPattern(testDir, p.get<std::string>(), false))
-            fileEntries.push_back({f, false});
-
     tpp::TppProject project;
-    for (const auto &fe : fileEntries)
+    for (const auto &source : inputs.sourceFiles)
     {
-        std::string content = readFile(fe.path);
-        if (fe.isTypes) project.add_type_source(std::move(content), fe.path.string());
-        else            project.add_template_source(std::move(content), fe.path.string());
+        std::string content = test_support::read_text_file(source.path);
+        if (source.isTypes) project.add_type_source(std::move(content), source.path.string());
+        else                project.add_template_source(std::move(content), source.path.string());
     }
 
-    for (const auto &pe : config.value("replacement-policies", nlohmann::json::array()))
+    for (const auto &policyPath : inputs.policyFiles)
     {
-        const auto policyPath = testDir / pe.get<std::string>();
-        project.add_policy_source(readFile(policyPath), policyPath.string());
+        project.add_policy_source(test_support::read_text_file(policyPath), policyPath.string());
     }
 
-    std::vector<tpp::DiagnosticLSPMessage> diagnostics;
-    tpp::LexedProject lexed;
-    tpp::ParsedProject parsed;
-    tpp::IR ir;
-    if (!tpp::lex(project, lexed, diagnostics) ||
-        !tpp::parse(lexed, parsed, diagnostics) ||
-        !tpp::compile(parsed, ir, diagnostics))
+    const auto compileResult = tpp::compile(project);
+    if (!compileResult)
     {
-        for (const auto &msg : diagnostics)
+        for (const auto &msg : compileResult.diagnostics)
             for (const auto &d : msg.toGCCDiagnostics())
                 std::cerr << d << std::endl;
         return EXIT_FAILURE;
     }
+    const auto &ir = compileResult.ir;
 
     // Read function selection and input from previews[0]
     const auto &previews = config.value("previews", nlohmann::json::array());
@@ -254,8 +183,16 @@ int main(int argc, char *argv[])
     }
     nlohmann::json inputJson = preview.at("input");
 
-    // Read expected_output.txt
-    std::string expectedRaw = readFile(testDir / "expected_output.txt");
+    const auto expectedOutput = test_support::load_expected_output(testDir);
+    if (!expectedOutput.has_value())
+    {
+        std::cerr << testDir.string()
+                  << ": error: no expected output found (expected_output.txt or test-case.json expected_output)"
+                  << std::endl;
+        return EXIT_FAILURE;
+    }
+
+    std::string expectedRaw = *expectedOutput;
     if (!expectedRaw.empty() && expectedRaw.back() == '\n')
         expectedRaw.pop_back();
 
