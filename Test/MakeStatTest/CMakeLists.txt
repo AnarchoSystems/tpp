@@ -6,5 +6,6 @@ tpp_add(make-stat-test
 )
 
 target_include_directories(make-stat-test PRIVATE
-    ${CMAKE_SOURCE_DIR}/Libraries/lib_tpp
     ${CMAKE_SOURCE_DIR}/Test/include)
+
+target_link_libraries(make-stat-test PRIVATE tpp_internal_api)

@@ -1,3 +1,23 @@
+# Internal-only surface for first-party tools and tests.
+# External consumers should depend on lib_tpp instead.
+add_library(tpp_internal_api INTERFACE)
+
+target_include_directories(tpp_internal_api INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>)
+
+# Keep tooling-only implementation grouped separately while still folding the
+# resulting objects into lib_tpp.
+add_library(tpp_internal_tooling OBJECT
+    src/Tooling.cc
+    src/ToolingCompile.cc
+)
+
+target_link_libraries(tpp_internal_tooling PRIVATE
+    tpp_internal_api
+    ${TPP_NLOHMANN_JSON_TARGET})
+
 add_library(lib_tpp
     src/Compiler.cc
     src/TypedefParser.cc
@@ -10,7 +30,7 @@ add_library(lib_tpp
     src/Lowering.cc
     src/PublicIRConverter.cc
     src/IRAssembler.cc
-    src/Tooling.cc
+    $<TARGET_OBJECTS:tpp_internal_tooling>
 )
 
 target_link_libraries(lib_tpp PUBLIC ${TPP_NLOHMANN_JSON_TARGET})

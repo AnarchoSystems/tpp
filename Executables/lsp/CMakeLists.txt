@@ -11,8 +11,7 @@ add_executable(tpp-lsp
     Preview.cc
 )
 
-target_link_libraries(tpp-lsp PRIVATE lib_tpp tpp_lsp_defs)
+target_link_libraries(tpp-lsp PRIVATE lib_tpp tpp_internal_api tpp_lsp_defs)
 
 target_include_directories(tpp-lsp PRIVATE
-    ${CMAKE_SOURCE_DIR}/Libraries/lib_tpp
     ${CMAKE_CURRENT_SOURCE_DIR})

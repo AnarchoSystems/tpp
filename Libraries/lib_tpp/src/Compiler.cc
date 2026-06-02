@@ -3,7 +3,6 @@
 #include "tpp/CompilerPipeline.h"
 #include "tpp/PublicIRConverter.h"
 #include "tpp/TemplateParser.h"
-#include "tpp/ToolingCompile.h"
 #include "tpp/TypedefParser.h"
 
 #include <algorithm>
@@ -44,24 +43,6 @@ namespace
                                 std::string message)
     {
         diagnostics_for(messages, kProjectDiagnosticUri).push_back(makeErrorDiagnostic(std::move(message)));
-    }
-
-    void rebuild_tooling_symbol_index(const compiler::SemanticModel &semanticModel,
-                                      ToolingSymbolIndex &symbolIndex)
-    {
-        symbolIndex = {};
-
-        for (const auto &structDef : semanticModel.structs_view())
-        {
-            symbolIndex.namedTypeLocations[structDef.name] = {structDef.sourceUri, structDef.sourceRange};
-
-            auto &fieldLocations = symbolIndex.structFieldLocations[structDef.name];
-            for (const auto &field : structDef.fields)
-                fieldLocations[field.name] = {field.sourceUri, field.sourceRange};
-        }
-
-        for (const auto &enumDef : semanticModel.enums_view())
-            symbolIndex.namedTypeLocations[enumDef.name] = {enumDef.sourceUri, enumDef.sourceRange};
     }
 
     TokKind to_internal_kind(TypeSourceTokenKind kind)
@@ -630,18 +611,6 @@ CompileResult compile(const TppProject &project,
     CompileResult result;
     result.success = compile(project, result.ir, result.diagnostics, options, nullptr);
     return result;
-}
-
-bool compile_for_tooling(const TppProject &project,
-                         IR &output,
-                         std::vector<DiagnosticLSPMessage> &diagnostics,
-                         ToolingSymbolIndex &symbolIndex,
-                         CompileOptions options) noexcept
-{
-    compiler::SemanticModel semanticModel;
-    const bool success = compile(project, output, diagnostics, options, &semanticModel);
-    rebuild_tooling_symbol_index(semanticModel, symbolIndex);
-    return success;
 }
 
 bool compile(const TppProject &project,

@@ -72,11 +72,10 @@ add_executable(tpp_acceptance_test
     src/WriterTest.cc
 )
 
-target_link_libraries(tpp_acceptance_test PRIVATE ${TPP_GTEST_MAIN_TARGET} tpp_lsp_defs)
+target_link_libraries(tpp_acceptance_test PRIVATE ${TPP_GTEST_MAIN_TARGET} tpp_internal_api tpp_lsp_defs)
 target_include_directories(tpp_acceptance_test PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${CMAKE_SOURCE_DIR}/Libraries/lib_tpp
     ${PROJECT_SOURCE_DIR}/Executables/lsp)
 
 add_dependencies(tpp_acceptance_test tpp tpp2cpp tpp2java tpp2swift render-tpp tpp-lsp)

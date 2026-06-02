@@ -6,5 +6,6 @@ tpp_add(make-swift-test
 )
 
 target_include_directories(make-swift-test PRIVATE
-    ${CMAKE_SOURCE_DIR}/Libraries/lib_tpp
     ${CMAKE_SOURCE_DIR}/Test/include)
+
+target_link_libraries(make-swift-test PRIVATE tpp_internal_api)
