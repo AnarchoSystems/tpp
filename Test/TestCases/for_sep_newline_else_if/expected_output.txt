@@ -1,2 +1,2 @@
-if (sInput == "Foo") {return f_Foo;}
-else if (sInput == "Bar") {return f_Bar;}
+    if (sInput == "Foo") {return f_Foo;}
+    else if (sInput == "Bar") {return f_Bar;}

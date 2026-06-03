@@ -148,6 +148,23 @@ final class TppWriter {
         emitWithMultilineIndent(try policy.apply(value))
     }
 
+    func emitWithIndentColumn(_ text: String, _ indentColumns: Int) {
+        guard indentColumns > 0, text.contains("\n") else {
+            output(text)
+            return
+        }
+
+        let pad = String(repeating: " ", count: indentColumns)
+        var indented = ""
+        for (idx, ch) in text.enumerated() {
+            indented.append(ch)
+            if ch == "\n" && idx + 1 < text.count {
+                indented += pad
+            }
+        }
+        output(indented)
+    }
+
     func beginCapturedBlock() {
         beginCapturedBlock(0)
     }
@@ -179,6 +196,10 @@ final class TppWriter {
     func endCaptureResult() -> CaptureResult {
         let captured = endCaptureFrame()
         return CaptureResult(text: Self.serializeFrame(captured), topLevelIndented: captured.topLevelIndentedOnly)
+    }
+
+    func endBlockCapture(_ indentColumns: Int) -> String {
+        Self.renderIndentedFrame(endCaptureFrame(), indentColumns)
     }
 
     func takeOutput(_ postProcessing: OutputPostProcessing = .none) -> String {

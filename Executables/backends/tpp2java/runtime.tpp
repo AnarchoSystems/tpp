@@ -139,6 +139,26 @@ static class TppWriter {
         return true;
     }
 
+    String endBlockCapture(int indentColumns) {
+        return renderIndentedFrame(endCaptureFrame(), indentColumns);
+    }
+
+    boolean emitWithIndentColumn(String text, int indentColumns) {
+        if (indentColumns <= 0 || text.indexOf('\n') < 0)
+            return emit(text);
+
+        String pad = " ".repeat(indentColumns);
+        StringBuilder indented = new StringBuilder(text.length() + pad.length());
+        for (int i = 0; i < text.length(); ++i) {
+            char ch = text.charAt(i);
+            indented.append(ch);
+            if (ch == '\n' && i + 1 < text.length())
+                indented.append(pad);
+        }
+        output(indented.toString());
+        return true;
+    }
+
     boolean beginCapturedBlock() {
         return beginCapturedBlock(0);
     }

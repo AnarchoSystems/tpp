@@ -467,8 +467,12 @@ for (int _i@f.scopeId@ = 0; _i@f.scopeId@ < @f.collection.path@.size(); _i@f.sco
         _sb.endCapture();
         throw new RuntimeException("tpp render error: " + _sb.error());
     }
+    @if f.bodyBlockIndentInParentBlock@
+    String _iterText@f.scopeId@ = _sb.endBlockCapture(@f.bodyBlockIndentInParentBlock@);
+    @else@
     TppWriter.CaptureResult _iter@f.scopeId@ = _sb.endCaptureResult();
     String _iterText@f.scopeId@ = _iter@f.scopeId@.text;
+    @end if@
     boolean _trimIterTrailingNewline@f.scopeId@ = false;
     if (_i@f.scopeId@ + 1 < @f.collection.path@.size()) {
         @if f.sepLit@
@@ -482,25 +486,45 @@ for (int _i@f.scopeId@ = 0; _i@f.scopeId@ < @f.collection.path@.size(); _i@f.sco
     if (_trimIterTrailingNewline@f.scopeId@ && _iterText@f.scopeId@.endsWith("\n"))
         _iterText@f.scopeId@ = _iterText@f.scopeId@.substring(0, _iterText@f.scopeId@.length() - 1);
     @if f.precededByLit@
+    @if f.bodyBlockIndentInParentBlock@
+    if (!_sb.emitWithIndentColumn(@f.precededByLit@, @f.bodyBlockIndentInParentBlock@))
+        throw new RuntimeException("tpp render error: " + _sb.error());
+    @else@
     if (!_sb.emit(@f.precededByLit@))
         throw new RuntimeException("tpp render error: " + _sb.error());
+    @end if@
     @end if@
     if (!_sb.emit(_iterText@f.scopeId@))
         throw new RuntimeException("tpp render error: " + _sb.error());
     @if f.sepLit@
     if (_i@f.scopeId@ + 1 < @f.collection.path@.size()) {
+        @if f.bodyBlockIndentInParentBlock@
+        if (!_sb.emitWithIndentColumn(@f.sepLit@, @f.bodyBlockIndentInParentBlock@))
+            throw new RuntimeException("tpp render error: " + _sb.error());
+        @else@
         if (!_sb.emit(@f.sepLit@))
             throw new RuntimeException("tpp render error: " + _sb.error());
+        @end if@
     } else {
         @if f.followedByLit@
+        @if f.bodyBlockIndentInParentBlock@
+        if (!@f.collection.path@.isEmpty() && !_sb.emitWithIndentColumn(@f.followedByLit@, @f.bodyBlockIndentInParentBlock@))
+            throw new RuntimeException("tpp render error: " + _sb.error());
+        @else@
         if (!@f.collection.path@.isEmpty() && !_sb.emit(@f.followedByLit@))
             throw new RuntimeException("tpp render error: " + _sb.error());
+        @end if@
         @end if@
     }
     @else@
     @if f.followedByLit@
+    @if f.bodyBlockIndentInParentBlock@
+    if (_i@f.scopeId@ + 1 >= @f.collection.path@.size() && !@f.collection.path@.isEmpty() && !_sb.emitWithIndentColumn(@f.followedByLit@, @f.bodyBlockIndentInParentBlock@))
+        throw new RuntimeException("tpp render error: " + _sb.error());
+    @else@
     if (_i@f.scopeId@ + 1 >= @f.collection.path@.size() && !@f.collection.path@.isEmpty() && !_sb.emit(@f.followedByLit@))
         throw new RuntimeException("tpp render error: " + _sb.error());
+    @end if@
     @end if@
     @end if@
 }

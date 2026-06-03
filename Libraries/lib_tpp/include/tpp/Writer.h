@@ -414,20 +414,20 @@ namespace tpp
                     iterFrame.trailingNewline = false;
                 }
 
-                if (!emitOptionalText(options.precededBy))
+                if (!emitOptionalTextWithIndentColumn(options.precededBy, blockIndentInParentBlock))
                     return false;
                 if (!emitIndentedFrame(iterFrame, blockIndentInParentBlock))
                     return false;
 
                 if (forEachHasNext())
                 {
-                    if (!emitOptionalText(options.sep))
+                    if (!emitOptionalTextWithIndentColumn(options.sep, blockIndentInParentBlock))
                         return false;
                 }
                 else
                 {
                     if (options.followedBy.has_value() && !collection.empty() &&
-                        !emitOptionalText(options.followedBy))
+                        !emitOptionalTextWithIndentColumn(options.followedBy, blockIndentInParentBlock))
                     {
                         return false;
                     }
@@ -1045,6 +1045,31 @@ namespace tpp
         bool emitOptionalText(const std::optional<std::string_view> &text)
         {
             return !text.has_value() || emit(*text);
+        }
+
+        bool emitOptionalTextWithIndentColumn(const std::optional<std::string_view> &text,
+                                              int indentColumns)
+        {
+            if (!text.has_value())
+                return true;
+
+            if (indentColumns <= 0 || text->find('\n') == std::string_view::npos)
+                return emit(*text);
+
+            const std::string pad(static_cast<size_t>(indentColumns), ' ');
+            std::string indented;
+            indented.reserve(text->size() + pad.size());
+
+            for (size_t i = 0; i < text->size(); ++i)
+            {
+                const char ch = (*text)[i];
+                indented.push_back(ch);
+                if (ch == '\n' && i + 1 < text->size())
+                    indented += pad;
+            }
+
+            output(indented);
+            return true;
         }
 
         void beginForEach(size_t size)

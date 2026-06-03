@@ -306,8 +306,12 @@ for _i@f.scopeId@ in 0..<@swift_value_path(f.collection)@.count {
     @emit_instr(instr)@
     @end for@
     if _sb.hasError { fatalError("tpp render error: \(_sb.error)") }
+    @if f.bodyBlockIndentInParentBlock@
+    var _iterText@f.scopeId@ = _sb.endBlockCapture(@f.bodyBlockIndentInParentBlock@)
+    @else@
     let _iter@f.scopeId@ = _sb.endCaptureResult()
     var _iterText@f.scopeId@ = _iter@f.scopeId@.text
+    @end if@
     var _trimIterTrailingNewline@f.scopeId@ = false
     if _i@f.scopeId@ + 1 < @swift_value_path(f.collection)@.count {
         @if f.sepLit@
@@ -322,20 +326,36 @@ for _i@f.scopeId@ in 0..<@swift_value_path(f.collection)@.count {
         _iterText@f.scopeId@.removeLast()
     }
     @if f.precededByLit@
+    @if f.bodyBlockIndentInParentBlock@
+    _sb.emitWithIndentColumn(@f.precededByLit@, @f.bodyBlockIndentInParentBlock@)
+    @else@
     _sb.emit(@f.precededByLit@)
+    @end if@
     @end if@
     _sb.emit(_iterText@f.scopeId@)
     @if f.sepLit@
     if _i@f.scopeId@ + 1 < @swift_value_path(f.collection)@.count {
+        @if f.bodyBlockIndentInParentBlock@
+        _sb.emitWithIndentColumn(@f.sepLit@, @f.bodyBlockIndentInParentBlock@)
+        @else@
         _sb.emit(@f.sepLit@)
+        @end if@
     } else {
         @if f.followedByLit@
+        @if f.bodyBlockIndentInParentBlock@
+        if !@swift_value_path(f.collection)@.isEmpty { _sb.emitWithIndentColumn(@f.followedByLit@, @f.bodyBlockIndentInParentBlock@) }
+        @else@
         if !@swift_value_path(f.collection)@.isEmpty { _sb.emit(@f.followedByLit@) }
+        @end if@
         @end if@
     }
     @else@
     @if f.followedByLit@
+    @if f.bodyBlockIndentInParentBlock@
+    if _i@f.scopeId@ + 1 >= @swift_value_path(f.collection)@.count && !@swift_value_path(f.collection)@.isEmpty { _sb.emitWithIndentColumn(@f.followedByLit@, @f.bodyBlockIndentInParentBlock@) }
+    @else@
     if _i@f.scopeId@ + 1 >= @swift_value_path(f.collection)@.count && !@swift_value_path(f.collection)@.isEmpty { _sb.emit(@f.followedByLit@) }
+    @end if@
     @end if@
     @end if@
 }
