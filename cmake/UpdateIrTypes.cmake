@@ -32,7 +32,7 @@ if(_missing_types)
 endif()
 
 execute_process(
-    COMMAND "${CMAKE_COMMAND}" -DCMD=${TPP_EXE} -DARGS=${SOURCE_DIR} -DOUT=${OUT_JSON} -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
+    COMMAND "${CMAKE_COMMAND}" -DCMD=${TPP_EXE} -DARGS=${SOURCE_DIR} -DOUT=${OUT_JSON} -P ${TPP_SOURCE}/cmake/StdoutToFile.cmake
     RESULT_VARIABLE _tpp_rc
 )
 if(NOT _tpp_rc EQUAL 0)
@@ -40,7 +40,7 @@ if(NOT _tpp_rc EQUAL 0)
 endif()
 
 execute_process(
-    COMMAND "${CMAKE_COMMAND}" -DCMD=${TPP2CPP_EXE} "-DARGS=types;-ns;tpp;--input;${OUT_JSON}" -DOUT=${OUT_HEADER}.generated -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
+    COMMAND "${CMAKE_COMMAND}" -DCMD=${TPP2CPP_EXE} "-DARGS=types;-ns;tpp;--input;${OUT_JSON}" -DOUT=${OUT_HEADER}.generated -P ${TPP_SOURCE}/cmake/StdoutToFile.cmake
     RESULT_VARIABLE _tpp2cpp_rc
 )
 if(NOT _tpp2cpp_rc EQUAL 0)

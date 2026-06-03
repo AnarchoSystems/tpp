@@ -12,12 +12,12 @@ add_custom_target(update-codegen-types
         -DCMD=$<TARGET_FILE:tpp>
         "-DARGS=${CMAKE_CURRENT_SOURCE_DIR}"
         -DOUT=${CMAKE_CURRENT_BINARY_DIR}/_codegen_ir.json
-        -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
+        -P ${TPP_SOURCE}/cmake/StdoutToFile.cmake
     COMMAND ${CMAKE_COMMAND}
         -DCMD=$<TARGET_FILE:tpp2cpp>
         "-DARGS=types;-ns;codegen;--input;${CMAKE_CURRENT_BINARY_DIR}/_codegen_ir.json"
         -DOUT=${CMAKE_CURRENT_SOURCE_DIR}/CodegenTypes.h
-        -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
+        -P ${TPP_SOURCE}/cmake/StdoutToFile.cmake
     DEPENDS tpp tpp2cpp
     COMMENT "Regenerating CodegenTypes.h from codegen.tpp"
     VERBATIM

@@ -50,7 +50,7 @@ function(tpp_swift_add target_name)
             -DCMD=$<TARGET_FILE:tpp>
             "-DARGS=${TS_TEST_DIR}"
             -DOUT=${ir_json}
-            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
+            -P ${TPP_SOURCE}/cmake/StdoutToFile.cmake
         DEPENDS $<TARGET_FILE:tpp> ${test_case_files}
         COMMENT "tpp ${TS_NAME} → IR JSON"
         VERBATIM
@@ -63,7 +63,7 @@ function(tpp_swift_add target_name)
             -DCMD=$<TARGET_FILE:tpp2swift>
             "-DARGS=runtime-shared"
             -DOUT=${runtime_src}
-            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
+            -P ${TPP_SOURCE}/cmake/StdoutToFile.cmake
         DEPENDS $<TARGET_FILE:tpp2swift>
         COMMENT "tpp2swift runtime-shared ${TS_NAME}"
         VERBATIM
@@ -76,7 +76,7 @@ function(tpp_swift_add target_name)
             -DCMD=$<TARGET_FILE:tpp2swift>
             "-DARGS=source;--input;${ir_json}"
             -DOUT=${generated_src}
-            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
+            -P ${TPP_SOURCE}/cmake/StdoutToFile.cmake
         DEPENDS $<TARGET_FILE:tpp2swift> "${ir_json}"
         COMMENT "tpp2swift source ${TS_NAME}"
         VERBATIM
@@ -89,7 +89,7 @@ function(tpp_swift_add target_name)
             -DCMD=$<TARGET_FILE:make-swift-test>
             "-DARGS=${TS_TEST_DIR}"
             -DOUT=${test_src}
-            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
+            -P ${TPP_SOURCE}/cmake/StdoutToFile.cmake
         DEPENDS $<TARGET_FILE:make-swift-test> ${test_case_files}
         COMMENT "make-swift-test ${TS_NAME} → main.swift"
         VERBATIM

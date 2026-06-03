@@ -469,6 +469,18 @@ for (int _i@f.scopeId@ = 0; _i@f.scopeId@ < @f.collection.path@.size(); _i@f.sco
     }
     TppWriter.CaptureResult _iter@f.scopeId@ = _sb.endCaptureResult();
     String _iterText@f.scopeId@ = _iter@f.scopeId@.text;
+    boolean _trimIterTrailingNewline@f.scopeId@ = false;
+    if (_i@f.scopeId@ + 1 < @f.collection.path@.size()) {
+        @if f.sepLit@
+        _trimIterTrailingNewline@f.scopeId@ = !@f.sepLit@.isEmpty() && @f.sepLit@.charAt(0) != '\n' && @f.sepLit@.charAt(0) != '\r';
+        @end if@
+    } else {
+        @if f.followedByLit@
+        _trimIterTrailingNewline@f.scopeId@ = !@f.followedByLit@.isEmpty() && @f.followedByLit@.charAt(0) != '\n' && @f.followedByLit@.charAt(0) != '\r';
+        @end if@
+    }
+    if (_trimIterTrailingNewline@f.scopeId@ && _iterText@f.scopeId@.endsWith("\n"))
+        _iterText@f.scopeId@ = _iterText@f.scopeId@.substring(0, _iterText@f.scopeId@.length() - 1);
     @if f.precededByLit@
     if (!_sb.emit(@f.precededByLit@))
         throw new RuntimeException("tpp render error: " + _sb.error());

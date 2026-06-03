@@ -6,7 +6,9 @@ project(Tpp)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(TPP_DIRENV_FILE "${CMAKE_SOURCE_DIR}/.envrc")
+set(TPP_SOURCE ${CMAKE_CURRENT_SOURCE_DIR})
+
+set(TPP_DIRENV_FILE "${TPP_SOURCE}/.envrc")
 set(TPP_DIRENV_BIN_DIR "${CMAKE_BINARY_DIR}/bin")
 set(TPP_DIRENV_CACHE_FILE "${CMAKE_BINARY_DIR}/CMakeCache.txt")
 
@@ -24,7 +26,7 @@ message(STATUS "Building arm 64Bit")
 
 include(FetchContent)
 
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
+list(APPEND CMAKE_MODULE_PATH "${TPP_SOURCE}/cmake")
 include(TppHelpers)
 include(ProjectOptions)
 
@@ -35,7 +37,7 @@ endif()
 
 if(_tpp_is_top_level)
   configure_file(
-    "${CMAKE_SOURCE_DIR}/cmake/envrc.in"
+    "${TPP_SOURCE}/cmake/envrc.in"
     "${TPP_DIRENV_FILE}"
     @ONLY
   )
@@ -77,14 +79,14 @@ add_subdirectory(Executables)
 add_custom_target(update-ir-types
   COMMAND ${CMAKE_COMMAND}
           -DCMD=$<TARGET_FILE:tpp>
-          "-DARGS=${CMAKE_SOURCE_DIR}/Libraries/lib_tpp"
+          "-DARGS=${TPP_SOURCE}/Libraries/lib_tpp"
           -DOUT=${CMAKE_BINARY_DIR}/Libraries/lib_tpp/_ir.json
-          -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
+          -P ${TPP_SOURCE}/cmake/StdoutToFile.cmake
   COMMAND ${CMAKE_COMMAND}
           -DCMD=$<TARGET_FILE:tpp2cpp>
           "-DARGS=types;-ns;tpp;--input;${CMAKE_BINARY_DIR}/Libraries/lib_tpp/_ir.json"
-          -DOUT=${CMAKE_SOURCE_DIR}/Libraries/lib_tpp/include/tpp/IR.h
-          -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
+          -DOUT=${TPP_SOURCE}/Libraries/lib_tpp/include/tpp/IR.h
+          -P ${TPP_SOURCE}/cmake/StdoutToFile.cmake
   DEPENDS tpp tpp2cpp
   COMMENT "Regenerating IR.h from Libraries/lib_tpp/ir.tpp"
   VERBATIM

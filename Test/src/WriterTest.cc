@@ -162,6 +162,36 @@ TEST(WriterTest, EmitCapturedBlockForEach)
     EXPECT_EQ(writer.takeOutput(), "    alpha\n    beta\n");
 }
 
+TEST(WriterTest, EmitCapturedBlockForEachJoinsTrailingNewlineBeforeSeparator)
+{
+    Writer writer;
+    std::vector<std::string> items = {"foo", "bar", "qux"};
+    Writer::NativeLoopOptions options;
+    options.sep = std::string_view{",\n"};
+
+    EXPECT_TRUE(writer.emitCapturedBlockForEach(items, 3, options, [&](const auto &item, int) {
+        EXPECT_TRUE(writer.emitValue(item));
+        EXPECT_TRUE(writer.emit("\n"));
+    }));
+
+    EXPECT_EQ(writer.takeOutput(), "   foo,\n   bar,\n   qux\n");
+}
+
+TEST(WriterTest, EmitCapturedBlockForEachKeepsRuntimeColumnForNewlineSeparator)
+{
+    Writer writer;
+    std::vector<std::string> items = {"foo", "bar", "qux"};
+    Writer::NativeLoopOptions options;
+    options.sep = std::string_view{",\n"};
+
+    EXPECT_TRUE(writer.emit("   "));
+    EXPECT_TRUE(writer.emitCapturedBlockForEach(items, options, [&](const auto &item, int) {
+        EXPECT_TRUE(writer.emitValue(item));
+    }));
+
+    EXPECT_EQ(writer.takeOutput(), "   foo,\n   bar,\n   qux");
+}
+
 TEST(WriterTest, EmitAlignedForEach)
 {
     struct Row

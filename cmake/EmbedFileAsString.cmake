@@ -12,7 +12,7 @@
 #       -DINPUT=${json_file}
 #       -DOUT=${header_file}
 #       -DVAR=ir_json
-#       -P ${CMAKE_SOURCE_DIR}/cmake/EmbedFileAsString.cmake
+#       -P ${TPP_SOURCE}/cmake/EmbedFileAsString.cmake
 
 file(READ "${INPUT}" _raw)
 

@@ -2,7 +2,7 @@ project(tpp2cpp)
 
 set(SHARED_TYPES
     "${CMAKE_CURRENT_SOURCE_DIR}/../codegen/codegen.tpp"
-    "${CMAKE_SOURCE_DIR}/Libraries/lib_tpp/ir.tpp")
+    "${TPP_SOURCE}/Libraries/lib_tpp/ir.tpp")
 
 add_executable(tpp2cpp Main.cc)
 
@@ -19,7 +19,7 @@ add_custom_command(OUTPUT "${_tpp2cpp_ir}"
         -DCMD=$<TARGET_FILE:tpp>
         "-DARGS=${CMAKE_CURRENT_SOURCE_DIR}"
         -DOUT=${_tpp2cpp_ir}
-        -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
+        -P ${TPP_SOURCE}/cmake/StdoutToFile.cmake
     DEPENDS tpp
             ${SHARED_TYPES}
             ${CMAKE_CURRENT_SOURCE_DIR}/types.tpp
@@ -35,7 +35,7 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/defs.h
         -DINPUT=${_tpp2cpp_ir}
         -DOUT=${CMAKE_CURRENT_BINARY_DIR}/defs.h
         -DVAR=defs_ir_json
-        -P ${CMAKE_SOURCE_DIR}/cmake/EmbedFileAsString.cmake
+        -P ${TPP_SOURCE}/cmake/EmbedFileAsString.cmake
     DEPENDS "${_tpp2cpp_ir}"
     COMMENT "Embedding IR JSON into defs.h (tpp2cpp)"
     VERBATIM)

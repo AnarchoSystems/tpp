@@ -307,7 +307,20 @@ for _i@f.scopeId@ in 0..<@swift_value_path(f.collection)@.count {
     @end for@
     if _sb.hasError { fatalError("tpp render error: \(_sb.error)") }
     let _iter@f.scopeId@ = _sb.endCaptureResult()
-    let _iterText@f.scopeId@ = _iter@f.scopeId@.text
+    var _iterText@f.scopeId@ = _iter@f.scopeId@.text
+    var _trimIterTrailingNewline@f.scopeId@ = false
+    if _i@f.scopeId@ + 1 < @swift_value_path(f.collection)@.count {
+        @if f.sepLit@
+        _trimIterTrailingNewline@f.scopeId@ = !@f.sepLit@.isEmpty && @f.sepLit@.first != "\n" && @f.sepLit@.first != "\r"
+        @end if@
+    } else {
+        @if f.followedByLit@
+        _trimIterTrailingNewline@f.scopeId@ = !@f.followedByLit@.isEmpty && @f.followedByLit@.first != "\n" && @f.followedByLit@.first != "\r"
+        @end if@
+    }
+    if _trimIterTrailingNewline@f.scopeId@ && _iterText@f.scopeId@.hasSuffix("\n") {
+        _iterText@f.scopeId@.removeLast()
+    }
     @if f.precededByLit@
     _sb.emit(@f.precededByLit@)
     @end if@

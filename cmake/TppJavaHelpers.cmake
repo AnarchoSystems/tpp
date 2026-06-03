@@ -66,7 +66,7 @@ function(tpp_java_add target_name)
             -DCMD=$<TARGET_FILE:tpp>
             "-DARGS=${TJ_TEST_DIR}"
             -DOUT=${ir_json}
-            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
+            -P ${TPP_SOURCE}/cmake/StdoutToFile.cmake
         DEPENDS $<TARGET_FILE:tpp> ${test_case_files}
         COMMENT "tpp ${TJ_NAME} → IR JSON"
         VERBATIM
@@ -79,7 +79,7 @@ function(tpp_java_add target_name)
             -DCMD=$<TARGET_FILE:tpp2java>
             "-DARGS=runtime-shared"
             -DOUT=${runtime_src}
-            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
+            -P ${TPP_SOURCE}/cmake/StdoutToFile.cmake
         DEPENDS $<TARGET_FILE:tpp2java>
         COMMENT "tpp2java runtime-shared ${TJ_NAME}"
         VERBATIM
@@ -92,7 +92,7 @@ function(tpp_java_add target_name)
             -DCMD=$<TARGET_FILE:tpp2java>
             "-DARGS=source;--input;${ir_json}"
             -DOUT=${generated_src}
-            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
+            -P ${TPP_SOURCE}/cmake/StdoutToFile.cmake
         DEPENDS $<TARGET_FILE:tpp2java> "${ir_json}"
         COMMENT "tpp2java source ${TJ_NAME}"
         VERBATIM
@@ -105,7 +105,7 @@ function(tpp_java_add target_name)
             -DCMD=$<TARGET_FILE:make-java-test>
             "-DARGS=${TJ_TEST_DIR}"
             -DOUT=${test_src}
-            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
+            -P ${TPP_SOURCE}/cmake/StdoutToFile.cmake
         DEPENDS $<TARGET_FILE:make-java-test> ${test_case_files}
         COMMENT "make-java-test ${TJ_NAME} → Test.java"
         VERBATIM

@@ -126,12 +126,12 @@ foreach(test_name IN LISTS tpp_codegen_cases)
             "-DINPUT_ARGS=--print-inputs;${test_dir}"
             -DOUT=${out_test}
             -DDEPFILE=${out_test_depfile}
-            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFileWithDepfile.cmake
+            -P ${TPP_SOURCE}/cmake/StdoutToFileWithDepfile.cmake
         DEPENDS
             $<TARGET_FILE:make-stat-test>
             $<TARGET_FILE:tpp>
             ${test_expectation_deps}
-            ${CMAKE_SOURCE_DIR}/cmake/StdoutToFileWithDepfile.cmake
+            ${TPP_SOURCE}/cmake/StdoutToFileWithDepfile.cmake
         DEPFILE ${out_test_depfile}
         COMMENT "make-stat-test ${test_name}"
         VERBATIM)
@@ -229,7 +229,7 @@ add_custom_command(
         -DCMD=$<TARGET_FILE:tpp2java>
         "-DARGS=runtime-shared"
         -DOUT=${java_shared_runtime}
-        -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
+        -P ${TPP_SOURCE}/cmake/StdoutToFile.cmake
     DEPENDS $<TARGET_FILE:tpp2java>
     COMMENT "tpp2java runtime-shared"
     VERBATIM)
@@ -240,7 +240,7 @@ add_custom_command(
         -DCMD=$<TARGET_FILE:tpp2swift>
         "-DARGS=runtime-shared"
         -DOUT=${swift_shared_runtime}
-        -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
+        -P ${TPP_SOURCE}/cmake/StdoutToFile.cmake
     DEPENDS $<TARGET_FILE:tpp2swift>
     COMMENT "tpp2swift runtime-shared"
     VERBATIM)
@@ -265,7 +265,7 @@ foreach(test_name IN LISTS tpp_codegen_cases)
             -DCMD=$<TARGET_FILE:tpp2java>
             "-DARGS=bundle;-ns;${java_namespace};--input;${shared_ir}"
             -DOUT=${java_bundle}
-            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
+            -P ${TPP_SOURCE}/cmake/StdoutToFile.cmake
         DEPENDS $<TARGET_FILE:tpp2java> "${shared_ir}"
         COMMENT "tpp2java bundle ${test_name}"
         VERBATIM)
@@ -279,12 +279,12 @@ foreach(test_name IN LISTS tpp_codegen_cases)
             "-DINPUT_ARGS=--print-inputs;${test_dir}"
             -DOUT=${java_fragment}
             -DDEPFILE=${java_fragment_depfile}
-            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFileWithDepfile.cmake
+            -P ${TPP_SOURCE}/cmake/StdoutToFileWithDepfile.cmake
         DEPENDS
             $<TARGET_FILE:make-java-test>
             $<TARGET_FILE:tpp>
             ${test_expectation_deps}
-            ${CMAKE_SOURCE_DIR}/cmake/StdoutToFileWithDepfile.cmake
+            ${TPP_SOURCE}/cmake/StdoutToFileWithDepfile.cmake
         DEPFILE "${java_fragment_depfile}"
         COMMENT "make-java-test fragment ${test_name}"
         VERBATIM)
@@ -304,7 +304,7 @@ foreach(test_name IN LISTS tpp_codegen_cases)
             -DCMD=$<TARGET_FILE:tpp2swift>
             "-DARGS=source;-ns;${swift_namespace};--input;${shared_ir}"
             -DOUT=${swift_bundle}
-            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
+            -P ${TPP_SOURCE}/cmake/StdoutToFile.cmake
         DEPENDS $<TARGET_FILE:tpp2swift> "${shared_ir}"
         COMMENT "tpp2swift source ${test_name}"
         VERBATIM)
@@ -318,12 +318,12 @@ foreach(test_name IN LISTS tpp_codegen_cases)
             "-DINPUT_ARGS=--print-inputs;${test_dir}"
             -DOUT=${swift_fragment}
             -DDEPFILE=${swift_fragment_depfile}
-            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFileWithDepfile.cmake
+            -P ${TPP_SOURCE}/cmake/StdoutToFileWithDepfile.cmake
         DEPENDS
             $<TARGET_FILE:make-swift-test>
             $<TARGET_FILE:tpp>
             ${test_expectation_deps}
-            ${CMAKE_SOURCE_DIR}/cmake/StdoutToFileWithDepfile.cmake
+            ${TPP_SOURCE}/cmake/StdoutToFileWithDepfile.cmake
         DEPFILE "${swift_fragment_depfile}"
         COMMENT "make-swift-test fragment ${test_name}"
         VERBATIM)
@@ -343,7 +343,7 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND}
         -DOUT=${java_runner_src}
         "-DINPUTS=${java_concat_inputs}"
-        -P ${CMAKE_SOURCE_DIR}/cmake/ConcatFiles.cmake
+        -P ${TPP_SOURCE}/cmake/ConcatFiles.cmake
     DEPENDS ${java_concat_inputs}
     COMMENT "Assembling Java test runner"
     VERBATIM)
@@ -353,7 +353,7 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND}
         -DOUT=${swift_runner_src}
         "-DINPUTS=${swift_concat_inputs}"
-        -P ${CMAKE_SOURCE_DIR}/cmake/ConcatFiles.cmake
+        -P ${TPP_SOURCE}/cmake/ConcatFiles.cmake
     DEPENDS ${swift_concat_inputs}
     COMMENT "Assembling Swift test runner"
     VERBATIM)
@@ -409,8 +409,8 @@ add_dependencies(build_all_tests swift_tests)
 # ── update_ir_snapshots — regenerate IR snapshots and bump version ───────────
 
 add_custom_target(update_ir_snapshots
-    COMMAND ${CMAKE_SOURCE_DIR}/scripts/update-ir-snapshots.sh ${CMAKE_BINARY_DIR}
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMAND ${TPP_SOURCE}/scripts/update-ir-snapshots.sh ${CMAKE_BINARY_DIR}
+    WORKING_DIRECTORY ${TPP_SOURCE}
     USES_TERMINAL
     COMMENT "Updating IR snapshots and version"
 )

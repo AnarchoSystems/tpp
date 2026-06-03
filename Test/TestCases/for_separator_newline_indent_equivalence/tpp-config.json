@@ -1,0 +1,25 @@
+{
+    "types": [
+        "typedefs.tpp"
+    ],
+    "templates": [
+        "template.tpp"
+    ],
+    "previews": [
+        {
+            "template": "main",
+            "input": {
+                "e": {
+                    "name": "Foo",
+                    "prefix": "f_",
+                    "cases": [
+                        "foo",
+                        "bar",
+                        "qux"
+                    ]
+                }
+            },
+            "name": "default"
+        }
+    ]
+}

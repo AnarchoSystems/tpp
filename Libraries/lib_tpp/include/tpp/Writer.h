@@ -38,6 +38,32 @@ namespace tpp
             std::vector<RenderMapping> mappings;
         };
 
+        static void trimSingleTrailingNewline(CaptureResult &result)
+        {
+            if (result.text.empty() || result.text.back() != '\n')
+                return;
+
+            result.text.pop_back();
+            const int newSize = static_cast<int>(result.text.size());
+            result.mappings.erase(
+                std::remove_if(result.mappings.begin(), result.mappings.end(), [newSize](const RenderMapping &mapping) {
+                    return mapping.outStart >= newSize;
+                }),
+                result.mappings.end());
+
+            for (auto &mapping : result.mappings)
+                mapping.outEnd = std::min(mapping.outEnd, newSize);
+        }
+
+        static bool shouldTrimBeforeJoiner(const std::optional<std::string_view> &joiner)
+        {
+            if (!joiner.has_value() || joiner->empty())
+                return false;
+
+            const char first = (*joiner)[0];
+            return first != '\n' && first != '\r';
+        }
+
         explicit Writer(std::map<std::string, TppPolicy> namedPolicies = {})
             : namedPolicies_(std::move(namedPolicies))
         {
@@ -303,6 +329,12 @@ namespace tpp
 
                 CaptureResult iterResult = endCaptureResult();
 
+                if ((forEachHasNext() && shouldTrimBeforeJoiner(options.sep)) ||
+                    (!forEachHasNext() && shouldTrimBeforeJoiner(options.followedBy)))
+                {
+                    trimSingleTrailingNewline(iterResult);
+                }
+
                 if (!emitOptionalText(options.precededBy))
                     return false;
                 if (!emitCaptureResult(iterResult))
@@ -368,6 +400,15 @@ namespace tpp
                 }
 
                 OutputFrame iterFrame = endCaptureFrame();
+
+                 if (((forEachHasNext() && shouldTrimBeforeJoiner(options.sep)) ||
+                     (!forEachHasNext() && shouldTrimBeforeJoiner(options.followedBy))) &&
+                    iterFrame.trailingNewline && !iterFrame.lines.empty())
+                {
+                    iterFrame.currentLine = std::move(iterFrame.lines.back());
+                    iterFrame.lines.pop_back();
+                    iterFrame.trailingNewline = false;
+                }
 
                 if (!emitOptionalText(options.precededBy))
                     return false;

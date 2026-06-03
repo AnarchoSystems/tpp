@@ -396,6 +396,8 @@ namespace tpp
         {
             const auto &items = collection;
             const auto capturedBlockInfo = analyze_captured_block(*instr.body);
+            const bool separatorHasLineBreak = instr.sep.has_value() &&
+                (instr.sep->find('\n') != std::string::npos || instr.sep->find('\r') != std::string::npos);
 
             if (capturedBlockInfo.wrapped)
             {
@@ -426,6 +428,25 @@ namespace tpp
 
                     scopes_.push_back(std::move(bindings));
                     exec_body_range(*instr.body, capturedBlockInfo.firstIndex, capturedBlockInfo.pastLastIndex);
+                    scopes_.pop_back();
+                });
+            }
+
+            if (separatorHasLineBreak)
+            {
+                Writer::NativeLoopOptions options;
+                options.precededBy = instr.precededBy;
+                options.sep = instr.sep;
+                options.followedBy = instr.followedBy;
+
+                return writer_.emitCapturedBlockForEach(items, options, [&](const auto &item, int enumerator) {
+                    std::map<std::string, nlohmann::json> bindings;
+                    bindings.emplace(instr.varName, item);
+                    if (instr.enumeratorName.has_value())
+                        bindings.emplace(*instr.enumeratorName, enumerator);
+
+                    scopes_.push_back(std::move(bindings));
+                    exec_body(*instr.body);
                     scopes_.pop_back();
                 });
             }

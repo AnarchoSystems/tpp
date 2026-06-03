@@ -1,0 +1,13 @@
+enum EFoo
+{
+   f_foo,
+   f_bar,
+   f_qux
+};
+
+enum EFoo
+{
+   f_foo,
+   f_bar,
+   f_qux
+};

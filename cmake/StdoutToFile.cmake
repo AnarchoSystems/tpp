@@ -12,7 +12,7 @@
 #       -DCMD=$<TARGET_FILE:tool>
 #       "-DARGS=arg1;arg2;arg3"
 #       -DOUT=${output_file}
-#       -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
+#       -P ${TPP_SOURCE}/cmake/StdoutToFile.cmake
 
 get_filename_component(_dir "${OUT}" DIRECTORY)
 file(MAKE_DIRECTORY "${_dir}")

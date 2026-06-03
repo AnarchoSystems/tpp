@@ -2,7 +2,7 @@ project(tpp2swift)
 
 set(SHARED_TYPES
     "${CMAKE_CURRENT_SOURCE_DIR}/../codegen/codegen.tpp"
-    "${CMAKE_SOURCE_DIR}/Libraries/lib_tpp/ir.tpp")
+    "${TPP_SOURCE}/Libraries/lib_tpp/ir.tpp")
 
 add_executable(tpp2swift Main.cc)
 target_link_libraries(tpp2swift PRIVATE tpp_codegen)
@@ -17,7 +17,7 @@ add_custom_command(OUTPUT "${swift_ir}"
         -DCMD=$<TARGET_FILE:tpp>
         "-DARGS=${CMAKE_CURRENT_SOURCE_DIR}"
         -DOUT=${swift_ir}
-        -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
+        -P ${TPP_SOURCE}/cmake/StdoutToFile.cmake
     DEPENDS $<TARGET_FILE:tpp> ${swift_tpp_sources} ${SHARED_TYPES}
     COMMENT "tpp swift_defs"
     VERBATIM)
@@ -30,7 +30,7 @@ add_custom_command(OUTPUT "${swift_funs}"
         -DCMD=$<TARGET_FILE:tpp2cpp>
         "-DARGS=${_swift_funs_args}"
         -DOUT=${swift_funs}
-        -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
+        -P ${TPP_SOURCE}/cmake/StdoutToFile.cmake
     DEPENDS $<TARGET_FILE:tpp2cpp> "${swift_ir}"
     COMMENT "tpp2cpp functions swift_defs"
     VERBATIM)
@@ -43,7 +43,7 @@ add_custom_command(OUTPUT "${swift_impl}"
         -DCMD=$<TARGET_FILE:tpp2cpp>
         "-DARGS=${_swift_impl_args}"
         -DOUT=${swift_impl}
-        -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
+        -P ${TPP_SOURCE}/cmake/StdoutToFile.cmake
     DEPENDS $<TARGET_FILE:tpp2cpp> "${swift_ir}" "${swift_funs}"
     COMMENT "tpp2cpp impl swift_defs"
     VERBATIM)

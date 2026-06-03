@@ -327,6 +327,9 @@ struct ConvertConfig
 
     /// Preserve explicit BeginCapturedBlock/EmitCapturedBlock instructions in converted bodies.
     bool preserveCapturedBlockInstructions = false;
+
+    /// Treat inline for-loops with newline-containing separators as captured-body loops.
+    bool captureInlineForWhenSeparatorHasLineBreak = false;
 };
 
 inline RenderExprInfo exprInfoToContext(const tpp::ExprInfo &expr)
@@ -531,7 +534,11 @@ inline RenderInstruction convertInstruction(
                 forData->followedByLit = stringLiteral(*arg->followedBy);
             if (arg->precededBy.has_value())
                 forData->precededByLit = stringLiteral(*arg->precededBy);
-            forData->capturesBody = bodyIndent.wrapped;
+            const bool separatorHasLineBreak =
+                arg->sep.has_value() &&
+                (arg->sep->find('\n') != std::string::npos || arg->sep->find('\r') != std::string::npos);
+            forData->capturesBody = bodyIndent.wrapped ||
+                (cfg.captureInlineForWhenSeparatorHasLineBreak && separatorHasLineBreak);
             forData->bodyBlockIndentInParentBlock = bodyIndent.blockIndentInParentBlock;
 
             if (arg->alignSpec.has_value())
@@ -720,6 +727,7 @@ struct BuildFunctionsConfig
     bool needsStatic = false;
     bool callNeedsTry = false;
     bool preserveCapturedBlockInstructions = false;
+    bool captureInlineForWhenSeparatorHasLineBreak = false;
     std::vector<std::string> includes;
 
     static BuildFunctionsConfig forCpp(const std::vector<std::string> &includes = {})
@@ -728,6 +736,7 @@ struct BuildFunctionsConfig
         cfg.needsStatic = false;
         cfg.callNeedsTry = false;
         cfg.preserveCapturedBlockInstructions = true;
+        cfg.captureInlineForWhenSeparatorHasLineBreak = true;
         cfg.includes = includes;
         return cfg;
     }
@@ -738,6 +747,7 @@ struct BuildFunctionsConfig
         cfg.needsStatic = true;
         cfg.callNeedsTry = false;
         cfg.preserveCapturedBlockInstructions = true;
+        cfg.captureInlineForWhenSeparatorHasLineBreak = true;
         return cfg;
     }
 
@@ -747,6 +757,7 @@ struct BuildFunctionsConfig
         cfg.needsStatic = !namespaceName.empty();
         cfg.callNeedsTry = policiesPresent;
         cfg.preserveCapturedBlockInstructions = true;
+        cfg.captureInlineForWhenSeparatorHasLineBreak = true;
         return cfg;
     }
 };
@@ -763,6 +774,7 @@ inline RenderFunctionsInput buildFunctionsContext(
     cfg.functionPrefix = functionPrefix;
     cfg.callNeedsTry = bfCfg.callNeedsTry;
     cfg.preserveCapturedBlockInstructions = bfCfg.preserveCapturedBlockInstructions;
+    cfg.captureInlineForWhenSeparatorHasLineBreak = bfCfg.captureInlineForWhenSeparatorHasLineBreak;
 
     std::vector<RenderFunctionDef> functions;
     for (const auto &fn : ir.functions)

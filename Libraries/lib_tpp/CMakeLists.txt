@@ -35,7 +35,7 @@ add_library(lib_tpp
 
 target_link_libraries(lib_tpp PUBLIC ${TPP_NLOHMANN_JSON_TARGET})
 
-set(_version_json "${CMAKE_SOURCE_DIR}/version.json")
+set(_version_json "${TPP_SOURCE}/version.json")
 file(READ "${_version_json}" _version_json_content)
 string(JSON _version_major GET "${_version_json_content}" "major")
 string(JSON _version_minor GET "${_version_json_content}" "minor")
@@ -58,7 +58,7 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND}
             -DVERSION_JSON=${_version_json}
             -DOUTPUT=${_version_header}
-            -P ${CMAKE_SOURCE_DIR}/cmake/GenerateVersionHeader.cmake
+            -P ${TPP_SOURCE}/cmake/GenerateVersionHeader.cmake
     DEPENDS ${_version_json}
     COMMENT "Generating tpp/Version.h from version.json"
 )

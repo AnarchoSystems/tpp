@@ -2,7 +2,7 @@ project(tpp2java)
 
 set(SHARED_TYPES
     "${CMAKE_CURRENT_SOURCE_DIR}/../codegen/codegen.tpp"
-    "${CMAKE_SOURCE_DIR}/Libraries/lib_tpp/ir.tpp")
+    "${TPP_SOURCE}/Libraries/lib_tpp/ir.tpp")
 
 add_executable(tpp2java Main.cc)
 target_link_libraries(tpp2java PRIVATE tpp_codegen)
@@ -17,7 +17,7 @@ add_custom_command(OUTPUT "${java_ir}"
         -DCMD=$<TARGET_FILE:tpp>
         "-DARGS=${CMAKE_CURRENT_SOURCE_DIR}"
         -DOUT=${java_ir}
-        -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
+        -P ${TPP_SOURCE}/cmake/StdoutToFile.cmake
     DEPENDS $<TARGET_FILE:tpp> ${java_tpp_sources} ${SHARED_TYPES}
     COMMENT "tpp java_defs"
     VERBATIM)
@@ -30,7 +30,7 @@ add_custom_command(OUTPUT "${java_funs}"
         -DCMD=$<TARGET_FILE:tpp2cpp>
         "-DARGS=${_java_funs_args}"
         -DOUT=${java_funs}
-        -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
+        -P ${TPP_SOURCE}/cmake/StdoutToFile.cmake
     DEPENDS $<TARGET_FILE:tpp2cpp> "${java_ir}"
     COMMENT "tpp2cpp functions java_defs"
     VERBATIM)
@@ -43,7 +43,7 @@ add_custom_command(OUTPUT "${java_impl}"
         -DCMD=$<TARGET_FILE:tpp2cpp>
         "-DARGS=${_java_impl_args}"
         -DOUT=${java_impl}
-        -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
+        -P ${TPP_SOURCE}/cmake/StdoutToFile.cmake
     DEPENDS $<TARGET_FILE:tpp2cpp> "${java_ir}" "${java_funs}"
     COMMENT "tpp2cpp impl java_defs"
     VERBATIM)

@@ -6,6 +6,6 @@ tpp_add(make-java-test
 )
 
 target_include_directories(make-java-test PRIVATE
-    ${CMAKE_SOURCE_DIR}/Test/include)
+    ${TPP_SOURCE}/Test/include)
 
 target_link_libraries(make-java-test PRIVATE tpp_internal_api)

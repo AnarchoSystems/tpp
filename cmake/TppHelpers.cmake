@@ -72,8 +72,8 @@ function(tpp_add target_name)
             "-DINPUT_ARGS=--print-inputs;${TPP_SOURCE_DIR}"
             -DOUT=${out_json}
             -DDEPFILE=${out_json_depfile}
-            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFileWithDepfile.cmake
-        DEPENDS $<TARGET_FILE:tpp> ${CMAKE_SOURCE_DIR}/cmake/StdoutToFileWithDepfile.cmake
+            -P ${TPP_SOURCE}/cmake/StdoutToFileWithDepfile.cmake
+        DEPENDS $<TARGET_FILE:tpp> ${TPP_SOURCE}/cmake/StdoutToFileWithDepfile.cmake
         DEPFILE "${out_json_depfile}"
         COMMENT "tpp ${out_prefix}"
         VERBATIM
@@ -87,7 +87,7 @@ function(tpp_add target_name)
             -DCMD=$<TARGET_FILE:tpp2cpp>
             "-DARGS=${_types_args}"
             -DOUT=${out_types}
-            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
+            -P ${TPP_SOURCE}/cmake/StdoutToFile.cmake
         DEPENDS $<TARGET_FILE:tpp2cpp> "${out_json}"
         COMMENT "tpp2cpp types ${out_prefix}"
         VERBATIM
@@ -101,7 +101,7 @@ function(tpp_add target_name)
             -DCMD=$<TARGET_FILE:tpp2cpp>
             "-DARGS=${_funs_args}"
             -DOUT=${out_funs}
-            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
+            -P ${TPP_SOURCE}/cmake/StdoutToFile.cmake
         DEPENDS $<TARGET_FILE:tpp2cpp> "${out_json}"
         COMMENT "tpp2cpp functions ${out_prefix}"
         VERBATIM
@@ -115,7 +115,7 @@ function(tpp_add target_name)
             -DCMD=$<TARGET_FILE:tpp2cpp>
             "-DARGS=${_impl_args}"
             -DOUT=${out_impl}
-            -P ${CMAKE_SOURCE_DIR}/cmake/StdoutToFile.cmake
+            -P ${TPP_SOURCE}/cmake/StdoutToFile.cmake
         DEPENDS $<TARGET_FILE:tpp2cpp> "${out_json}" "${out_funs}" "${out_types}"
         COMMENT "tpp2cpp impl ${out_prefix}"
         VERBATIM
