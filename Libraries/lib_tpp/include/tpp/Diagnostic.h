@@ -20,7 +20,7 @@ namespace tpp
     NLOHMANN_JSON_SERIALIZE_ENUM(DiagnosticSeverity, {{DiagnosticSeverity::Error, "error"},
                                                       {DiagnosticSeverity::Warning, "warning"},
                                                       {DiagnosticSeverity::Information, "information"},
-                                                      {DiagnosticSeverity::Hint, "hint"}});
+                                                      {DiagnosticSeverity::Hint, "hint"}})
 
     struct Position
     {
