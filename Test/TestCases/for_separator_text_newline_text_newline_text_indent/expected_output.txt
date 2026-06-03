@@ -1,0 +1,7 @@
+{
+    A +
+    then
+    finally B +
+    then
+    finally C
+}

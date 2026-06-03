@@ -311,11 +311,11 @@ for _i@f.scopeId@ in 0..<@swift_value_path(f.collection)@.count {
     var _trimIterTrailingNewline@f.scopeId@ = false
     if _i@f.scopeId@ + 1 < @swift_value_path(f.collection)@.count {
         @if f.sepLit@
-        _trimIterTrailingNewline@f.scopeId@ = !@f.sepLit@.isEmpty && @f.sepLit@.first != "\n" && @f.sepLit@.first != "\r"
+        _trimIterTrailingNewline@f.scopeId@ = !@f.sepLit@.isEmpty && @f.sepLit@.contains { $0 != "\n" && $0 != "\r" }
         @end if@
     } else {
         @if f.followedByLit@
-        _trimIterTrailingNewline@f.scopeId@ = !@f.followedByLit@.isEmpty && @f.followedByLit@.first != "\n" && @f.followedByLit@.first != "\r"
+        _trimIterTrailingNewline@f.scopeId@ = !@f.followedByLit@.isEmpty && @f.followedByLit@.contains { $0 != "\n" && $0 != "\r" }
         @end if@
     }
     if _trimIterTrailingNewline@f.scopeId@ && _iterText@f.scopeId@.hasSuffix("\n") {

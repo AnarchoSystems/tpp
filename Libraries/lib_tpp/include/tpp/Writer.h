@@ -60,8 +60,12 @@ namespace tpp
             if (!joiner.has_value() || joiner->empty())
                 return false;
 
-            const char first = (*joiner)[0];
-            return first != '\n' && first != '\r';
+            for (const char ch : *joiner)
+            {
+                if (ch != '\n' && ch != '\r')
+                    return true;
+            }
+            return false;
         }
 
         explicit Writer(std::map<std::string, TppPolicy> namedPolicies = {})
