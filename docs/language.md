@@ -543,6 +543,15 @@ A line that mixes literal text or expressions with directives is an **inline lin
 
 ![](res/InlineExample.png)
 
+A body opened inline may continue over the following lines and be closed by a mid-line end directive:
+
+```
+@case Num(n)@num: @n@
+end num@end case@
+```
+
+The closing line's newline belongs to the body, so this renders exactly like the equivalent block-style layout. One restriction: an end directive that closes a block opened on an *earlier* line must be the last content on its line. Trailing text or another directive after it is a compile error — move it to the next line. Constructs that open and close on a single line (`@switch e@@case A@a@end case@@end switch@`) are not affected.
+
 ### Block Indentation
 
 When a block body is rendered, the **zero marker** — the leading whitespace of the first non-empty line in the body — is stripped from every body line. The body is then re-indented to the insertion column of the enclosing directive:

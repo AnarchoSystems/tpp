@@ -11,7 +11,10 @@ target_include_directories(tpp2swift PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 # ── Compile Swift templates to C++ functions via tpp2cpp ─────────────────────
 # Step 1: compile templates to JSON IR
 set(swift_ir "${CMAKE_CURRENT_BINARY_DIR}/swift_defs-tpp.json")
-file(GLOB swift_tpp_sources "${CMAKE_CURRENT_SOURCE_DIR}/*")
+set(swift_tpp_sources
+    "${CMAKE_CURRENT_SOURCE_DIR}/source.tpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/runtime.tpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tpp-config.json")
 add_custom_command(OUTPUT "${swift_ir}"
     COMMAND ${CMAKE_COMMAND}
         -DCMD=$<TARGET_FILE:tpp>

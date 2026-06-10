@@ -1,0 +1,14 @@
+add:
+num: 1
+end num
+num: 2
+end num
+end add
+item: a
+done a
+item: b
+done b
+after for
+yes
+more yes
+after if

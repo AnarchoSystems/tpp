@@ -672,6 +672,10 @@ namespace tpp::compiler
                                 std::string functionName;
                                 if (const auto *callNode = findSyntheticRenderCall(sourceCase->body))
                                     functionName = callNode->functionName;
+                                else
+                                    throw std::runtime_error(
+                                        "internal error: synthetic render case for tag '" + variant.tag +
+                                        "' contains no function call node");
 
                                 std::vector<ResolvedCallArgument> callArguments;
                                 if (variant.payload.has_value())

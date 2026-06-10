@@ -1281,9 +1281,22 @@ namespace tpp::compiler
                 if (hasInline)
                 {
                     const size_t linePos = pos;
-                    auto inlineNodes = parseInline(tl.segments, 0, (int)pos, nullptr, true);
+                    Range inlineEndRange{};
+                    auto inlineNodes = parseInline(tl.segments, 0, (int)pos, &inlineEndRange, true);
                     for (auto &n : inlineNodes)
                         nodes.push_back(std::move(n));
+                    if (hasRange(inlineEndRange))
+                    {
+                        // A terminator (@end for@/@end if@/@end case@) appeared mid-line:
+                        // it closes the block this call is parsing. The line's newline
+                        // belongs to the body, matching the equivalent block-style layout.
+                        nodes.push_back(TextNode{"\n"});
+                        if (pos == linePos)
+                            ++pos;
+                        if (outEndRange)
+                            *outEndRange = inlineEndRange;
+                        return nodes;
+                    }
                     if (pos == linePos)
                     {
                         nodes.push_back(TextNode{"\n"});

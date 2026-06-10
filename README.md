@@ -150,6 +150,8 @@ After a full build, the main artifacts you will typically care about are:
 
 All executables are written to `build/bin/`, so tools like `direnv` only need to add a single directory to `PATH`.
 
+To integrate tpp code generation into your own CMake project, use the `tpp_add()` helper from `cmake/TppHelpers.cmake` — it automates the compile-to-IR and `tpp2cpp` codegen steps and attaches the generated sources to your target. See [CMake Integration](docs/usage.md#cmake-integration) for the full signature and examples.
+
 The `.envrc` file is generated during configure and is intentionally not committed. After the first configure, run `direnv allow` once to approve it for this checkout.
 
 If you are working in VS Code with the CMake Tools extension, the equivalent workflow is simply: configure the project once, then build the default target. That is the preferred developer workflow for this repository.

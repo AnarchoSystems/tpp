@@ -445,6 +445,42 @@ void validateTemplateSemantics(const TemplateFunction &f,
         }
     };
 
+    // Content following an end directive that closes a block opened on an
+    // earlier line is silently dropped by the AST builder; reject it here.
+    auto checkInlineEndTrailing = [&](ScopeKind kind, const char *what,
+                                      const TemplateLine &line, size_t li, const LineSeg &seg)
+    {
+        for (auto it = frames.rbegin(); it != frames.rend(); ++it)
+        {
+            if (it->kind != kind)
+                continue;
+            if (it->openLineIndex >= 0 && it->openLineIndex != (int)li)
+            {
+                size_t idx = (size_t)(&seg - line.segments.data());
+                for (size_t i = idx + 1; i < line.segments.size(); ++i)
+                {
+                    const auto &trailing = line.segments[i];
+                    if (trailing.isDirective ||
+                        trailing.text.find_first_not_of(" \t\r") != std::string::npos)
+                    {
+                        const auto &last = line.segments.back();
+                        Diagnostic d;
+                        d.range = {{(int)(bodyStartLine + li),
+                                    trailing.isDirective ? trailing.startCol - 1 : trailing.startCol},
+                                   {(int)(bodyStartLine + li),
+                                    last.isDirective ? last.endCol + 1 : last.endCol}};
+                        d.message = std::string("content after ") + what +
+                            " closing a multi-line block is not supported; move it to the next line";
+                        d.severity = DiagnosticSeverity::Error;
+                        diags.push_back(std::move(d));
+                        break;
+                    }
+                }
+            }
+            break;
+        }
+    };
+
     for (size_t li = 0; li < templateLines.size(); ++li)
     {
         const auto &line = templateLines[li];
@@ -534,6 +570,7 @@ void validateTemplateSemantics(const TemplateFunction &f,
                         break;
                     }
                 }
+                checkInlineEndTrailing(ScopeKind::For, "@end for@", line, li, seg);
                 popTo(ScopeKind::For);
             }
             else if (std::holds_alternative<AlignmentCellDirective>(seg.info))
@@ -662,6 +699,7 @@ void validateTemplateSemantics(const TemplateFunction &f,
             }
             else if (std::holds_alternative<EndIfDirective>(seg.info))
             {
+                checkInlineEndTrailing(ScopeKind::If, "@end if@", line, li, seg);
                 popTo(ScopeKind::If);
             }
             else if (auto *d = std::get_if<SwitchDirective>(&seg.info))
@@ -680,6 +718,7 @@ void validateTemplateSemantics(const TemplateFunction &f,
             }
             else if (std::holds_alternative<EndSwitchDirective>(seg.info))
             {
+                checkInlineEndTrailing(ScopeKind::Switch, "@end switch@", line, li, seg);
                 for (auto it = frames.rbegin(); it != frames.rend(); ++it)
                 {
                     if (it->kind != ScopeKind::Switch)
@@ -753,6 +792,7 @@ void validateTemplateSemantics(const TemplateFunction &f,
             }
             else if (std::holds_alternative<EndCaseDirective>(seg.info))
             {
+                checkInlineEndTrailing(ScopeKind::Case, "@end case@", line, li, seg);
                 popTo(ScopeKind::Case);
             }
             else if (auto *d = std::get_if<RenderDirective>(&seg.info))

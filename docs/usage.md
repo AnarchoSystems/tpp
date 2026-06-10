@@ -292,7 +292,7 @@ tpp my_project | tpp2java runtime-shared > Runtime.java
 tpp my_project | tpp2java source -ns Functions > Functions.java
 ```
 
-This backend is used by the Java acceptance-test pipeline in `Test/MakeJavaTest/` and by `cmake/TppJavaHelpers.cmake`.
+This backend is used by the Java acceptance-test pipeline in `Test/MakeJavaTest/`.
 
 ---
 
@@ -337,7 +337,7 @@ tpp . | tpp2swift runtime-shared > Runtime.swift
 tpp . | tpp2swift source -ns Functions > Functions.swift
 ```
 
-This backend is used by the Swift acceptance-test pipeline in `Test/MakeSwiftTest/` and by `cmake/TppSwiftHelpers.cmake`.
+This backend is used by the Swift acceptance-test pipeline in `Test/MakeSwiftTest/`.
 
 ---
 
@@ -521,32 +521,6 @@ target_link_libraries(mylib PRIVATE lib_tpp)
 The implementation `.cc` is added as a private source to `<target>`. The generated headers are accessible via the target's include directories — no extra `target_include_directories()` call needed.
 
 The compile-to-IR step tracks the resolved config, source, and policy inputs reported by `tpp --print-inputs`. The downstream codegen steps depend on that IR plus the generated headers, so edits to referenced project inputs rebuild the generated files without broad directory-glob dependencies.
-
-### `tpp_java_add()`
-
-The `cmake/TppJavaHelpers.cmake` module provides `tpp_java_add()` for generating and compiling Java acceptance tests.
-
-```cmake
-tpp_java_add(<target>
-  TEST_DIR <dir>
-  NAME     <name>
-)
-```
-
-It runs `tpp`, then `tpp2java runtime-shared`, then `tpp2java source`, then `make-java-test`, and finally `javac` to compile the shared runtime, generated Java source, and test harness together.
-
-### `tpp_swift_add()`
-
-The `cmake/TppSwiftHelpers.cmake` module provides `tpp_swift_add()` for generating and compiling Swift acceptance tests.
-
-```cmake
-tpp_swift_add(<target>
-  TEST_DIR <dir>
-  NAME     <name>
-)
-```
-
-It runs `tpp`, then `tpp2swift runtime-shared`, then `tpp2swift source`, then `make-swift-test`, and finally `swiftc` to compile the shared runtime, generated Swift source, and test harness together.
 
 ### Using Generated Code
 

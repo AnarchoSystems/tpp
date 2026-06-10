@@ -287,6 +287,8 @@ A **block line** contains only structural directives and optional whitespace —
 
 **Block indentation:** the leading whitespace of the first non-empty line in a block body is the "zero marker". All body lines are de-indented by that amount, then re-indented at the insertion column of the enclosing directive.
 
+**Multi-line inline bodies:** a body started inline (e.g. `@case Num(n)@num: @n@`) may continue over following lines and be closed by a mid-line end directive (e.g. `end num@end case@`). The closing line's newline belongs to the body. However, an end directive that closes a block opened on an *earlier* line must be the last content on its line — any trailing text or directive after it is a compile error ("content after @end …@ closing a multi-line block is not supported"). Fully single-line constructs (`@switch e@@case A@a@end case@@end switch@`) are unaffected.
+
 ---
 
 ## Escaping

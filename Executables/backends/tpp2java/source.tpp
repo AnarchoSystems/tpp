@@ -359,7 +359,7 @@ template java_policy_ref(ref: PolicyRef)
 @switch ref@@case Named(tag)@@tag@@end case@@case Pure@TppPolicy.pure@end case@@case Runtime@_policy@end case@@end switch@
 END
 
-// ── Recursive instruction dispatcher (block-style switch — avoids bug) ───────
+// ── Recursive instruction dispatcher ─────────────────────────────────────────
 
 template emit_instr(instr: RenderInstruction)
 @switch instr@

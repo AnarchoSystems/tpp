@@ -374,6 +374,7 @@ if(SWIFT_COMPILER)
     set(swift_bin "${swift_runner_dir}/Test")
     add_custom_command(
         OUTPUT "${swift_bin}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${swift_runner_dir}"
         COMMAND "${SWIFT_COMPILER}" -parse-as-library -o "${swift_bin}" "${swift_runner_src}"
         DEPENDS "${swift_runner_src}"
         COMMENT "swiftc aggregated Swift tests")

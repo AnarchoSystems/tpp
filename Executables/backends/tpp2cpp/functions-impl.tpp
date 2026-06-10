@@ -115,7 +115,7 @@ tpp::Writer::NativeLoopOptions{
 }
 END
 
-// ── Recursive instruction dispatcher (block-style switch — avoids bug) ───────
+// ── Recursive instruction dispatcher ─────────────────────────────────────────
 
 template emit_instr(instr: RenderInstruction)
 @switch instr@

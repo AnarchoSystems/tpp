@@ -11,7 +11,10 @@ target_include_directories(tpp2java PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 # ── Compile Java templates to C++ functions via tpp2cpp ──────────────────────
 # Step 1: compile templates to JSON IR
 set(java_ir "${CMAKE_CURRENT_BINARY_DIR}/java_defs-tpp.json")
-file(GLOB java_tpp_sources "${CMAKE_CURRENT_SOURCE_DIR}/*")
+set(java_tpp_sources
+    "${CMAKE_CURRENT_SOURCE_DIR}/source.tpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/runtime.tpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tpp-config.json")
 add_custom_command(OUTPUT "${java_ir}"
     COMMAND ${CMAKE_COMMAND}
         -DCMD=$<TARGET_FILE:tpp>

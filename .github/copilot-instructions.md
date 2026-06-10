@@ -12,6 +12,7 @@ tpp uses a **single compiler frontend / multiple backends** design. The `tpp` CL
 
 | Backend | Binary | Job |
 |---|---|---|
+| Compiler frontend | `tpp` | Reads `tpp-config.json`, type-checks types/templates, emits the JSON IR consumed by all backends |
 | C++ code gen | `tpp2cpp` | Emits typed C++ struct/function headers from the intermediate representation |
 | Java code gen | `tpp2java` | Emits typed Java source from the intermediate representation |
 | Swift code gen | `tpp2swift` | Emits typed Swift source from the intermediate representation |

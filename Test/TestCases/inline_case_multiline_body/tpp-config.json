@@ -1,0 +1,15 @@
+{
+    "types": ["typedefs.tpp"],
+    "templates": ["template.tpp"],
+    "previews": [
+        {
+            "template": "main",
+            "input": [
+                {"Add": {"left": {"Num": 1}, "right": {"Num": 2}}},
+                ["a", "b"],
+                true
+            ],
+            "name": "default"
+        }
+    ]
+}

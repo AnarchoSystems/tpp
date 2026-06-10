@@ -1,0 +1,18 @@
+{
+    "expect_success": false,
+    "expected_diagnostics": [
+        {
+            "uri": "error_content_after_inline_end_case/template.tpp",
+            "diagnostics": [
+                {
+                    "range": {
+                        "start": {"line": 3, "character": 17},
+                        "end":   {"line": 3, "character": 44}
+                    },
+                    "message": "content after @end case@ closing a multi-line block is not supported; move it to the next line",
+                    "severity": "error"
+                }
+            ]
+        }
+    ]
+}
