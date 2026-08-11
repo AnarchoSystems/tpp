@@ -307,24 +307,28 @@ for _i@f.scopeId@ in 0..<@swift_value_path(f.collection)@.count {
     @end for@
     if _sb.hasError { fatalError("tpp render error: \(_sb.error)") }
     @if f.bodyBlockIndentInParentBlock@
-    var _iterText@f.scopeId@ = _sb.endBlockCapture(@f.bodyBlockIndentInParentBlock@)
+    let _iterTextRaw@f.scopeId@ = _sb.endBlockCapture(@f.bodyBlockIndentInParentBlock@)
     @else@
     let _iter@f.scopeId@ = _sb.endCaptureResult()
-    var _iterText@f.scopeId@ = _iter@f.scopeId@.text
+    let _iterTextRaw@f.scopeId@ = _iter@f.scopeId@.text
     @end if@
-    var _trimIterTrailingNewline@f.scopeId@ = false
+    let _trimIterTrailingNewline@f.scopeId@: Bool
     if _i@f.scopeId@ + 1 < @swift_value_path(f.collection)@.count {
         @if f.sepLit@
         _trimIterTrailingNewline@f.scopeId@ = !@f.sepLit@.isEmpty && @f.sepLit@.contains { $0 != "\n" && $0 != "\r" }
+        @else@
+        _trimIterTrailingNewline@f.scopeId@ = false
         @end if@
     } else {
         @if f.followedByLit@
         _trimIterTrailingNewline@f.scopeId@ = !@f.followedByLit@.isEmpty && @f.followedByLit@.contains { $0 != "\n" && $0 != "\r" }
+        @else@
+        _trimIterTrailingNewline@f.scopeId@ = false
         @end if@
     }
-    if _trimIterTrailingNewline@f.scopeId@ && _iterText@f.scopeId@.hasSuffix("\n") {
-        _iterText@f.scopeId@.removeLast()
-    }
+    let _iterText@f.scopeId@ = (_trimIterTrailingNewline@f.scopeId@ && _iterTextRaw@f.scopeId@.hasSuffix("\n"))
+        ? String(_iterTextRaw@f.scopeId@.dropLast())
+        : _iterTextRaw@f.scopeId@
     @if f.precededByLit@
     @if f.bodyBlockIndentInParentBlock@
     _sb.emitWithIndentColumn(@f.precededByLit@, @f.bodyBlockIndentInParentBlock@)

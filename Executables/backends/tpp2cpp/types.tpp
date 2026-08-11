@@ -121,24 +121,86 @@ j["@field.name@"] = v.@field.name@;
 END
 
 template render_cpp_enum(e: CppEnumDef)
-@for variant in e.variants@
-@if not variant.payload@
-@if variant.docComment@@variant.docComment@@end if@struct @e.name@_@variant.tag@
-{
-    friend void to_json(nlohmann::json& j, const @e.name@_@variant.tag@&) { j = nlohmann::json::object(); }
-    friend void from_json(const nlohmann::json&, @e.name@_@variant.tag@&) {}
-};
-@end if@
-@end for@
 @if e.docComment@@e.docComment@@end if@struct @e.name@
 {
-    using Value = std::variant<@for variant in e.variants | enumerator=variantIndex sep=", "@@if not variant.payload@@e.name@_@variant.tag@@else@@if variant.recursive@std::unique_ptr<@cpp_ir_type(variant.payload)@>@else@@cpp_ir_type(variant.payload)@@end if@@end if@@end for@>;
+    @for variant in e.variants@
+@if variant.docComment@@variant.docComment@@end if@    struct @variant.tag@
+    {
+        @if variant.payload@
+        using Payload = @if variant.recursive@std::unique_ptr<@cpp_ir_type(variant.payload)@>@else@@cpp_ir_type(variant.payload)@@end if@;
+        Payload value;
+        @variant.tag@() = default;
+        @if not variant.recursive@
+        explicit @variant.tag@(const Payload& v) : value(v) {}
+        @end if@
+        explicit @variant.tag@(Payload&& v) : value(std::move(v)) {}
+        friend void to_json(nlohmann::json& j, const @variant.tag@& v) { j = _tpp_j(v.value); }
+        @else@
+        friend void to_json(nlohmann::json& j, const @variant.tag@&) { j = nlohmann::json::object(); }
+        friend void from_json(const nlohmann::json&, @variant.tag@&) {}
+        @end if@
+    };
+    @end for@
+    using Value = std::variant<@for variant in e.variants | sep=", "@@variant.tag@@end for@>;
     Value value;
+
+    @e.name@() = default;
+
+    @for variant in e.variants@
+    @if not variant.recursive@
+    @e.name@(const @variant.tag@& v) : value(v) {}
+    @end if@
+    @e.name@(@variant.tag@&& v) : value(std::move(v)) {}
+    @if not variant.recursive@
+    @e.name@& operator=(const @variant.tag@& v)
+    {
+        value = v;
+        return *this;
+    }
+    @end if@
+    @e.name@& operator=(@variant.tag@&& v)
+    {
+        value = std::move(v);
+        return *this;
+    }
+    @end for@
+
+    template<typename TCase, typename... TArgs>
+    TCase& emplace(TArgs&&... args)
+    {
+        return value.template emplace<TCase>(std::forward<TArgs>(args)...);
+    }
+
+    @for variant in e.variants@
+    template<typename... TArgs>
+    @variant.tag@& emplace_@variant.tag@(TArgs&&... args)
+    {
+        return emplace<@variant.tag@>(std::forward<TArgs>(args)...);
+    }
+    @end for@
+
     static std::string tpp_typedefs() noexcept
     {
         return @e.rawTypedefs@;
     }
 };
+END
+
+template render_cpp_enum_json(e: CppEnumDef)
+inline void from_json(const nlohmann::json& j, @e.name@& v)
+{
+    @for variant in e.variants | enumerator=variantIndex sep="\n    else "@
+    if (j.contains("@variant.tag@")) v = @e.name@::@variant.tag@{@if variant.payload@@if variant.recursive@std::make_unique<@cpp_ir_type(variant.payload)@>(j["@variant.tag@"].get<@cpp_ir_type(variant.payload)@>())@else@j["@variant.tag@"].get<@cpp_ir_type(variant.payload)@>()@end if@@end if@};
+    @end for@
+}
+inline void to_json(nlohmann::json& j, const @e.name@& v)
+{
+    const char* _tags[] = {@for variant in e.variants | sep=", "@"@variant.tag@"@end for@};
+    std::visit([&](const auto& arg) {
+        j = nlohmann::json::object();
+        j[_tags[v.value.index()]] = _tpp_j(arg);
+    }, v.value);
+}
 END
 
 template render_cpp_struct(s: CppStructDef)
@@ -165,6 +227,7 @@ template render_cpp_types(preStructEnums: list<CppEnumDef>, structs: list<CppStr
 #include <vector>
 #include <optional>
 #include <variant>
+#include <utility>
 @if namespaceName@
 namespace @namespaceName@ {
 @end if@
@@ -207,36 +270,10 @@ inline void to_json(nlohmann::json& j, const @s.name@& v);
 @end for@
 
 @for e in preStructEnums@
-inline void from_json(const nlohmann::json& j, @e.name@& v)
-{
-    @for variant in e.variants | enumerator=variantIndex sep="\n    else "@
-    if (j.contains("@variant.tag@")) @if not variant.payload@v.value.emplace<@variantIndex@>();@else@@if variant.recursive@v.value.emplace<@variantIndex@>(std::make_unique<@cpp_ir_type(variant.payload)@>(j["@variant.tag@"].get<@cpp_ir_type(variant.payload)@>()));@else@v.value.emplace<@variantIndex@>(j["@variant.tag@"].get<@cpp_ir_type(variant.payload)@>());@end if@@end if@
-    @end for@
-}
-inline void to_json(nlohmann::json& j, const @e.name@& v)
-{
-    const char* _tags[] = {@for variant in e.variants | sep=", "@"@variant.tag@"@end for@};
-    std::visit([&](const auto& arg) {
-        j = nlohmann::json::object();
-        j[_tags[v.value.index()]] = _tpp_j(arg);
-    }, v.value);
-}
+@render_cpp_enum_json(e)@
 @end for@
 @for e in postStructEnums@
-inline void from_json(const nlohmann::json& j, @e.name@& v)
-{
-    @for variant in e.variants | enumerator=variantIndex sep="\n    else "@
-    if (j.contains("@variant.tag@")) @if not variant.payload@v.value.emplace<@variantIndex@>();@else@@if variant.recursive@v.value.emplace<@variantIndex@>(std::make_unique<@cpp_ir_type(variant.payload)@>(j["@variant.tag@"].get<@cpp_ir_type(variant.payload)@>()));@else@v.value.emplace<@variantIndex@>(j["@variant.tag@"].get<@cpp_ir_type(variant.payload)@>());@end if@@end if@
-    @end for@
-}
-inline void to_json(nlohmann::json& j, const @e.name@& v)
-{
-    const char* _tags[] = {@for variant in e.variants | sep=", "@"@variant.tag@"@end for@};
-    std::visit([&](const auto& arg) {
-        j = nlohmann::json::object();
-        j[_tags[v.value.index()]] = _tpp_j(arg);
-    }, v.value);
-}
+@render_cpp_enum_json(e)@
 @end for@
 @for s in structs@
 inline void from_json(const nlohmann::json& j, @s.name@& v)

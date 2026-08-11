@@ -99,6 +99,23 @@ template cpp_policy_ref(ref: PolicyRef)
 @switch ref@@case Named(tag)@_tppPolicy_@tag@@end case@@case Pure@_tppPolicyPure@end case@@case Runtime@_policy@end case@@end switch@
 END
 
+template emit_switch_payload_helpers()
+template<typename T, typename = void>
+struct _tpp_case_has_value_member : std::false_type {};
+
+template<typename T>
+struct _tpp_case_has_value_member<T, std::void_t<decltype(std::declval<const T&>().value)>> : std::true_type {};
+
+template<typename T>
+inline decltype(auto) _tpp_case_payload(const T& v)
+{
+    if constexpr (_tpp_case_has_value_member<T>::value)
+        return (v.value);
+    else
+        return (v);
+}
+END
+
 template cpp_inline_loop_options(f: ForData)
 tpp::Writer::NativeLoopOptions{
     @if f.precededByLit@std::optional<std::string_view>{@f.precededByLit@}@else@std::nullopt@end if@,
@@ -275,10 +292,11 @@ switch ((@cpp_value_path(s.expr)@).value.index()) {
 @for c in s.cases@
     case @c.variantIndex@: { // @c.tag@
         @if c.bindingName@
+    const auto& _tpp_case_value_@c.variantIndex@ = std::get<@c.variantIndex@>((@cpp_value_path(s.expr)@).value);
         @if c.isRecursivePayload@
-    [[maybe_unused]] const auto& @c.bindingName@ = *std::get<@c.variantIndex@>((@cpp_value_path(s.expr)@).value);
+    [[maybe_unused]] const auto& @c.bindingName@ = *_tpp_case_payload(_tpp_case_value_@c.variantIndex@);
         @else@
-    [[maybe_unused]] const auto& @c.bindingName@ = std::get<@c.variantIndex@>((@cpp_value_path(s.expr)@).value);
+    [[maybe_unused]] const auto& @c.bindingName@ = _tpp_case_payload(_tpp_case_value_@c.variantIndex@);
         @end if@
         @end if@
         @if c.body@
@@ -348,11 +366,15 @@ template render_cpp_native_implementation(ctx: RenderFunctionsInput)
 #include <vector>
 #include <optional>
 #include <algorithm>
+#include <type_traits>
+#include <utility>
 #include <regex>
 #include <stdexcept>
 @if ctx.namespaceName@
 namespace @ctx.namespaceName@ {
 @end if@
+
+@emit_switch_payload_helpers()@
 
 @if ctx.policies@
 

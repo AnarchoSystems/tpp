@@ -59,6 +59,7 @@ add_executable(tpp_acceptance_test
     ${PROJECT_SOURCE_DIR}/Executables/lsp/TppProject.cc
     src/TestUtils.cc
     src/AcceptanceTest.cc
+    src/EnumCppVariantApiTest.cc
     src/FunctionLookupTest.cc
     src/RenderCLITest.cc
     src/IRStabilityTest.cc
