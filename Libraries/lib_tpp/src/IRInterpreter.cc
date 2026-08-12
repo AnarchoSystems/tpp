@@ -357,9 +357,10 @@ struct IRInterpreter::Impl {
                 return true;
             }
 
+            const nlohmann::json collectionCopy = *collection;
             const bool ok = instr.alignSpec.has_value()
-                                ? exec_for_aligned(instr, *collection)
-                                : exec_for_normal(instr, *collection);
+                                ? exec_for_aligned(instr, collectionCopy)
+                                : exec_for_normal(instr, collectionCopy);
 
             if (hasPolicy && !writer_.popPolicy()) {
                 return false;

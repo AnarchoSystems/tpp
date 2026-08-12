@@ -12,6 +12,10 @@
 //   LspDefinitionTest   — go-to-definition returns the expected location
 //   LspHoverTest        — hover returns expected markdown fragments
 
+#ifdef _WIN32
+#define NOMINMAX
+#endif
+
 #include "LspClient.h"
 #include "TestUtils.h"
 #include "LspDefinitions.h"
@@ -29,6 +33,34 @@
 #include <string>
 #include <tuple>
 #include <vector>
+
+#ifdef _WIN32
+#include <ctime>
+#include <random>
+static char *mkdtemp(char *tmpl)
+{
+    std::string s(tmpl);
+    auto pos = s.rfind("XXXXXX");
+    if (pos == std::string::npos) {
+        return nullptr;
+    }
+    std::mt19937 rng(static_cast<unsigned>(std::time(nullptr)));
+    std::uniform_int_distribution<int> dist(0, 35);
+    static constexpr char kChars[] = "abcdefghijklmnopqrstuvwxyz0123456789";
+    for (int attempt = 0; attempt < 100; ++attempt) {
+        std::string candidate = s;
+        for (int i = 0; i < 6; ++i) {
+            candidate[pos + i] = kChars[dist(rng)];
+        }
+        std::error_code ec;
+        if (std::filesystem::create_directories(candidate, ec) && !ec) {
+            std::copy(candidate.begin(), candidate.end(), tmpl);
+            return tmpl;
+        }
+    }
+    return nullptr;
+}
+#endif
 
 static void PrintTo(const LspTokenSpec &s, std::ostream *os) { *os << s.testCase << "/" << s.file; }
 static void PrintTo(const LspFoldingSpec &s, std::ostream *os) { *os << s.testCase << "/" << s.file; }

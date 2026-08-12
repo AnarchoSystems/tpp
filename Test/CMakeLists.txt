@@ -396,11 +396,17 @@ if(SWIFT_COMPILER)
     add_dependencies(swift_tests swift_tests_build)
 endif()
 
+if(WIN32)
+    set(JAVA_CP_SEP ";")
+else()
+    set(JAVA_CP_SEP ":")
+endif()
+
 foreach(test_name IN LISTS tpp_codegen_cases)
     if(JAVA_RUNTIME AND JAVA_COMPILER)
         add_test(
             NAME "java/${test_name}"
-            COMMAND "${JAVA_RUNTIME}" -cp "${java_runner_dir}:${ORG_JSON_JAR}" Test "${test_name}"
+            COMMAND "${JAVA_RUNTIME}" -cp "${java_runner_dir}${JAVA_CP_SEP}${ORG_JSON_JAR}" Test "${test_name}"
         )
         set_tests_properties("java/${test_name}" PROPERTIES TIMEOUT 5)
     endif()
