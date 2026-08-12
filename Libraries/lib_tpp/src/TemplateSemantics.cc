@@ -90,7 +90,10 @@ namespace
                     return arg->field;
                 return base + "." + arg->field;
             }
-            return "";
+            else
+            {
+                return "";
+            }
         }, expr);
     }
 

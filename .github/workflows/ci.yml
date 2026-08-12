@@ -74,28 +74,58 @@ jobs:
         if: runner.os != 'Windows'
         run: cmake --build build --parallel
 
-      - name: Build (Windows, verbose with fallback)
+      - name: Build (Windows, concise diagnostics)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          cmake --build build --config Debug --parallel --verbose
+          New-Item -ItemType Directory -Force -Path build | Out-Null
+          $parallelLog = 'build/windows-build-parallel.log'
+          $serialLog = 'build/windows-build-serial.log'
+
+          cmake --build build --config Debug --parallel *>&1 | Tee-Object -FilePath $parallelLog
           if ($LASTEXITCODE -ne 0) {
-            Write-Host 'Parallel build failed; retrying serialized with detailed MSBuild diagnostics...'
-            cmake --build build --config Debug --verbose -- /m:1 /v:detailed
+            Write-Host 'Parallel build failed; retrying serialized with minimal MSBuild verbosity...'
+            cmake --build build --config Debug -- /m:1 /v:minimal *>&1 | Tee-Object -FilePath $serialLog
+            $buildExitCode = $LASTEXITCODE
+
+            Write-Host '--- Filtered compiler diagnostics ---'
+            $diag = Select-String -Path $serialLog -Pattern 'error C[0-9]{4}|warning C[0-9]{4}|fatal error|treated as an error|Build FAILED' -CaseSensitive:$false
+            if ($diag) {
+              $diag | ForEach-Object { $_.Line }
+            } else {
+              Write-Host 'No compiler diagnostics matched filter. See full log artifact/files.'
+            }
+
+            exit $buildExitCode
           }
 
       - name: Build Java & Swift tests (non-Windows)
         if: runner.os != 'Windows'
         run: cmake --build build --target build_all_tests --parallel
 
-      - name: Build Java & Swift tests (Windows, verbose with fallback)
+      - name: Build Java & Swift tests (Windows, concise diagnostics)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          cmake --build build --config Debug --target build_all_tests --parallel --verbose
+          New-Item -ItemType Directory -Force -Path build | Out-Null
+          $parallelLog = 'build/windows-tests-build-parallel.log'
+          $serialLog = 'build/windows-tests-build-serial.log'
+
+          cmake --build build --config Debug --target build_all_tests --parallel *>&1 | Tee-Object -FilePath $parallelLog
           if ($LASTEXITCODE -ne 0) {
-            Write-Host 'Parallel test-target build failed; retrying serialized with detailed MSBuild diagnostics...'
-            cmake --build build --config Debug --target build_all_tests --verbose -- /m:1 /v:detailed
+            Write-Host 'Parallel test-target build failed; retrying serialized with minimal MSBuild verbosity...'
+            cmake --build build --config Debug --target build_all_tests -- /m:1 /v:minimal *>&1 | Tee-Object -FilePath $serialLog
+            $buildExitCode = $LASTEXITCODE
+
+            Write-Host '--- Filtered compiler diagnostics ---'
+            $diag = Select-String -Path $serialLog -Pattern 'error C[0-9]{4}|warning C[0-9]{4}|fatal error|treated as an error|Build FAILED' -CaseSensitive:$false
+            if ($diag) {
+              $diag | ForEach-Object { $_.Line }
+            } else {
+              Write-Host 'No compiler diagnostics matched filter. See full log artifact/files.'
+            }
+
+            exit $buildExitCode
           }
 
       - name: Test (non-Windows)
