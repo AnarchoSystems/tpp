@@ -14,8 +14,11 @@ collect_all_files() {
 
 collect_changed_files_for_refspec() {
     local refspec="$1"
-    if git diff --name-only --diff-filter=ACMR "$refspec" -- '*.[ch]' '*.cc' '*.cpp' '*.cxx' '*.hh' '*.hpp' '*.hxx' >/dev/null 2>&1; then
-        git diff --name-only --diff-filter=ACMR "$refspec" -- '*.[ch]' '*.cc' '*.cpp' '*.cxx' '*.hh' '*.hpp' '*.hxx'
+    local output
+    if output="$(git diff --name-only --diff-filter=ACMR "$refspec" -- '*.[ch]' '*.cc' '*.cpp' '*.cxx' '*.hh' '*.hpp' '*.hxx' 2>/dev/null)"; then
+        if [[ -n "$output" ]]; then
+            printf '%s\n' "$output"
+        fi
         return 0
     fi
     return 1
