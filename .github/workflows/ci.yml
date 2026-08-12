@@ -55,14 +55,47 @@ jobs:
             echo "swift not installed on this runner"
           fi
 
-      - name: Configure
+      - name: Configure (non-Windows)
+        if: runner.os != 'Windows'
         run: cmake -B build -DCMAKE_BUILD_TYPE=Debug
 
-      - name: Build
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build (non-Windows)
+        if: runner.os != 'Windows'
         run: cmake --build build --parallel
 
-      - name: Build Java & Swift tests
+      - name: Build (Windows, verbose with fallback)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cmake --build build --config Debug --parallel --verbose
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host 'Parallel build failed; retrying serialized with detailed MSBuild diagnostics...'
+            cmake --build build --config Debug --verbose -- /m:1 /v:detailed
+          }
+
+      - name: Build Java & Swift tests (non-Windows)
+        if: runner.os != 'Windows'
         run: cmake --build build --target build_all_tests --parallel
 
-      - name: Test
+      - name: Build Java & Swift tests (Windows, verbose with fallback)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cmake --build build --config Debug --target build_all_tests --parallel --verbose
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host 'Parallel test-target build failed; retrying serialized with detailed MSBuild diagnostics...'
+            cmake --build build --config Debug --target build_all_tests --verbose -- /m:1 /v:detailed
+          }
+
+      - name: Test (non-Windows)
+        if: runner.os != 'Windows'
         run: ctest --parallel --progress --output-on-failure --test-dir build
+
+      - name: Test (Windows)
+        if: runner.os == 'Windows'
+        run: ctest -C Debug --parallel --progress --output-on-failure --test-dir build
