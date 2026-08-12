@@ -53,9 +53,9 @@ collect_changed_files() {
 populate_files() {
     local mode="$1"
     files=()
-    while IFS= read -r path; do
-        if [[ -n "$path" ]]; then
-            files+=("$path")
+    while IFS= read -r filepath; do
+        if [[ -n "$filepath" ]]; then
+            files+=("$filepath")
         fi
     done < <(if [[ "$mode" == "changed" ]]; then collect_changed_files; else collect_all_files; fi)
 }
