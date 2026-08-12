@@ -129,7 +129,8 @@ template <typename... Args>
     }
 
     out = [&ir, fn, name](typename ArgType<Args>::type... args) -> std::string {
-        nlohmann::json input = nlohmann::json::array({nlohmann::json(args)...});
+        nlohmann::json input = nlohmann::json::array();
+        (input.push_back(nlohmann::json(args)), ...);
         std::string output;
         std::string renderError;
         if (!render_function(ir, *fn, input, output, renderError)) {

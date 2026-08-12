@@ -343,7 +343,13 @@ static nlohmann::json to_render_cpp_type_input(const tpp::IR &iRep,
     }
 
     nlohmann::json ns = namespaceName.empty() ? nlohmann::json() : nlohmann::json(namespaceName);
-    return nlohmann::json::array({preStructEnums, structs, postStructEnums, nlohmann::json(includes), ns});
+    nlohmann::json result = nlohmann::json::array();
+    result.push_back(std::move(preStructEnums));
+    result.push_back(std::move(structs));
+    result.push_back(std::move(postStructEnums));
+    result.push_back(includes);
+    result.push_back(std::move(ns));
+    return result;
 }
 
 static nlohmann::json to_render_cpp_functions_input(const tpp::IR &iRep,

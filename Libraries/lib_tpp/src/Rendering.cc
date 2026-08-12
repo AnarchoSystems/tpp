@@ -120,7 +120,15 @@ bool render_function(const IR &ir, const FunctionDef &function,
             boundArgs = nlohmann::json::object();
             boundArgs[p.name] = value;
         } else {
-            if (!input.is_array() || input.size() != function.params.size()) {
+            if (input.is_object()) {
+                boundArgs = input;
+                for (const auto &parameter : function.params) {
+                    if (!boundArgs.contains(parameter.name)) {
+                        error = "Missing argument '" + parameter.name + "' for function '" + function.name + "'";
+                        return false;
+                    }
+                }
+            } else if (!input.is_array() || input.size() != function.params.size()) {
                 const std::size_t got = input.is_array() ? input.size() : 0;
                 const std::size_t expected = function.params.size();
                 error = "Expected " + std::to_string(expected) +
@@ -128,10 +136,11 @@ bool render_function(const IR &ir, const FunctionDef &function,
                         " for function '" + function.name +
                         "', got " + std::to_string(got);
                 return false;
-            }
-            boundArgs = nlohmann::json::object();
-            for (std::size_t i = 0; i < function.params.size(); ++i) {
-                boundArgs[function.params[i].name] = input[i];
+            } else {
+                boundArgs = nlohmann::json::object();
+                for (std::size_t i = 0; i < function.params.size(); ++i) {
+                    boundArgs[function.params[i].name] = input.at(i);
+                }
             }
         }
 
