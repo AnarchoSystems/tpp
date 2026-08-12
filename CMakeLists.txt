@@ -77,6 +77,18 @@ if(TPP_FETCH_GTEST)
     GIT_TAG        v1.14.0
   )
   FetchContent_MakeAvailable(googletest)
+
+  # Ensure bundled googletest headers win over any system-installed gtest.
+  # Without this, mixed header/source versions can break gmock compilation.
+  foreach(_tpp_gtest_target gtest gtest_main gmock gmock_main)
+    if(TARGET ${_tpp_gtest_target})
+      target_include_directories(${_tpp_gtest_target} BEFORE PRIVATE
+        ${googletest_SOURCE_DIR}/googletest/include
+        ${googletest_SOURCE_DIR}/googletest
+        ${googletest_SOURCE_DIR}/googlemock/include
+        ${googletest_SOURCE_DIR}/googlemock)
+    endif()
+  endforeach()
 endif()
 
 if(TPP_CONFIGURE_TESTS)

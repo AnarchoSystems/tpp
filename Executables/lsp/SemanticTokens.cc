@@ -31,6 +31,7 @@ using FieldAccess = compiler::FieldAccess;
 using ASTNode = compiler::ASTNode;
 using CaseNode = compiler::CaseNode;
 using FunctionCallNode = compiler::FunctionCallNode;
+using TextNode = compiler::TextNode;
 using AlignmentCellNode = compiler::AlignmentCellNode;
 using CommentNode = compiler::CommentNode;
 using InterpolationNode = compiler::InterpolationNode;

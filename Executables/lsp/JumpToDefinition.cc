@@ -183,7 +183,13 @@ static nlohmann::json resolveTypeIdentifierInSource(const std::string &src,
 static std::string typeRefNamedType(const TypeRef &type) {
     return std::visit([](auto &&arg) -> std::string {
         using T = std::decay_t<decltype(arg)>;
-        if constexpr (std::is_same_v<T, NamedType>) {
+        if constexpr (std::is_same_v<T, compiler::StringType>) {
+            return {};
+        } else if constexpr (std::is_same_v<T, compiler::IntType>) {
+            return {};
+        } else if constexpr (std::is_same_v<T, compiler::BoolType>) {
+            return {};
+        } else if constexpr (std::is_same_v<T, NamedType>) {
             return arg.name;
         } else if constexpr (std::is_same_v<T, std::shared_ptr<ListType>>) {
             return arg ? typeRefNamedType(arg->elementType) : std::string{};
