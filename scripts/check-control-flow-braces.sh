@@ -12,26 +12,52 @@ collect_all_files() {
     git ls-files '*.[ch]' '*.cc' '*.cpp' '*.cxx' '*.hh' '*.hpp' '*.hxx'
 }
 
+collect_changed_files_for_refspec() {
+    local refspec="$1"
+    if git diff --name-only --diff-filter=ACMR "$refspec" -- '*.[ch]' '*.cc' '*.cpp' '*.cxx' '*.hh' '*.hpp' '*.hxx' >/dev/null 2>&1; then
+        git diff --name-only --diff-filter=ACMR "$refspec" -- '*.[ch]' '*.cc' '*.cpp' '*.cxx' '*.hh' '*.hpp' '*.hxx'
+        return 0
+    fi
+    return 1
+}
+
 collect_changed_files() {
     if [[ -n "${GITHUB_BASE_REF:-}" ]]; then
         git fetch --no-tags --depth=1 origin "$GITHUB_BASE_REF" >/dev/null 2>&1 || true
-        git diff --name-only --diff-filter=ACMR "origin/$GITHUB_BASE_REF"...HEAD -- '*.[ch]' '*.cc' '*.cpp' '*.cxx' '*.hh' '*.hpp' '*.hxx'
+        if git rev-parse --verify "origin/$GITHUB_BASE_REF" >/dev/null 2>&1; then
+            if collect_changed_files_for_refspec "origin/$GITHUB_BASE_REF...HEAD"; then
+                return
+            fi
+            if collect_changed_files_for_refspec "origin/$GITHUB_BASE_REF..HEAD"; then
+                return
+            fi
+        fi
+    fi
+
+    if git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
+        collect_changed_files_for_refspec "HEAD~1..HEAD"
         return
     fi
 
     if git rev-parse --verify HEAD >/dev/null 2>&1; then
-        git diff --name-only --diff-filter=ACMR HEAD -- '*.[ch]' '*.cc' '*.cpp' '*.cxx' '*.hh' '*.hpp' '*.hxx'
+        collect_changed_files_for_refspec "HEAD"
         return
     fi
 
     collect_all_files
 }
 
-if [[ "$scope" == "changed" ]]; then
-    mapfile -t files < <(collect_changed_files)
-else
-    mapfile -t files < <(collect_all_files)
-fi
+populate_files() {
+    local mode="$1"
+    files=()
+    while IFS= read -r path; do
+        if [[ -n "$path" ]]; then
+            files+=("$path")
+        fi
+    done < <(if [[ "$mode" == "changed" ]]; then collect_changed_files; else collect_all_files; fi)
+}
+
+populate_files "$scope"
 
 if [[ ${#files[@]} -eq 0 ]]; then
     echo "control-flow brace enforcement skipped (no matching files)"
