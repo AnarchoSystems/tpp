@@ -580,12 +580,13 @@ static nlohmann::json walkNode(const ASTNode &node,
                                const std::string &uri) {
     return std::visit([&](auto &&arg) -> nlohmann::json {
         using T = std::decay_t<decltype(arg)>;
+        nlohmann::json result = nullptr;
 
         if constexpr (std::is_same_v<T, InterpolationNode>) {
             if (rangeContains(arg.sourceRange, line, character)) {
                 const int exprStart = arg.sourceRange.start.character + 1; // skip '@'
-                return resolveExprAtCursor(arg.expr, line, character, exprStart,
-                                           scope, project, uri);
+                result = resolveExprAtCursor(arg.expr, line, character, exprStart,
+                                             scope, project, uri);
             }
         } else if constexpr (std::is_same_v<T, std::shared_ptr<FunctionCallNode>>) {
             if (rangeContains(arg->sourceRange, line, character)) {
@@ -595,7 +596,8 @@ static nlohmann::json walkNode(const ASTNode &node,
                     // Cursor on function name — jump to definition
                     for (const auto *func : project.find_template_overloads(arg->functionName)) {
                         if (func->sourceUri && func->sourceRange) {
-                            return locationJson(*func->sourceUri, *func->sourceRange);
+                            result = locationJson(*func->sourceUri, *func->sourceRange);
+                            break;
                         }
                     }
                 } else {
@@ -609,64 +611,70 @@ static nlohmann::json walkNode(const ASTNode &node,
                         firstArg = false;
                         const std::string argText = exprToText(argExpr);
                         if (character >= argCol && character < argCol + (int)argText.size()) {
-                            return resolveExprAtCursor(argExpr, line, character, argCol,
-                                                       scope, project, uri);
+                            result = resolveExprAtCursor(argExpr, line, character, argCol,
+                                                         scope, project, uri);
+                            break;
                         }
                         argCol += (int)argText.size();
                     }
                 }
             }
         } else if constexpr (std::is_same_v<T, std::shared_ptr<IndentNode>>) {
-            return walkNodes(arg->body, line, character, scope, project, uri);
+            result = walkNodes(arg->body, line, character, scope, project, uri);
         } else if constexpr (std::is_same_v<T, std::shared_ptr<ForNode>>) {
             if (rangeContains(arg->sourceRange, line, character)) {
                 // Cursor is on the @for@ directive itself.
                 // Resolve the collection expression (cursor may be on the collection var).
-                return resolveExpr(arg->collectionExpr, scope, project, uri);
-            }
-            // Recurse into body with the loop variable added to scope.
-            TemplateScope innerScope = scope;
-            innerScope.forBindings[arg->varName] = {uri, arg->sourceRange};
-            // Compute element TypeRef for the for-loop variable
-            auto colType = exprTypeRef(arg->collectionExpr, scope, project);
-            if (colType) {
-                if (auto *lst = std::get_if<std::shared_ptr<ListType>>(&*colType)) {
-                    if (*lst) {
-                        innerScope.varTypes[arg->varName] = (*lst)->elementType;
+                result = resolveExpr(arg->collectionExpr, scope, project, uri);
+            } else {
+                // Recurse into body with the loop variable added to scope.
+                TemplateScope innerScope = scope;
+                innerScope.forBindings[arg->varName] = {uri, arg->sourceRange};
+                // Compute element TypeRef for the for-loop variable
+                auto colType = exprTypeRef(arg->collectionExpr, scope, project);
+                if (colType) {
+                    if (auto *lst = std::get_if<std::shared_ptr<ListType>>(&*colType)) {
+                        if (*lst) {
+                            innerScope.varTypes[arg->varName] = (*lst)->elementType;
+                        }
+                    } else {
+                        innerScope.varTypes[arg->varName] = *colType;
                     }
-                } else {
-                    innerScope.varTypes[arg->varName] = *colType;
                 }
+                result = walkNodes(arg->body, line, character, std::move(innerScope), project, uri);
             }
-            return walkNodes(arg->body, line, character, std::move(innerScope), project, uri);
         } else if constexpr (std::is_same_v<T, std::shared_ptr<IfNode>>) {
             if (rangeContains(arg->sourceRange, line, character)) {
-                return resolveExpr(arg->condExpr, scope, project, uri);
-            }
-            auto r = walkNodes(arg->thenBody, line, character, scope, project, uri);
-            if (!r.is_null()) {
-                return r;
-            }
-            return walkNodes(arg->elseBody, line, character, scope, project, uri);
-        } else if constexpr (std::is_same_v<T, std::shared_ptr<SwitchNode>>) {
-            if (rangeContains(arg->sourceRange, line, character)) {
-                return resolveExpr(arg->expr, scope, project, uri);
-            }
-            for (const auto &c : arg->cases) {
-                auto r = walkNodes(c.body, line, character, scope, project, uri);
+                result = resolveExpr(arg->condExpr, scope, project, uri);
+            } else {
+                auto r = walkNodes(arg->thenBody, line, character, scope, project, uri);
                 if (!r.is_null()) {
-                    return r;
+                    result = r;
+                } else {
+                    result = walkNodes(arg->elseBody, line, character, scope, project, uri);
                 }
             }
-            if (arg->defaultCase) {
-                return walkNodes(arg->defaultCase->body, line, character, scope, project, uri);
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<SwitchNode>>) {
+            if (rangeContains(arg->sourceRange, line, character)) {
+                result = resolveExpr(arg->expr, scope, project, uri);
+            } else {
+                for (const auto &c : arg->cases) {
+                    auto r = walkNodes(c.body, line, character, scope, project, uri);
+                    if (!r.is_null()) {
+                        result = r;
+                        break;
+                    }
+                }
+                if (result.is_null() && arg->defaultCase) {
+                    result = walkNodes(arg->defaultCase->body, line, character, scope, project, uri);
+                }
             }
         } else if constexpr (std::is_same_v<T, std::shared_ptr<RenderViaNode>>) {
             if (rangeContains(arg->sourceRange, line, character)) {
-                return resolveExpr(arg->collectionExpr, scope, project, uri);
+                result = resolveExpr(arg->collectionExpr, scope, project, uri);
             }
         }
-        return nullptr;
+        return result;
     },
                       node);
 }
@@ -692,83 +700,89 @@ static nlohmann::json hoverWalkNode(const ASTNode &node,
                                     const std::string &uri) {
     return std::visit([&](auto &&arg) -> nlohmann::json {
         using T = std::decay_t<decltype(arg)>;
+        nlohmann::json result = nullptr;
 
         if constexpr (std::is_same_v<T, InterpolationNode>) {
             if (rangeContains(arg.sourceRange, line, character)) {
                 const int exprStart = arg.sourceRange.start.character + 1;
-                return resolveExprHoverAtCursor(arg.expr, character, exprStart, scope, project);
+                result = resolveExprHoverAtCursor(arg.expr, character, exprStart, scope, project);
             }
         } else if constexpr (std::is_same_v<T, std::shared_ptr<FunctionCallNode>>) {
             if (rangeContains(arg->sourceRange, line, character)) {
                 const int sc = arg->sourceRange.start.character;
                 const int nameEnd = sc + 1 + static_cast<int>(arg->functionName.size());
                 if (character >= sc && character <= nameEnd) {
-                    return hoverForFunctionName(arg->functionName, project);
-                }
-
-                int argCol = sc + 1 + static_cast<int>(arg->functionName.size()) + 1;
-                bool firstArg = true;
-                for (const auto &argExpr : arg->arguments) {
-                    if (!firstArg) {
-                        argCol += 2;
+                    result = hoverForFunctionName(arg->functionName, project);
+                } else {
+                    int argCol = sc + 1 + static_cast<int>(arg->functionName.size()) + 1;
+                    bool firstArg = true;
+                    for (const auto &argExpr : arg->arguments) {
+                        if (!firstArg) {
+                            argCol += 2;
+                        }
+                        firstArg = false;
+                        const std::string argText = exprToText(argExpr);
+                        if (character >= argCol && character < argCol + static_cast<int>(argText.size())) {
+                            result = resolveExprHoverAtCursor(argExpr, character, argCol, scope, project);
+                            break;
+                        }
+                        argCol += static_cast<int>(argText.size());
                     }
-                    firstArg = false;
-                    const std::string argText = exprToText(argExpr);
-                    if (character >= argCol && character < argCol + static_cast<int>(argText.size())) {
-                        return resolveExprHoverAtCursor(argExpr, character, argCol, scope, project);
-                    }
-                    argCol += static_cast<int>(argText.size());
                 }
             }
         } else if constexpr (std::is_same_v<T, std::shared_ptr<IndentNode>>) {
-            return hoverWalkNodes(arg->body, line, character, scope, project, uri);
+            result = hoverWalkNodes(arg->body, line, character, scope, project, uri);
         } else if constexpr (std::is_same_v<T, std::shared_ptr<ForNode>>) {
             if (rangeContains(arg->sourceRange, line, character)) {
-                return hoverForExpr(arg->collectionExpr, scope, project);
-            }
-
-            TemplateScope innerScope = scope;
-            innerScope.forBindings[arg->varName] = {uri, arg->sourceRange};
-            auto colType = exprTypeRef(arg->collectionExpr, scope, project);
-            if (colType) {
-                if (auto *lst = std::get_if<std::shared_ptr<ListType>>(&*colType)) {
-                    if (*lst) {
-                        innerScope.varTypes[arg->varName] = (*lst)->elementType;
+                result = hoverForExpr(arg->collectionExpr, scope, project);
+            } else {
+                TemplateScope innerScope = scope;
+                innerScope.forBindings[arg->varName] = {uri, arg->sourceRange};
+                auto colType = exprTypeRef(arg->collectionExpr, scope, project);
+                if (colType) {
+                    if (auto *lst = std::get_if<std::shared_ptr<ListType>>(&*colType)) {
+                        if (*lst) {
+                            innerScope.varTypes[arg->varName] = (*lst)->elementType;
+                        }
+                    } else {
+                        innerScope.varTypes[arg->varName] = *colType;
                     }
-                } else {
-                    innerScope.varTypes[arg->varName] = *colType;
                 }
+                result = hoverWalkNodes(arg->body, line, character, std::move(innerScope), project, uri);
             }
-            return hoverWalkNodes(arg->body, line, character, std::move(innerScope), project, uri);
         } else if constexpr (std::is_same_v<T, std::shared_ptr<IfNode>>) {
             if (rangeContains(arg->sourceRange, line, character)) {
-                return hoverForExpr(arg->condExpr, scope, project);
-            }
-            auto result = hoverWalkNodes(arg->thenBody, line, character, scope, project, uri);
-            if (!result.is_null()) {
-                return result;
-            }
-            return hoverWalkNodes(arg->elseBody, line, character, scope, project, uri);
-        } else if constexpr (std::is_same_v<T, std::shared_ptr<SwitchNode>>) {
-            if (rangeContains(arg->sourceRange, line, character)) {
-                return hoverForExpr(arg->expr, scope, project);
-            }
-            for (const auto &caseNode : arg->cases) {
-                auto result = hoverWalkNodes(caseNode.body, line, character, scope, project, uri);
-                if (!result.is_null()) {
-                    return result;
+                result = hoverForExpr(arg->condExpr, scope, project);
+            } else {
+                auto nestedResult = hoverWalkNodes(arg->thenBody, line, character, scope, project, uri);
+                if (!nestedResult.is_null()) {
+                    result = nestedResult;
+                } else {
+                    result = hoverWalkNodes(arg->elseBody, line, character, scope, project, uri);
                 }
             }
-            if (arg->defaultCase) {
-                return hoverWalkNodes(arg->defaultCase->body, line, character, scope, project, uri);
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<SwitchNode>>) {
+            if (rangeContains(arg->sourceRange, line, character)) {
+                result = hoverForExpr(arg->expr, scope, project);
+            } else {
+                for (const auto &caseNode : arg->cases) {
+                    auto nestedResult = hoverWalkNodes(caseNode.body, line, character, scope, project, uri);
+                    if (!nestedResult.is_null()) {
+                        result = nestedResult;
+                        break;
+                    }
+                }
+                if (result.is_null() && arg->defaultCase) {
+                    result = hoverWalkNodes(arg->defaultCase->body, line, character, scope, project, uri);
+                }
             }
         } else if constexpr (std::is_same_v<T, std::shared_ptr<RenderViaNode>>) {
             if (rangeContains(arg->sourceRange, line, character)) {
-                return hoverForExpr(arg->collectionExpr, scope, project);
+                result = hoverForExpr(arg->collectionExpr, scope, project);
             }
         }
 
-        return nullptr;
+        return result;
     },
                       node);
 }
