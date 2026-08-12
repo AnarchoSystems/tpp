@@ -196,7 +196,8 @@ template emit_for_inline(f: ForData)
 if (!_writer.emitForEach(
     @cpp_value_path(f.collection)@,
     @cpp_inline_loop_options(f)@,
-        [&]([[maybe_unused]] const auto& @f.varName@, @if f.enumeratorName@int @f.enumeratorName@@else@[[maybe_unused]] int@end if@) {
+        [&](const auto& @f.varName@, @if f.enumeratorName@int @f.enumeratorName@@else@[[maybe_unused]] int@end if@) {
+            (void)@f.varName@;
             @for instr in f.body@
             @emit_instr(instr)@
             @end for@
@@ -212,7 +213,8 @@ if (!_writer.emitCapturedBlockForEach(
     @cpp_value_path(f.collection)@,
     @f.bodyBlockIndentInParentBlock@,
     @cpp_block_loop_options(f)@,
-        [&]([[maybe_unused]] const auto& @f.varName@, @if f.enumeratorName@int @f.enumeratorName@@else@[[maybe_unused]] int@end if@) {
+        [&](const auto& @f.varName@, @if f.enumeratorName@int @f.enumeratorName@@else@[[maybe_unused]] int@end if@) {
+            (void)@f.varName@;
             @for instr in f.body@
             @emit_instr(instr)@
             @end for@
@@ -221,7 +223,8 @@ if (!_writer.emitCapturedBlockForEach(
 @else@
 if (!_writer.emitCapturedBlockForEach(@cpp_value_path(f.collection)@,
                                      @cpp_block_loop_options(f)@,
-                                    [&]([[maybe_unused]] const auto& @f.varName@, @if f.enumeratorName@int @f.enumeratorName@@else@[[maybe_unused]] int@end if@) {
+                                    [&](const auto& @f.varName@, @if f.enumeratorName@int @f.enumeratorName@@else@[[maybe_unused]] int@end if@) {
+                                        (void)@f.varName@;
                                         @for instr in f.body@
                                         @emit_instr(instr)@
                                         @end for@
@@ -256,7 +259,8 @@ if (!_writer.emitAlignedForEach(
         std::vector<char>{ @for ch in f.alignSpecChars | sep=", "@'@ch@'@end for@ },
         std::vector<char>{ @for ch in f.alignSpecChars | sep=", "@'@ch@'@end for@ }.size() == 1,
     @cpp_inline_loop_options(f)@,
-        [&]([[maybe_unused]] const auto& @f.varName@, @if f.enumeratorName@int @f.enumeratorName@@else@[[maybe_unused]] int@end if@) {
+        [&](const auto& @f.varName@, @if f.enumeratorName@int @f.enumeratorName@@else@[[maybe_unused]] int@end if@) {
+            (void)@f.varName@;
             @for cell in f.cells@
             @emit_align_cell(cell)@
             @end for@
