@@ -7,6 +7,9 @@ set(SHARED_TYPES
 add_executable(tpp2java Main.cc)
 target_link_libraries(tpp2java PRIVATE tpp_codegen)
 target_include_directories(tpp2java PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+target_compile_options(tpp2java PRIVATE
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wno-overlength-strings>
+)
 
 # ── Compile Java templates to C++ functions via tpp2cpp ──────────────────────
 # Step 1: compile templates to JSON IR

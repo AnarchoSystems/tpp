@@ -7,6 +7,9 @@ set(SHARED_TYPES
 add_executable(tpp2swift Main.cc)
 target_link_libraries(tpp2swift PRIVATE tpp_codegen)
 target_include_directories(tpp2swift PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+target_compile_options(tpp2swift PRIVATE
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wno-overlength-strings>
+)
 
 # ── Compile Swift templates to C++ functions via tpp2cpp ─────────────────────
 # Step 1: compile templates to JSON IR

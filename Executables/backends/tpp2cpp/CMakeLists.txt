@@ -8,7 +8,9 @@ add_executable(tpp2cpp Main.cc)
 
 target_link_libraries(tpp2cpp PRIVATE tpp_codegen)
 target_include_directories(tpp2cpp PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
-target_compile_options(tpp2cpp PRIVATE -Wno-overlength-strings)
+target_compile_options(tpp2cpp PRIVATE
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wno-overlength-strings>
+)
 
 target_sources(tpp2cpp PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/defs.h)
 
