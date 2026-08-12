@@ -30,19 +30,14 @@
 #include <tuple>
 #include <vector>
 
-static void PrintTo(const LspTokenSpec &s, std::ostream *os)
-    { *os << s.testCase << "/" << s.file; }
-static void PrintTo(const LspFoldingSpec &s, std::ostream *os)
-    { *os << s.testCase << "/" << s.file; }
-static void PrintTo(const LspDefinitionSpec &s, std::ostream *os)
-    { *os << s.testCase << " '" << s.name << "'"; }
-static void PrintTo(const LspHoverSpec &s, std::ostream *os)
-    { *os << s.testCase << " '" << s.name << "'"; }
+static void PrintTo(const LspTokenSpec &s, std::ostream *os) { *os << s.testCase << "/" << s.file; }
+static void PrintTo(const LspFoldingSpec &s, std::ostream *os) { *os << s.testCase << "/" << s.file; }
+static void PrintTo(const LspDefinitionSpec &s, std::ostream *os) { *os << s.testCase << " '" << s.name << "'"; }
+static void PrintTo(const LspHoverSpec &s, std::ostream *os) { *os << s.testCase << " '" << s.name << "'"; }
 
 // ── Free helpers ─────────────────────────────────────────────────────────────
 
-static std::string fileUri(const std::filesystem::path &p)
-{
+static std::string fileUri(const std::filesystem::path &p) {
     static constexpr char kHex[] = "0123456789ABCDEF";
 
     std::string rawPath = std::filesystem::weakly_canonical(p).string();
@@ -50,11 +45,9 @@ static std::string fileUri(const std::filesystem::path &p)
 
     std::string encoded;
     encoded.reserve(rawPath.size());
-    for (unsigned char ch : rawPath)
-    {
+    for (unsigned char ch : rawPath) {
         if (std::isalnum(ch) || ch == '-' || ch == '_' || ch == '.' || ch == '~' ||
-            ch == '/' || ch == ':')
-        {
+            ch == '/' || ch == ':') {
             encoded.push_back(static_cast<char>(ch));
             continue;
         }
@@ -67,80 +60,73 @@ static std::string fileUri(const std::filesystem::path &p)
     return "file://" + encoded;
 }
 
-static std::string readFileStr(const std::filesystem::path &p)
-{
+static std::string readFileStr(const std::filesystem::path &p) {
     std::ifstream f(p);
     return std::string(std::istreambuf_iterator<char>(f),
                        std::istreambuf_iterator<char>());
 }
 
-static void writeFileStr(const std::filesystem::path &p, const std::string &content)
-{
+static void writeFileStr(const std::filesystem::path &p, const std::string &content) {
     std::filesystem::create_directories(p.parent_path());
     std::ofstream out(p);
     out << content;
 }
 
 // Relative source URL ("testname/file.tpp") → absolute file:// URI.
-static std::string srcUri(const std::string &relUrl)
-{
+static std::string srcUri(const std::string &relUrl) {
     return fileUri(std::filesystem::weakly_canonical("TestCases/" + relUrl));
 }
 
-static std::string hoverText(const nlohmann::json &result)
-{
-    if (!result.contains("contents"))
+static std::string hoverText(const nlohmann::json &result) {
+    if (!result.contains("contents")) {
         return {};
+    }
 
     const auto &contents = result["contents"];
-    if (contents.is_string())
+    if (contents.is_string()) {
         return contents.get<std::string>();
-    if (contents.is_object() && contents.contains("value") && contents["value"].is_string())
+    }
+    if (contents.is_object() && contents.contains("value") && contents["value"].is_string()) {
         return contents["value"].get<std::string>();
-    if (contents.is_array())
-    {
+    }
+    if (contents.is_array()) {
         std::string combined;
-        for (const auto &entry : contents)
-        {
-            if (!combined.empty())
+        for (const auto &entry : contents) {
+            if (!combined.empty()) {
                 combined += "\n";
-            if (entry.is_string())
+            }
+            if (entry.is_string()) {
                 combined += entry.get<std::string>();
-            else if (entry.is_object() && entry.contains("value") && entry["value"].is_string())
+            } else if (entry.is_object() && entry.contains("value") && entry["value"].is_string()) {
                 combined += entry["value"].get<std::string>();
+            }
         }
         return combined;
     }
     return {};
 }
 
-static std::pair<int, int> lineAndCharacterAtOffset(const std::string &text, size_t offset)
-{
+static std::pair<int, int> lineAndCharacterAtOffset(const std::string &text, size_t offset) {
     int line = 0;
     int character = 0;
     const size_t clampedOffset = std::min(offset, text.size());
-    for (size_t index = 0; index < clampedOffset; ++index)
-    {
-        if (text[index] == '\n')
-        {
+    for (size_t index = 0; index < clampedOffset; ++index) {
+        if (text[index] == '\n') {
             ++line;
             character = 0;
-        }
-        else
-        {
+        } else {
             ++character;
         }
     }
     return {line, character};
 }
 
-static bool hasCompletionLabel(const nlohmann::json &result, const std::string &label)
-{
-    if (!result.is_array())
+static bool hasCompletionLabel(const nlohmann::json &result, const std::string &label) {
+    if (!result.is_array()) {
         return false;
+    }
 
-    return std::any_of(result.begin(), result.end(), [&](const auto &entry)
-    {
+    return std::any_of(result.begin(), result.end(), [&](const auto &entry) {
         return entry.is_object() && entry.value("label", std::string{}) == label;
     });
 }
@@ -150,56 +136,51 @@ static bool hasCompletionLabel(const nlohmann::json &result, const std::string &
 // Collect publishDiagnostics notifications into a sorted DiagnosticLSPMessage
 // list.  Empty per-file lists are omitted.
 static std::vector<tpp::DiagnosticLSPMessage> lspDiagsFromNotifs(
-    const std::vector<nlohmann::json> &notifs)
-{
+    const std::vector<nlohmann::json> &notifs) {
     std::map<std::string, std::vector<tpp::Diagnostic>> byUri;
-    for (const auto &n : notifs)
-    {
-        if (n.value("method", "") != "textDocument/publishDiagnostics")
+    for (const auto &n : notifs) {
+        if (n.value("method", "") != "textDocument/publishDiagnostics") {
             continue;
+        }
         const auto &params = n["params"];
         std::string uri = params.value("uri", "");
-        if (uri.empty())
+        if (uri.empty()) {
             continue;
-        for (const auto &d : params.value("diagnostics", nlohmann::json::array()))
+        }
+        for (const auto &d : params.value("diagnostics", nlohmann::json::array())) {
             byUri[uri].push_back(d.get<tpp::Diagnostic>());
+        }
     }
-    auto diagLess = [](const tpp::Diagnostic &a, const tpp::Diagnostic &b)
-    {
+    auto diagLess = [](const tpp::Diagnostic &a, const tpp::Diagnostic &b) {
         return std::tie(a.range.start.line, a.range.start.character, a.message) <
                std::tie(b.range.start.line, b.range.start.character, b.message);
     };
     std::vector<tpp::DiagnosticLSPMessage> result;
-    for (auto &[uri, diags] : byUri)
-    {
-        if (diags.empty())
+    for (auto &[uri, diags] : byUri) {
+        if (diags.empty()) {
             continue;
+        }
         std::sort(diags.begin(), diags.end(), diagLess);
         result.push_back({uri, diags});
     }
     std::sort(result.begin(), result.end(),
-              [](const auto &a, const auto &b)
-              { return a.uri < b.uri; });
+              [](const auto &a, const auto &b) { return a.uri < b.uri; });
     return result;
 }
 
 // Normalize expected diagnostics: relative URIs → absolute file://, then sort.
 static std::vector<tpp::DiagnosticLSPMessage> normalizeExpected(
-    std::vector<tpp::DiagnosticLSPMessage> diags)
-{
-    auto diagLess = [](const tpp::Diagnostic &a, const tpp::Diagnostic &b)
-    {
+    std::vector<tpp::DiagnosticLSPMessage> diags) {
+    auto diagLess = [](const tpp::Diagnostic &a, const tpp::Diagnostic &b) {
         return std::tie(a.range.start.line, a.range.start.character, a.message) <
                std::tie(b.range.start.line, b.range.start.character, b.message);
     };
-    for (auto &msg : diags)
-    {
+    for (auto &msg : diags) {
         msg.uri = srcUri(msg.uri);
         std::sort(msg.diagnostics.begin(), msg.diagnostics.end(), diagLess);
     }
     std::sort(diags.begin(), diags.end(),
-              [](const auto &a, const auto &b)
-              { return a.uri < b.uri; });
+              [](const auto &a, const auto &b) { return a.uri < b.uri; });
     return diags;
 }
 
@@ -208,9 +189,8 @@ static std::vector<tpp::DiagnosticLSPMessage> normalizeExpected(
 // the workspace root is known.  TearDown() shuts the server down automatically.
 
 template <typename T>
-class LspParamFixture : public ::testing::TestWithParam<T>
-{
-protected:
+class LspParamFixture : public ::testing::TestWithParam<T> {
+  protected:
     std::unique_ptr<tpp_test::LspClient> client_;
     T spec_;
     std::filesystem::path tcDir;
@@ -219,8 +199,7 @@ protected:
     virtual std::string getTestCaseName() const = 0;
     virtual void additionalSetUp() {}
 
-    void SetUp() final
-    {
+    void SetUp() final {
         namespace fs = std::filesystem;
         spec_ = this->GetParam();
         tcDir = fs::weakly_canonical(std::string("TestCases/") + getTestCaseName());
@@ -229,26 +208,22 @@ protected:
         additionalSetUp();
     }
 
-    void TearDown() override
-    {
-        if (client_)
-        {
+    void TearDown() override {
+        if (client_) {
             client_->shutdown();
             client_.reset();
         }
     }
 };
 
-class LspTestWithLoading : public LspParamFixture<tTestCase>
-{
-protected:
+class LspTestWithLoading : public LspParamFixture<tTestCase> {
+  protected:
     tLoadedTestCase loaded_;
 
     // tTestCase uses .name, not .testCase
     std::string getTestCaseName() const override { return spec_.name; }
 
-    void additionalSetUp() override
-    {
+    void additionalSetUp() override {
         loaded_ = spec_.extract();
     }
 };
@@ -257,12 +232,10 @@ protected:
 // For each positive test case, verify that tpp/renderPreview returns the
 // expected rendered output.
 
-class LspPreviewTest : public LspTestWithLoading
-{
+class LspPreviewTest : public LspTestWithLoading {
 };
 
-TEST_P(LspPreviewTest, RenderMatchesExpected)
-{
+TEST_P(LspPreviewTest, RenderMatchesExpected) {
     namespace fs = std::filesystem;
     fs::path tcDir = fs::weakly_canonical("TestCases/" + loaded_.name);
 
@@ -274,8 +247,7 @@ TEST_P(LspPreviewTest, RenderMatchesExpected)
     EXPECT_EQ(result.value("output", ""), loaded_.expectedOutput)
         << "Test: " << loaded_.name;
 
-    if (loaded_.name == "basic_struct")
-    {
+    if (loaded_.name == "basic_struct") {
         ASSERT_TRUE(result.contains("mappings"))
             << "tpp/renderPreview missing 'mappings' field\nTest: " << loaded_.name;
         ASSERT_TRUE(result["mappings"].is_array())
@@ -285,19 +257,16 @@ TEST_P(LspPreviewTest, RenderMatchesExpected)
 
         bool foundFooMapping = false;
         bool foundFieldTypeMapping = false;
-        for (const auto &mapping : result["mappings"])
-        {
+        for (const auto &mapping : result["mappings"]) {
             if (mapping["sourceRange"]["start"]["line"] == 1 &&
                 mapping["outStart"] == 7 &&
-                mapping["outEnd"] == 10)
-            {
+                mapping["outEnd"] == 10) {
                 foundFooMapping = true;
             }
 
             if (mapping["sourceRange"]["start"]["line"] == 4 &&
                 mapping["outStart"] == 17 &&
-                mapping["outEnd"] == 20)
-            {
+                mapping["outEnd"] == 20) {
                 foundFieldTypeMapping = true;
             }
         }
@@ -308,8 +277,7 @@ TEST_P(LspPreviewTest, RenderMatchesExpected)
             << "Expected a precise preview mapping for the first @field.type@ emission inside the captured loop body";
     }
 
-    if (loaded_.name == "basic_variant")
-    {
+    if (loaded_.name == "basic_variant") {
         ASSERT_TRUE(result.contains("mappings"))
             << "tpp/renderPreview missing 'mappings' field\nTest: " << loaded_.name;
         ASSERT_TRUE(result["mappings"].is_array())
@@ -321,28 +289,24 @@ TEST_P(LspPreviewTest, RenderMatchesExpected)
         bool foundDocStringCaseMapping = false;
         bool foundDataTableLiteralMapping = false;
         bool foundDataTableVectorMapping = false;
-        for (const auto &mapping : result["mappings"])
-        {
+        for (const auto &mapping : result["mappings"]) {
             const int outStart = mapping["outStart"].get<int>();
             const int outEnd = mapping["outEnd"].get<int>();
             const std::string mappedText = output.substr(static_cast<size_t>(outStart),
                                                          static_cast<size_t>(outEnd - outStart));
 
             if (mapping["sourceRange"]["start"]["line"] == 11 &&
-                mappedText == "    some_other_step(\"DocString\");\n")
-            {
+                mappedText == "    some_other_step(\"DocString\");\n") {
                 foundDocStringCaseMapping = true;
             }
 
             if (mapping["sourceRange"]["start"]["line"] == 15 &&
-                mappedText == "    {")
-            {
+                mappedText == "    {") {
                 foundDataTableLiteralMapping = true;
             }
 
             if (mapping["sourceRange"]["start"]["line"] == 16 &&
-                mappedText == "        std::vector<TableRow> table = {")
-            {
+                mappedText == "        std::vector<TableRow> table = {") {
                 foundDataTableVectorMapping = true;
             }
         }
@@ -355,8 +319,7 @@ TEST_P(LspPreviewTest, RenderMatchesExpected)
             << "Expected preview literal mappings inside a switch case body to use file-relative line numbers";
     }
 
-    if (loaded_.name == "direct_function_call_zero_args")
-    {
+    if (loaded_.name == "direct_function_call_zero_args") {
         ASSERT_TRUE(result.contains("mappings"))
             << "tpp/renderPreview missing 'mappings' field\nTest: " << loaded_.name;
         ASSERT_TRUE(result["mappings"].is_array())
@@ -364,19 +327,16 @@ TEST_P(LspPreviewTest, RenderMatchesExpected)
 
         bool foundCallSiteMapping = false;
         bool foundCalleeLiteralMapping = false;
-        for (const auto &mapping : result["mappings"])
-        {
+        for (const auto &mapping : result["mappings"]) {
             if (mapping["sourceRange"]["start"]["line"] == 5 &&
                 mapping["outStart"] == 0 &&
-                mapping["outEnd"] == 11)
-            {
+                mapping["outEnd"] == 11) {
                 foundCallSiteMapping = true;
             }
 
             if (mapping["sourceRange"]["start"]["line"] == 1 &&
                 mapping["outStart"] == 0 &&
-                mapping["outEnd"] == 11)
-            {
+                mapping["outEnd"] == 11) {
                 foundCalleeLiteralMapping = true;
             }
         }
@@ -387,8 +347,7 @@ TEST_P(LspPreviewTest, RenderMatchesExpected)
             << "Expected preview mappings to retain the callee template output span for footer()";
     }
 
-    if (loaded_.name == "hello_world")
-    {
+    if (loaded_.name == "hello_world") {
         ASSERT_TRUE(result.contains("mappings"))
             << "tpp/renderPreview missing 'mappings' field\nTest: " << loaded_.name;
         ASSERT_TRUE(result["mappings"].is_array())
@@ -403,8 +362,7 @@ TEST_P(LspPreviewTest, RenderMatchesExpected)
         EXPECT_EQ(mapping["outEnd"], 13);
     }
 
-    if (loaded_.name == "lsp_multi_file_sources")
-    {
+    if (loaded_.name == "lsp_multi_file_sources") {
         namespace fs = std::filesystem;
         const std::string templateUri = fileUri(fs::weakly_canonical("TestCases/lsp_multi_file_sources/template.tpp"));
         const std::string helperUri = fileUri(fs::weakly_canonical("TestCases/lsp_multi_file_sources/helper.tpp"));
@@ -416,19 +374,16 @@ TEST_P(LspPreviewTest, RenderMatchesExpected)
 
         bool foundForDirectiveMapping = false;
         bool foundHelperMapping = false;
-        for (const auto &mapping : result["mappings"])
-        {
+        for (const auto &mapping : result["mappings"]) {
             if (mapping.value("sourceUri", "") == templateUri &&
                 mapping["sourceRange"]["start"]["line"] == 1 &&
                 mapping["outStart"] == 0 &&
-                mapping["outEnd"] == 11)
-            {
+                mapping["outEnd"] == 11) {
                 foundForDirectiveMapping = true;
             }
 
             if (mapping.value("sourceUri", "") == helperUri &&
-                mapping["sourceRange"]["start"]["line"] == 2)
-            {
+                mapping["sourceRange"]["start"]["line"] == 2) {
                 foundHelperMapping = true;
             }
         }
@@ -442,19 +397,16 @@ TEST_P(LspPreviewTest, RenderMatchesExpected)
 
 INSTANTIATE_TEST_SUITE_P(LspTests, LspPreviewTest,
                          ::testing::ValuesIn(GetPositiveTestCases()),
-                         [](const testing::TestParamInfo<LspPreviewTest::ParamType> &info)
-                         { return info.param.name; });
+                         [](const testing::TestParamInfo<LspPreviewTest::ParamType> &info) { return info.param.name; });
 
 // ── LspDiagnosticsTest ────────────────────────────────────────────────────────
 // For each test case with compile-time diagnostics, verify that
 // publishDiagnostics matches the normalized case expectations.
 
-class LspDiagnosticsTest : public LspTestWithLoading
-{
+class LspDiagnosticsTest : public LspTestWithLoading {
 };
 
-TEST_P(LspDiagnosticsTest, PublishDiagnostics)
-{
+TEST_P(LspDiagnosticsTest, PublishDiagnostics) {
     auto notifications = client_->didOpen(srcUri(loaded_.sources[0].url),
                                           loaded_.sources[0].content);
     auto actual = lspDiagsFromNotifs(notifications);
@@ -467,11 +419,9 @@ TEST_P(LspDiagnosticsTest, PublishDiagnostics)
 
 INSTANTIATE_TEST_SUITE_P(LspTests, LspDiagnosticsTest,
                          ::testing::ValuesIn(GetDiagnosticTestCases()),
-                         [](const testing::TestParamInfo<LspDiagnosticsTest::ParamType> &info)
-                         { return info.param.name; });
+                         [](const testing::TestParamInfo<LspDiagnosticsTest::ParamType> &info) { return info.param.name; });
 
-TEST(LspWatchTest, PolicyChangesReloadProjectAndPublishPolicyDiagnostics)
-{
+TEST(LspWatchTest, PolicyChangesReloadProjectAndPublishPolicyDiagnostics) {
     namespace fs = std::filesystem;
 
     fs::path tempDir = fs::temp_directory_path() / fs::path("tpp-lsp-policy-watch-XXXXXX");
@@ -487,16 +437,16 @@ TEST(LspWatchTest, PolicyChangesReloadProjectAndPublishPolicyDiagnostics)
     const fs::path policyPath = tempDir / "policies" / "escape-html.policy.json";
 
     writeFileStr(configPath,
-        "{\n"
-        "    \"types\": [],\n"
-        "    \"templates\": [\"template.tpp\"],\n"
-        "    \"replacement-policies\": [\"policies/*.policy.json\"],\n"
-        "    \"previews\": [{\"template\": \"main\", \"input\": {\"v\": \"<x>\"}}]\n"
-        "}\n");
+                 "{\n"
+                 "    \"types\": [],\n"
+                 "    \"templates\": [\"template.tpp\"],\n"
+                 "    \"replacement-policies\": [\"policies/*.policy.json\"],\n"
+                 "    \"previews\": [{\"template\": \"main\", \"input\": {\"v\": \"<x>\"}}]\n"
+                 "}\n");
     writeFileStr(templatePath,
-        "template main(v: string)\n"
-        "@v | policy=\"escape-html\"@\n"
-        "END\n");
+                 "template main(v: string)\n"
+                 "@v | policy=\"escape-html\"@\n"
+                 "END\n");
     writeFileStr(policyPath, "{\"tag\":123}\n");
 
     tpp_test::LspClient client(TPP_LSP_EXE);
@@ -509,11 +459,12 @@ TEST(LspWatchTest, PolicyChangesReloadProjectAndPublishPolicyDiagnostics)
     const std::string policyUri = fileUri(policyPath);
 
     auto byUri = [&](const std::vector<tpp::DiagnosticLSPMessage> &messages, const std::string &uri)
-        -> const std::vector<tpp::Diagnostic>*
-    {
-        for (const auto &message : messages)
-            if (message.uri == uri)
+        -> const std::vector<tpp::Diagnostic> * {
+        for (const auto &message : messages) {
+            if (message.uri == uri) {
                 return &message.diagnostics;
+            }
+        }
         return nullptr;
     };
 
@@ -528,17 +479,13 @@ TEST(LspWatchTest, PolicyChangesReloadProjectAndPublishPolicyDiagnostics)
     EXPECT_NE((*policyDiags)[0].message.find("missing required string field 'tag'"), std::string::npos);
 
     writeFileStr(policyPath,
-        "{\n"
-        "    \"tag\": \"escape-html\",\n"
-        "    \"replacements\": [{\"find\": \"<\", \"replace\": \"&lt;\"}]\n"
-        "}\n");
+                 "{\n"
+                 "    \"tag\": \"escape-html\",\n"
+                 "    \"replacements\": [{\"find\": \"<\", \"replace\": \"&lt;\"}]\n"
+                 "}\n");
 
-    auto changeNotifications = client.didChangeWatchedFiles(nlohmann::json::array({
-        {
-            {"uri", fileUri(policyPath)},
-            {"type", 2}
-        }
-    }));
+    auto changeNotifications = client.didChangeWatchedFiles(nlohmann::json::array({{{"uri", fileUri(policyPath)},
+                                                                                    {"type", 2}}}));
     auto changed = lspDiagsFromNotifs(changeNotifications);
 
     const auto *clearedTemplateDiags = byUri(changed, templateUri);
@@ -552,8 +499,7 @@ TEST(LspWatchTest, PolicyChangesReloadProjectAndPublishPolicyDiagnostics)
     fs::remove_all(tempDir, ec);
 }
 
-TEST(LspWatchTest, DirtyPolicyEditsRecompileProjectWithoutSave)
-{
+TEST(LspWatchTest, DirtyPolicyEditsRecompileProjectWithoutSave) {
     namespace fs = std::filesystem;
 
     fs::path tempDir = fs::temp_directory_path() / fs::path("tpp-lsp-policy-dirty-XXXXXX");
@@ -569,16 +515,16 @@ TEST(LspWatchTest, DirtyPolicyEditsRecompileProjectWithoutSave)
     const fs::path policyPath = tempDir / "policies" / "escape-html.policy.json";
 
     writeFileStr(configPath,
-        "{\n"
-        "    \"types\": [],\n"
-        "    \"templates\": [\"template.tpp\"],\n"
-        "    \"replacement-policies\": [\"policies/*.policy.json\"],\n"
-        "    \"previews\": [{\"template\": \"main\", \"input\": {\"v\": \"<x>\"}}]\n"
-        "}\n");
+                 "{\n"
+                 "    \"types\": [],\n"
+                 "    \"templates\": [\"template.tpp\"],\n"
+                 "    \"replacement-policies\": [\"policies/*.policy.json\"],\n"
+                 "    \"previews\": [{\"template\": \"main\", \"input\": {\"v\": \"<x>\"}}]\n"
+                 "}\n");
     writeFileStr(templatePath,
-        "template main(v: string)\n"
-        "@v | policy=\"escape-html\"@\n"
-        "END\n");
+                 "template main(v: string)\n"
+                 "@v | policy=\"escape-html\"@\n"
+                 "END\n");
     writeFileStr(policyPath, "{\"tag\":123}\n");
 
     const std::string validPolicy =
@@ -594,24 +540,25 @@ TEST(LspWatchTest, DirtyPolicyEditsRecompileProjectWithoutSave)
     const std::string policyUri = fileUri(policyPath);
 
     auto byUri = [&](const std::vector<tpp::DiagnosticLSPMessage> &messages, const std::string &uri)
-        -> const std::vector<tpp::Diagnostic>*
-    {
-        for (const auto &message : messages)
-            if (message.uri == uri)
+        -> const std::vector<tpp::Diagnostic> * {
+        for (const auto &message : messages) {
+            if (message.uri == uri) {
                 return &message.diagnostics;
+            }
+        }
         return nullptr;
     };
 
     auto rawPublishForUri = [&](const std::vector<nlohmann::json> &notifications, const std::string &uri)
-        -> const nlohmann::json*
-    {
-        for (const auto &notification : notifications)
-        {
-            if (notification.value("method", "") != "textDocument/publishDiagnostics")
+        -> const nlohmann::json * {
+        for (const auto &notification : notifications) {
+            if (notification.value("method", "") != "textDocument/publishDiagnostics") {
                 continue;
+            }
             const auto &params = notification["params"];
-            if (params.value("uri", "") == uri)
+            if (params.value("uri", "") == uri) {
                 return &params["diagnostics"];
+            }
         }
         return nullptr;
     };
@@ -648,8 +595,7 @@ TEST(LspWatchTest, DirtyPolicyEditsRecompileProjectWithoutSave)
     fs::remove_all(tempDir, ec);
 }
 
-TEST(LspWatchTest, EncodedWorkspaceUriAndConfigPathResolveToProject)
-{
+TEST(LspWatchTest, EncodedWorkspaceUriAndConfigPathResolveToProject) {
     namespace fs = std::filesystem;
 
     const fs::path baseDir = fs::temp_directory_path() / "tpp lsp+uri";
@@ -669,15 +615,15 @@ TEST(LspWatchTest, EncodedWorkspaceUriAndConfigPathResolveToProject)
     const fs::path templatePath = tempDir / "template.tpp";
 
     writeFileStr(configPath,
-        "{\n"
-        "    \"types\": [],\n"
-        "    \"templates\": [\"template.tpp\"],\n"
-        "    \"previews\": [{\"template\": \"main\", \"input\": []}]\n"
-        "}\n");
+                 "{\n"
+                 "    \"types\": [],\n"
+                 "    \"templates\": [\"template.tpp\"],\n"
+                 "    \"previews\": [{\"template\": \"main\", \"input\": []}]\n"
+                 "}\n");
     writeFileStr(templatePath,
-        "template main()\n"
-        "OK\n"
-        "END\n");
+                 "template main()\n"
+                 "OK\n"
+                 "END\n");
 
     tpp_test::LspClient client(TPP_LSP_EXE);
     client.initialize(fileUri(tempDir));
@@ -686,15 +632,15 @@ TEST(LspWatchTest, EncodedWorkspaceUriAndConfigPathResolveToProject)
     auto openNotifications = client.didOpen(templateUri, readFileStr(templatePath));
 
     auto rawPublishForUri = [&](const std::vector<nlohmann::json> &notifications, const std::string &uri)
-        -> const nlohmann::json*
-    {
-        for (const auto &notification : notifications)
-        {
-            if (notification.value("method", "") != "textDocument/publishDiagnostics")
+        -> const nlohmann::json * {
+        for (const auto &notification : notifications) {
+            if (notification.value("method", "") != "textDocument/publishDiagnostics") {
                 continue;
+            }
             const auto &params = notification["params"];
-            if (params.value("uri", "") == uri)
+            if (params.value("uri", "") == uri) {
                 return &params["diagnostics"];
+            }
         }
         return nullptr;
     };
@@ -705,7 +651,7 @@ TEST(LspWatchTest, EncodedWorkspaceUriAndConfigPathResolveToProject)
     EXPECT_TRUE(templateDiags->empty());
 
     auto preview = client.request("tpp/renderPreview", {{"configPath", configPath.string()},
-                                                         {"previewIndex", 0}});
+                                                        {"previewIndex", 0}});
     ASSERT_FALSE(preview.contains("error"))
         << "tpp/renderPreview error: " << preview.value("error", "");
     EXPECT_EQ(preview.value("output", ""), "OK");
@@ -714,8 +660,7 @@ TEST(LspWatchTest, EncodedWorkspaceUriAndConfigPathResolveToProject)
     fs::remove_all(tempDir, ec);
 }
 
-TEST(ToolingTest, ParseTemplateSourceSkipsCommentsAndIndentedHeaders)
-{
+TEST(ToolingTest, ParseTemplateSourceSkipsCommentsAndIndentedHeaders) {
     const std::string src =
         "/// doc comment ignored by tooling source scan\n"
         "/* block comment before template\n"
@@ -745,8 +690,7 @@ TEST(ToolingTest, ParseTemplateSourceSkipsCommentsAndIndentedHeaders)
     EXPECT_EQ(templates[1].sourceRange.start.line, 8);
 }
 
-TEST(LspCompletionTest, FieldAndTypeNameCompletions)
-{
+TEST(LspCompletionTest, FieldAndTypeNameCompletions) {
     namespace fs = std::filesystem;
 
     const fs::path tcDir = fs::weakly_canonical("TestCases/basic_struct");
@@ -792,21 +736,18 @@ TEST(LspCompletionTest, FieldAndTypeNameCompletions)
 // at the exact absolute position with the right type.  Non-exhaustive: extra
 // tokens produced by the server are ignored.
 
-class LspTokenTest : public LspParamFixture<LspTokenSpec>
-{
-protected:
+class LspTokenTest : public LspParamFixture<LspTokenSpec> {
+  protected:
     std::string getTestCaseName() const override { return spec_.testCase; }
     std::string targetUri_;
 
-    void additionalSetUp() override
-    {
+    void additionalSetUp() override {
         targetUri_ = fileUri(tcDir / spec_.file);
         client_->didOpen(targetUri_, readFileStr(tcDir / spec_.file));
     }
 };
 
-TEST_P(LspTokenTest, ExpectedTokensPresent)
-{
+TEST_P(LspTokenTest, ExpectedTokensPresent) {
     auto result = client_->request("textDocument/semanticTokens/full", {{"textDocument", {{"uri", targetUri_}}}});
     ASSERT_FALSE(result.contains("error"))
         << "semanticTokens/full error: " << result.value("error", "");
@@ -817,15 +758,12 @@ TEST_P(LspTokenTest, ExpectedTokensPresent)
 
     const auto tokens = lsp::decodeTokens(result["data"]);
 
-    for (const auto &exp : spec_.expected)
-    {
+    for (const auto &exp : spec_.expected) {
         const auto expType = lsp::tokenTypeFromName(exp.type);
-        const bool found   = std::any_of(
+        const bool found = std::any_of(
             tokens.begin(), tokens.end(),
-            [&](const lsp::SemanticToken &tok)
-            {
-                return tok.line == exp.line && tok.character == exp.character
-                    && tok.length == exp.length && tok.type == expType;
+            [&](const lsp::SemanticToken &tok) {
+                return tok.line == exp.line && tok.character == exp.character && tok.length == exp.length && tok.type == expType;
             });
         EXPECT_TRUE(found)
             << "Missing token: line=" << exp.line
@@ -837,28 +775,24 @@ TEST_P(LspTokenTest, ExpectedTokensPresent)
 
 INSTANTIATE_TEST_SUITE_P(LspTests, LspTokenTest,
                          ::testing::ValuesIn(GetLspTokenSpecs()),
-                         [](const testing::TestParamInfo<LspTokenTest::ParamType> &info)
-                         { return info.param.testCase; });
+                         [](const testing::TestParamInfo<LspTokenTest::ParamType> &info) { return info.param.testCase; });
 
 // ── LspFoldingTest ────────────────────────────────────────────────────────────
 // Parameterised on LspFoldingSpec discovered from normalized test-case metadata.
 // Verifies the exact set of folding ranges (order-independent by startLine).
 
-class LspFoldingTest : public LspParamFixture<LspFoldingSpec>
-{
-protected:
+class LspFoldingTest : public LspParamFixture<LspFoldingSpec> {
+  protected:
     std::string getTestCaseName() const override { return spec_.testCase; }
     std::string targetUri_;
 
-    void additionalSetUp() override
-    {
+    void additionalSetUp() override {
         targetUri_ = fileUri(tcDir / spec_.file);
         client_->didOpen(targetUri_, readFileStr(tcDir / spec_.file));
     }
 };
 
-TEST_P(LspFoldingTest, ExactFoldingRanges)
-{
+TEST_P(LspFoldingTest, ExactFoldingRanges) {
     const auto &spec = GetParam();
     auto result = client_->request("textDocument/foldingRange", {{"textDocument", {{"uri", targetUri_}}}});
     ASSERT_FALSE(result.contains("error"))
@@ -871,12 +805,10 @@ TEST_P(LspFoldingTest, ExactFoldingRanges)
     // Sort by startLine for deterministic comparison.
     auto sorted = result;
     std::sort(sorted.begin(), sorted.end(),
-              [](const nlohmann::json &a, const nlohmann::json &b)
-              {
+              [](const nlohmann::json &a, const nlohmann::json &b) {
                   return a["startLine"].get<int>() < b["startLine"].get<int>();
               });
-    for (int i = 0; i < (int)spec.expected.size(); ++i)
-    {
+    for (int i = 0; i < (int)spec.expected.size(); ++i) {
         EXPECT_EQ(sorted[i]["startLine"].get<int>(), spec.expected[i].first)
             << "Range " << i << " startLine mismatch";
         EXPECT_EQ(sorted[i]["endLine"].get<int>(), spec.expected[i].second)
@@ -886,32 +818,29 @@ TEST_P(LspFoldingTest, ExactFoldingRanges)
 
 INSTANTIATE_TEST_SUITE_P(LspTests, LspFoldingTest,
                          ::testing::ValuesIn(GetLspFoldingSpecs()),
-                         [](const testing::TestParamInfo<LspFoldingTest::ParamType> &info)
-                         { return info.param.testCase; });
+                         [](const testing::TestParamInfo<LspFoldingTest::ParamType> &info) { return info.param.testCase; });
 
 // ── LspDefinitionTest ─────────────────────────────────────────────────────────
 // Parameterised on LspDefinitionSpec discovered from normalized test-case metadata.
 // Opens all .tpp files in the test case, then verifies the definition target.
 
-class LspDefinitionTest : public LspParamFixture<LspDefinitionSpec>
-{
-protected:
+class LspDefinitionTest : public LspParamFixture<LspDefinitionSpec> {
+  protected:
     std::string getTestCaseName() const override { return spec_.testCase; }
-    void additionalSetUp() override
-    {
+    void additionalSetUp() override {
         namespace fs = std::filesystem;
-        for (const auto &entry : fs::directory_iterator(tcDir))
-        {
-            if (!entry.is_regular_file())
+        for (const auto &entry : fs::directory_iterator(tcDir)) {
+            if (!entry.is_regular_file()) {
                 continue;
-            if (entry.path().extension() == ".tpp")
+            }
+            if (entry.path().extension() == ".tpp") {
                 client_->didOpen(fileUri(entry.path()), readFileStr(entry.path()));
+            }
         }
     }
 };
 
-TEST_P(LspDefinitionTest, TargetLocation)
-{
+TEST_P(LspDefinitionTest, TargetLocation) {
     namespace fs = std::filesystem;
     std::string uri = fileUri(fs::weakly_canonical(
         std::string("TestCases/") + spec_.testCase + "/" + spec_.file));
@@ -921,8 +850,7 @@ TEST_P(LspDefinitionTest, TargetLocation)
     ASSERT_FALSE(result.contains("error"))
         << "definition error: " << result.value("error", "");
 
-    if (!spec_.expected_file.has_value())
-    {
+    if (!spec_.expected_file.has_value()) {
         EXPECT_TRUE(result.is_null())
             << "Expected no definition but got: " << result.dump();
         return;
@@ -934,8 +862,7 @@ TEST_P(LspDefinitionTest, TargetLocation)
     std::string exp_uri = fileUri(fs::weakly_canonical(
         std::string("TestCases/") + spec_.testCase + "/" + spec_.expected_file.value()));
 
-    auto check = [&](const nlohmann::json &loc)
-    {
+    auto check = [&](const nlohmann::json &loc) {
         EXPECT_EQ(loc.value("uri", ""), exp_uri);
         if (spec_.expected_line >= 0) {
             EXPECT_EQ(loc["range"]["start"]["line"].get<int>(), spec_.expected_line);
@@ -945,47 +872,41 @@ TEST_P(LspDefinitionTest, TargetLocation)
         }
     };
 
-    if (result.is_array())
-    {
+    if (result.is_array()) {
         ASSERT_FALSE(result.empty()) << "Expected at least one location";
         check(result[0]);
-    }
-    else
-    {
+    } else {
         check(result);
     }
 }
 
 INSTANTIATE_TEST_SUITE_P(LspTests, LspDefinitionTest,
                          ::testing::ValuesIn(GetLspDefinitionSpecs()),
-                         [](const testing::TestParamInfo<LspDefinitionTest::ParamType> &info)
-                         { return info.param.name; });
+                         [](const testing::TestParamInfo<LspDefinitionTest::ParamType> &info) { return info.param.name; });
 
-class LspHoverTest : public LspParamFixture<LspHoverSpec>
-{
-protected:
+class LspHoverTest : public LspParamFixture<LspHoverSpec> {
+  protected:
     std::string getTestCaseName() const override { return spec_.testCase; }
-    void additionalSetUp() override
-    {
+    void additionalSetUp() override {
         namespace fs = std::filesystem;
-        for (const auto &entry : fs::directory_iterator(tcDir))
-        {
-            if (!entry.is_regular_file())
+        for (const auto &entry : fs::directory_iterator(tcDir)) {
+            if (!entry.is_regular_file()) {
                 continue;
-            if (entry.path().extension() == ".tpp")
+            }
+            if (entry.path().extension() == ".tpp") {
                 client_->didOpen(fileUri(entry.path()), readFileStr(entry.path()));
+            }
         }
     }
 };
 
-TEST_P(LspHoverTest, ContainsExpectedText)
-{
+TEST_P(LspHoverTest, ContainsExpectedText) {
     namespace fs = std::filesystem;
     std::string uri = fileUri(fs::weakly_canonical(
         std::string("TestCases/") + spec_.testCase + "/" + spec_.file));
 
     auto result = client_->request("textDocument/hover", {{"textDocument", {{"uri", uri}}},
-                                                           {"position", {{"line", spec_.line}, {"character", spec_.character}}}});
+                                                          {"position", {{"line", spec_.line}, {"character", spec_.character}}}});
     ASSERT_FALSE(result.contains("error"))
         << "hover error: " << result.value("error", "");
     ASSERT_FALSE(result.is_null())
@@ -995,8 +916,7 @@ TEST_P(LspHoverTest, ContainsExpectedText)
     ASSERT_FALSE(contents.empty())
         << "Expected non-empty hover content";
 
-    for (const auto &expected : spec_.expected_contains)
-    {
+    for (const auto &expected : spec_.expected_contains) {
         EXPECT_NE(contents.find(expected), std::string::npos)
             << "Missing hover fragment: '" << expected << "'\nHover: " << contents;
     }
@@ -1004,5 +924,4 @@ TEST_P(LspHoverTest, ContainsExpectedText)
 
 INSTANTIATE_TEST_SUITE_P(LspTests, LspHoverTest,
                          ::testing::ValuesIn(GetLspHoverSpecs()),
-                         [](const testing::TestParamInfo<LspHoverTest::ParamType> &info)
-                         { return info.param.name; });
+                         [](const testing::TestParamInfo<LspHoverTest::ParamType> &info) { return info.param.name; });

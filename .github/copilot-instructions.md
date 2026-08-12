@@ -54,6 +54,7 @@ Keep this section as a pointer only. The authoritative workflow lives in `.githu
 - **Naming:** `PascalCase` for classes/structs; `snake_case` for functions and variables.
 - **Namespace:** wrap all implementation code in `namespace tpp { … }`.
 - **Section dividers:** `// ════════…` decorative separators are conventional in larger files.
+- **Control flow braces (required):** always use braces for `if`/`else`/`for`/`while`/`do` bodies, even single-line statements; avoid indentation-only one-liners. When touching existing code, normalize touched control flow to braced form.
 
 ## Acceptance Tests
 

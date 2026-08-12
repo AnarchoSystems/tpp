@@ -9,324 +9,310 @@
 #include <utility>
 #include <vector>
 
-namespace tpp
-{
+namespace tpp {
 
-    // ═══════════════════════════════════════════════════════════════════
-    // Helpers
-    // ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════
+// Helpers
+// ═══════════════════════════════════════════════════════════════════
 
-    static bool isOptionalType(const TypeKind &tk)
+static bool isOptionalType(const TypeKind &tk) {
+    return tk.value.index() == 5; // Optional variant
+}
+
+static std::string type_signature_name(const TypeKind &tk) {
+    switch (tk.value.index()) {
+    case 0:
     {
-        return tk.value.index() == 5; // Optional variant
+        return "string";
     }
-
-    static std::string type_signature_name(const TypeKind &tk)
+    case 1:
     {
-        switch (tk.value.index())
-        {
-        case 0: return "string";
-        case 1: return "int";
-        case 2: return "bool";
-        case 3: return std::get<3>(tk.value);
-        case 4:
-        {
-            const auto &inner = std::get<4>(tk.value);
-            return inner ? ("list<" + type_signature_name(*inner) + ">") : "list<?>";
-        }
-        case 5:
-        {
-            const auto &inner = std::get<5>(tk.value);
-            return inner ? ("optional<" + type_signature_name(*inner) + ">") : "optional<?>";
-        }
-        default:
-            return "?";
-        }
+        return "int";
     }
-
-    static std::string function_signature_text(const FunctionDef &f)
+    case 2:
     {
-        std::string text = f.name + "(";
-        for (std::size_t i = 0; i < f.params.size(); ++i)
-        {
-            if (i > 0)
-                text += ", ";
-            text += type_signature_name(*f.params[i].type);
-        }
-        text += ")";
-        return text;
+        return "bool";
     }
-
-    static bool function_matches_signature(const FunctionDef &f,
-                                           const std::vector<std::string> &signature)
+    case 3:
     {
-        if (f.params.size() != signature.size())
+        return std::get<3>(tk.value);
+    }
+    case 4: {
+        const auto &inner = std::get<4>(tk.value);
+        return inner ? ("list<" + type_signature_name(*inner) + ">") : "list<?>";
+    }
+    case 5: {
+        const auto &inner = std::get<5>(tk.value);
+        return inner ? ("optional<" + type_signature_name(*inner) + ">") : "optional<?>";
+    }
+    default:
+    {
+        return "?";
+    }
+    }
+}
+
+static std::string function_signature_text(const FunctionDef &f) {
+    std::string text = f.name + "(";
+    for (std::size_t i = 0; i < f.params.size(); ++i) {
+        if (i > 0) {
+            text += ", ";
+        }
+        text += type_signature_name(*f.params[i].type);
+    }
+    text += ")";
+    return text;
+}
+
+static bool function_matches_signature(const FunctionDef &f,
+                                       const std::vector<std::string> &signature) {
+    if (f.params.size() != signature.size()) {
+        return false;
+    }
+    for (std::size_t i = 0; i < signature.size(); ++i) {
+        if (type_signature_name(*f.params[i].type) != signature[i]) {
             return false;
-        for (std::size_t i = 0; i < signature.size(); ++i)
-        {
-            if (type_signature_name(*f.params[i].type) != signature[i])
-                return false;
         }
-        return true;
     }
+    return true;
+}
 
-    // ═══════════════════════════════════════════════════════════════════
-    // Direct IR rendering
-    // ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════
+// Direct IR rendering
+// ═══════════════════════════════════════════════════════════════════
 
-    bool render_function(const IR &ir, const FunctionDef &function,
-                         const nlohmann::json &input,
-                         std::string &output, std::string &error,
-                         std::vector<RenderMapping> *tracking)
-    {
-        try
-        {
-            // ── Bind JSON input to function parameters ──
-            nlohmann::json boundArgs;
-            if (function.params.empty())
-            {
-                boundArgs = input;
-            }
-            else if (function.params.size() == 1)
-            {
-                const auto &p = function.params[0];
-                bool isList = (p.type->value.index() == 4); // List variant
-                nlohmann::json value;
-                if (isList)
-                {
-                    if (input.is_array() && input.size() == 1 && input[0].is_array())
+bool render_function(const IR &ir, const FunctionDef &function,
+                     const nlohmann::json &input,
+                     std::string &output, std::string &error,
+                     std::vector<RenderMapping> *tracking) {
+    try {
+        // ── Bind JSON input to function parameters ──
+        nlohmann::json boundArgs;
+        if (function.params.empty()) {
+            boundArgs = input;
+        } else if (function.params.size() == 1) {
+            const auto &p = function.params[0];
+            bool isList = (p.type->value.index() == 4); // List variant
+            nlohmann::json value;
+            if (isList) {
+                if (input.is_array() && input.size() == 1 && input[0].is_array()) {
+                    value = input[0];
+                } else if (input.is_object() && input.contains(p.name)) {
+                    value = input[p.name];
+                } else {
+                    value = input;
+                }
+            } else {
+                if (input.is_array()) {
+                    if (input.size() == 1) {
                         value = input[0];
-                    else if (input.is_object() && input.contains(p.name))
-                        value = input[p.name];
-                    else
-                        value = input;
-                }
-                else
-                {
-                    if (input.is_array())
-                    {
-                        if (input.size() == 1)
-                            value = input[0];
-                        else
-                        {
-                            error = "Expected 1 argument for function '" + function.name +
-                                    "', got " + std::to_string(input.size());
-                            return false;
-                        }
+                    } else {
+                        error = "Expected 1 argument for function '" + function.name +
+                                "', got " + std::to_string(input.size());
+                        return false;
                     }
-                    else if (input.is_object() && input.contains(p.name))
-                        value = input[p.name];
-                    else
-                        value = input;
+                } else if (input.is_object() && input.contains(p.name)) {
+                    value = input[p.name];
+                } else {
+                    value = input;
                 }
-                boundArgs = nlohmann::json::object();
-                boundArgs[p.name] = value;
             }
-            else
-            {
-                if (!input.is_array() || input.size() != function.params.size())
-                {
-                    const std::size_t got = input.is_array() ? input.size() : 0;
-                    const std::size_t expected = function.params.size();
-                    error = "Expected " + std::to_string(expected) +
-                            " argument" + (expected == 1 ? "" : "s") +
-                            " for function '" + function.name +
-                            "', got " + std::to_string(got);
-                    return false;
-                }
-                boundArgs = nlohmann::json::object();
-                for (std::size_t i = 0; i < function.params.size(); ++i)
-                    boundArgs[function.params[i].name] = input[i];
+            boundArgs = nlohmann::json::object();
+            boundArgs[p.name] = value;
+        } else {
+            if (!input.is_array() || input.size() != function.params.size()) {
+                const std::size_t got = input.is_array() ? input.size() : 0;
+                const std::size_t expected = function.params.size();
+                error = "Expected " + std::to_string(expected) +
+                        " argument" + (expected == 1 ? "" : "s") +
+                        " for function '" + function.name +
+                        "', got " + std::to_string(got);
+                return false;
             }
+            boundArgs = nlohmann::json::object();
+            for (std::size_t i = 0; i < function.params.size(); ++i) {
+                boundArgs[function.params[i].name] = input[i];
+            }
+        }
 
-            // ── Validate required struct fields ──
-            std::function<const StructDef *(const TypeKind &)> resolveStruct =
-                [&](const TypeKind &tk) -> const StructDef *
-            {
-                if (tk.value.index() == 3)
-                {
-                    const auto &name = std::get<3>(tk.value);
-                    for (const auto &s : ir.structs)
-                        if (s.name == name) return &s;
-                    return nullptr;
-                }
-                if (tk.value.index() == 5)
-                {
-                    const auto &inner = std::get<5>(tk.value);
-                    if (inner) return resolveStruct(*inner);
+        // ── Validate required struct fields ──
+        std::function<const StructDef *(const TypeKind &)> resolveStruct =
+            [&](const TypeKind &tk) -> const StructDef * {
+            if (tk.value.index() == 3) {
+                const auto &name = std::get<3>(tk.value);
+                for (const auto &s : ir.structs) {
+                    if (s.name == name) {
+                        return &s;
+                    }
                 }
                 return nullptr;
-            };
+            }
+            if (tk.value.index() == 5) {
+                const auto &inner = std::get<5>(tk.value);
+                if (inner) {
+                    return resolveStruct(*inner);
+                }
+            }
+            return nullptr;
+        };
 
-            for (const auto &p : function.params)
-            {
-                const StructDef *sd = resolveStruct(*p.type);
-                if (!sd)
+        for (const auto &p : function.params) {
+            const StructDef *sd = resolveStruct(*p.type);
+            if (!sd) {
+                continue;
+            }
+            if (!boundArgs.contains(p.name) || !boundArgs[p.name].is_object()) {
+                error = "Missing field '" + sd->fields[0].name +
+                        "' in input data for function '" + function.name + "'";
+                return false;
+            }
+            const auto &obj = boundArgs[p.name];
+            for (const auto &fd : sd->fields) {
+                if (isOptionalType(*fd.type)) {
                     continue;
-                if (!boundArgs.contains(p.name) || !boundArgs[p.name].is_object())
-                {
-                    error = "Missing field '" + sd->fields[0].name +
+                }
+                if (!obj.contains(fd.name) || obj[fd.name].is_null()) {
+                    error = "Missing field '" + fd.name +
                             "' in input data for function '" + function.name + "'";
                     return false;
                 }
-                const auto &obj = boundArgs[p.name];
-                for (const auto &fd : sd->fields)
-                {
-                    if (isOptionalType(*fd.type))
-                        continue;
-                    if (!obj.contains(fd.name) || obj[fd.name].is_null())
-                    {
-                        error = "Missing field '" + fd.name +
-                                "' in input data for function '" + function.name + "'";
-                        return false;
-                    }
-                }
-            }
-
-            std::map<std::string, nlohmann::json> bindings;
-            if (boundArgs.is_object())
-            {
-                for (auto it = boundArgs.begin(); it != boundArgs.end(); ++it)
-                    bindings.emplace(it.key(), it.value());
-            }
-
-            IRInterpreter interpreter(ir);
-            if (!interpreter.render(function, std::move(bindings)))
-            {
-                error = interpreter.error();
-                return false;
-            }
-
-            output = interpreter.take_output(tracking);
-
-            return true;
-        }
-        catch (const std::exception &e)
-        {
-            error = e.what();
-            return false;
-        }
-        catch (...)
-        {
-            return false;
-        }
-    }
-
-    // ═══════════════════════════════════════════════════════════════════
-    // Function lookup
-    // ═══════════════════════════════════════════════════════════════════
-
-    bool get_function(const IR &ir, const std::string &functionName,
-                      const FunctionDef *&function, std::string &error)
-    {
-        const FunctionDef *match = nullptr;
-        int matchCount = 0;
-
-        for (const auto &f : ir.functions)
-        {
-            if (f.name == functionName)
-            {
-                match = &f;
-                ++matchCount;
             }
         }
 
-        if (matchCount == 1)
-        {
-            function = match;
-            return true;
+        std::map<std::string, nlohmann::json> bindings;
+        if (boundArgs.is_object()) {
+            for (auto it = boundArgs.begin(); it != boundArgs.end(); ++it) {
+                bindings.emplace(it.key(), it.value());
+            }
         }
 
-        if (matchCount > 1)
-        {
-            error = "function '" + functionName + "' is ambiguous; matching overloads: ";
-            bool first = true;
-            for (const auto &f : ir.functions)
-            {
-                if (f.name != functionName)
-                    continue;
-                if (!first)
-                    error += ", ";
-                first = false;
-                error += function_signature_text(f);
-            }
+        IRInterpreter interpreter(ir);
+        if (!interpreter.render(function, std::move(bindings))) {
+            error = interpreter.error();
             return false;
         }
 
-        error = "function '" + functionName + "' not found";
+        output = interpreter.take_output(tracking);
+
+        return true;
+    } catch (const std::exception &e) {
+        error = e.what();
+        return false;
+    } catch (...) {
         return false;
     }
+}
 
-    bool get_function(const IR &ir, const std::string &functionName,
-                      const std::vector<std::string> &signature,
-                      const FunctionDef *&function, std::string &error)
-    {
-        if (signature.empty())
-            return get_function(ir, functionName, function, error);
+// ═══════════════════════════════════════════════════════════════════
+// Function lookup
+// ═══════════════════════════════════════════════════════════════════
 
-        const FunctionDef *match = nullptr;
-        int matchCount = 0;
+bool get_function(const IR &ir, const std::string &functionName,
+                  const FunctionDef *&function, std::string &error) {
+    const FunctionDef *match = nullptr;
+    int matchCount = 0;
 
-        for (const auto &f : ir.functions)
-        {
-            if (f.name != functionName)
-                continue;
-            if (!function_matches_signature(f, signature))
-                continue;
+    for (const auto &f : ir.functions) {
+        if (f.name == functionName) {
             match = &f;
             ++matchCount;
         }
+    }
 
-        if (matchCount == 1)
-        {
-            function = match;
-            return true;
+    if (matchCount == 1) {
+        function = match;
+        return true;
+    }
+
+    if (matchCount > 1) {
+        error = "function '" + functionName + "' is ambiguous; matching overloads: ";
+        bool first = true;
+        for (const auto &f : ir.functions) {
+            if (f.name != functionName) {
+                continue;
+            }
+            if (!first) {
+                error += ", ";
+            }
+            first = false;
+            error += function_signature_text(f);
         }
-
-        std::string sigText = functionName + "(";
-        for (std::size_t i = 0; i < signature.size(); ++i)
-        {
-            if (i > 0)
-                sigText += ", ";
-            sigText += signature[i];
-        }
-        sigText += ")";
-
-        if (matchCount > 1)
-        {
-            error = "function signature '" + sigText + "' is ambiguous";
-            return false;
-        }
-
-        error = "function '" + functionName + "' with signature '" + sigText + "' not found";
         return false;
     }
 
-    // ═══════════════════════════════════════════════════════════════════
-    // Tracked rendering
-    // ═══════════════════════════════════════════════════════════════════
+    error = "function '" + functionName + "' not found";
+    return false;
+}
 
-    std::string renderTracked(const IR &ir, const std::string &functionName,
-                              const nlohmann::json &input,
-                              std::vector<RenderMapping> &mappings)
-    {
-        return renderTracked(ir, functionName, {}, input, mappings);
+bool get_function(const IR &ir, const std::string &functionName,
+                  const std::vector<std::string> &signature,
+                  const FunctionDef *&function, std::string &error) {
+    if (signature.empty()) {
+        return get_function(ir, functionName, function, error);
     }
 
-    std::string renderTracked(const IR &ir, const std::string &functionName,
-                              const std::vector<std::string> &signature,
-                              const nlohmann::json &input,
-                              std::vector<RenderMapping> &mappings)
-    {
-        const FunctionDef *fn = nullptr;
-        std::string error;
-        if (!get_function(ir, functionName, signature, fn, error))
-            throw std::runtime_error(error);
-        std::string output;
-        mappings.clear();
-        if (!render_function(ir, *fn, input, output, error, &mappings))
-            throw std::runtime_error(error);
-        return output;
+    const FunctionDef *match = nullptr;
+    int matchCount = 0;
+
+    for (const auto &f : ir.functions) {
+        if (f.name != functionName) {
+            continue;
+        }
+        if (!function_matches_signature(f, signature)) {
+            continue;
+        }
+        match = &f;
+        ++matchCount;
     }
+
+    if (matchCount == 1) {
+        function = match;
+        return true;
+    }
+
+    std::string sigText = functionName + "(";
+    for (std::size_t i = 0; i < signature.size(); ++i) {
+        if (i > 0) {
+            sigText += ", ";
+        }
+        sigText += signature[i];
+    }
+    sigText += ")";
+
+    if (matchCount > 1) {
+        error = "function signature '" + sigText + "' is ambiguous";
+        return false;
+    }
+
+    error = "function '" + functionName + "' with signature '" + sigText + "' not found";
+    return false;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Tracked rendering
+// ═══════════════════════════════════════════════════════════════════
+
+std::string renderTracked(const IR &ir, const std::string &functionName,
+                          const nlohmann::json &input,
+                          std::vector<RenderMapping> &mappings) {
+    return renderTracked(ir, functionName, {}, input, mappings);
+}
+
+std::string renderTracked(const IR &ir, const std::string &functionName,
+                          const std::vector<std::string> &signature,
+                          const nlohmann::json &input,
+                          std::vector<RenderMapping> &mappings) {
+    const FunctionDef *fn = nullptr;
+    std::string error;
+    if (!get_function(ir, functionName, signature, fn, error)) {
+        throw std::runtime_error(error);
+    }
+    std::string output;
+    mappings.clear();
+    if (!render_function(ir, *fn, input, output, error, &mappings)) {
+        throw std::runtime_error(error);
+    }
+    return output;
+}
 
 } // namespace tpp

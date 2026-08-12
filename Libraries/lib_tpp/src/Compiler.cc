@@ -7,462 +7,470 @@
 
 #include <algorithm>
 
-namespace tpp
-{
+namespace tpp {
 
-namespace
-{
-    constexpr const char *kProjectDiagnosticUri = "tpp://project";
+namespace {
+template <typename>
+inline constexpr bool always_false_v = false;
 
-    bool has_any_diagnostics(const std::vector<DiagnosticLSPMessage> &messages) noexcept
-    {
-        for (const auto &message : messages)
-        {
-            if (!message.diagnostics.empty())
-                return true;
+constexpr const char *kProjectDiagnosticUri = "tpp://project";
+
+bool has_any_diagnostics(const std::vector<DiagnosticLSPMessage> &messages) noexcept {
+    for (const auto &message : messages) {
+        if (!message.diagnostics.empty()) {
+            return true;
         }
-        return false;
     }
+    return false;
+}
 
-    std::vector<Diagnostic> &diagnostics_for(std::vector<DiagnosticLSPMessage> &messages,
-                                             const std::string &uri)
-    {
-        auto it = std::find_if(messages.begin(), messages.end(), [&](const DiagnosticLSPMessage &message)
-        {
-            return message.uri == uri;
-        });
-        if (it == messages.end())
-        {
-            messages.emplace_back(uri);
-            return messages.back().diagnostics;
-        }
-        return it->diagnostics;
+std::vector<Diagnostic> &diagnostics_for(std::vector<DiagnosticLSPMessage> &messages,
+                                         const std::string &uri) {
+    auto it = std::find_if(messages.begin(), messages.end(), [&](const DiagnosticLSPMessage &message) {
+        return message.uri == uri;
+    });
+    if (it == messages.end()) {
+        messages.emplace_back(uri);
+        return messages.back().diagnostics;
     }
+    return it->diagnostics;
+}
 
-    void add_project_diagnostic(std::vector<DiagnosticLSPMessage> &messages,
-                                std::string message)
+void add_project_diagnostic(std::vector<DiagnosticLSPMessage> &messages,
+                            std::string message) {
+    diagnostics_for(messages, kProjectDiagnosticUri).push_back(makeErrorDiagnostic(std::move(message)));
+}
+
+TokKind to_internal_kind(TypeSourceTokenKind kind) {
+    switch (kind) {
+    case TypeSourceTokenKind::Struct:
     {
-        diagnostics_for(messages, kProjectDiagnosticUri).push_back(makeErrorDiagnostic(std::move(message)));
+        return TokKind::Struct;
     }
-
-    TokKind to_internal_kind(TypeSourceTokenKind kind)
+    case TypeSourceTokenKind::Enum:
     {
-        switch (kind)
-        {
-        case TypeSourceTokenKind::Struct:
-            return TokKind::Struct;
-        case TypeSourceTokenKind::Enum:
-            return TokKind::Enum;
-        case TypeSourceTokenKind::LBrace:
-            return TokKind::LBrace;
-        case TypeSourceTokenKind::RBrace:
-            return TokKind::RBrace;
-        case TypeSourceTokenKind::Semi:
-            return TokKind::Semi;
-        case TypeSourceTokenKind::Colon:
-            return TokKind::Colon;
-        case TypeSourceTokenKind::LParen:
-            return TokKind::LParen;
-        case TypeSourceTokenKind::RParen:
-            return TokKind::RParen;
-        case TypeSourceTokenKind::Comma:
-            return TokKind::Comma;
-        case TypeSourceTokenKind::LAngle:
-            return TokKind::LAngle;
-        case TypeSourceTokenKind::RAngle:
-            return TokKind::RAngle;
-        case TypeSourceTokenKind::KwOptional:
-            return TokKind::KwOptional;
-        case TypeSourceTokenKind::KwList:
-            return TokKind::KwList;
-        case TypeSourceTokenKind::KwString:
-            return TokKind::KwString;
-        case TypeSourceTokenKind::KwInt:
-            return TokKind::KwInt;
-        case TypeSourceTokenKind::KwBool:
-            return TokKind::KwBool;
-        case TypeSourceTokenKind::Ident:
-            return TokKind::Ident;
-        case TypeSourceTokenKind::Comment:
-            return TokKind::Comment;
-        case TypeSourceTokenKind::DocComment:
-            return TokKind::DocComment;
-        case TypeSourceTokenKind::Eof:
-            return TokKind::Eof;
-        }
+        return TokKind::Enum;
+    }
+    case TypeSourceTokenKind::LBrace:
+    {
+        return TokKind::LBrace;
+    }
+    case TypeSourceTokenKind::RBrace:
+    {
+        return TokKind::RBrace;
+    }
+    case TypeSourceTokenKind::Semi:
+    {
+        return TokKind::Semi;
+    }
+    case TypeSourceTokenKind::Colon:
+    {
+        return TokKind::Colon;
+    }
+    case TypeSourceTokenKind::LParen:
+    {
+        return TokKind::LParen;
+    }
+    case TypeSourceTokenKind::RParen:
+    {
+        return TokKind::RParen;
+    }
+    case TypeSourceTokenKind::Comma:
+    {
+        return TokKind::Comma;
+    }
+    case TypeSourceTokenKind::LAngle:
+    {
+        return TokKind::LAngle;
+    }
+    case TypeSourceTokenKind::RAngle:
+    {
+        return TokKind::RAngle;
+    }
+    case TypeSourceTokenKind::KwOptional:
+    {
+        return TokKind::KwOptional;
+    }
+    case TypeSourceTokenKind::KwList:
+    {
+        return TokKind::KwList;
+    }
+    case TypeSourceTokenKind::KwString:
+    {
+        return TokKind::KwString;
+    }
+    case TypeSourceTokenKind::KwInt:
+    {
+        return TokKind::KwInt;
+    }
+    case TypeSourceTokenKind::KwBool:
+    {
+        return TokKind::KwBool;
+    }
+    case TypeSourceTokenKind::Ident:
+    {
+        return TokKind::Ident;
+    }
+    case TypeSourceTokenKind::Comment:
+    {
+        return TokKind::Comment;
+    }
+    case TypeSourceTokenKind::DocComment:
+    {
+        return TokKind::DocComment;
+    }
+    case TypeSourceTokenKind::Eof:
+    {
         return TokKind::Eof;
     }
-
-    std::vector<Token> to_internal_tokens(const std::vector<TypeSourceToken> &tokens)
-    {
-        std::vector<Token> result;
-        result.reserve(tokens.size());
-        for (const auto &token : tokens)
-        {
-            result.push_back({
-                to_internal_kind(token.kind),
-                token.text,
-                token.range.start.line,
-                token.range.start.character
-            });
-        }
-        return result;
     }
+    return TokKind::Eof;
+}
 
-    void clear_range(Range &range) noexcept
-    {
-        range = {};
+std::vector<Token> to_internal_tokens(const std::vector<TypeSourceToken> &tokens) {
+    std::vector<Token> result;
+    result.reserve(tokens.size());
+    for (const auto &token : tokens) {
+        result.push_back({to_internal_kind(token.kind),
+                          token.text,
+                          token.range.start.line,
+                          token.range.start.character});
     }
+    return result;
+}
 
-    void clear_source_uri(std::string &sourceUri) noexcept
-    {
-        sourceUri.clear();
-    }
+void clear_range(Range &range) noexcept {
+    range = {};
+}
 
-    void strip_type_ranges(std::vector<compiler::StructDef> &structs,
-                           std::vector<compiler::EnumDef> &enums)
-    {
-        for (auto &structDef : structs)
-        {
-            clear_range(structDef.sourceRange);
-            for (auto &field : structDef.fields)
-                clear_range(field.sourceRange);
-        }
+void clear_source_uri(std::string &sourceUri) noexcept {
+    sourceUri.clear();
+}
 
-        for (auto &enumDef : enums)
-        {
-            clear_range(enumDef.sourceRange);
-            for (auto &variant : enumDef.variants)
-                clear_range(variant.sourceRange);
+void strip_type_ranges(std::vector<compiler::StructDef> &structs,
+                       std::vector<compiler::EnumDef> &enums) {
+    for (auto &structDef : structs) {
+        clear_range(structDef.sourceRange);
+        for (auto &field : structDef.fields) {
+            clear_range(field.sourceRange);
         }
     }
 
-    void strip_case_ranges(compiler::CaseNode &caseNode);
-
-    void strip_ast_ranges(std::vector<compiler::ASTNode> &nodes)
-    {
-        for (auto &node : nodes)
-        {
-            std::visit([&](auto &value)
-            {
-                using T = std::decay_t<decltype(value)>;
-                if constexpr (std::is_same_v<T, compiler::AlignmentCellNode>)
-                {
-                    clear_range(value.sourceRange);
-                }
-                else if constexpr (std::is_same_v<T, compiler::CommentNode>)
-                {
-                    clear_range(value.startRange);
-                    clear_range(value.endRange);
-                }
-                else if constexpr (std::is_same_v<T, compiler::InterpolationNode>)
-                {
-                    clear_range(value.sourceRange);
-                }
-                else if constexpr (std::is_same_v<T, std::shared_ptr<compiler::ForNode>>)
-                {
-                    if (!value)
-                        return;
-                    clear_range(value->sourceRange);
-                    clear_range(value->endRange);
-                    strip_ast_ranges(value->body);
-                }
-                else if constexpr (std::is_same_v<T, std::shared_ptr<compiler::IfNode>>)
-                {
-                    if (!value)
-                        return;
-                    clear_range(value->sourceRange);
-                    clear_range(value->elseRange);
-                    clear_range(value->endRange);
-                    strip_ast_ranges(value->thenBody);
-                    strip_ast_ranges(value->elseBody);
-                }
-                else if constexpr (std::is_same_v<T, std::shared_ptr<compiler::SwitchNode>>)
-                {
-                    if (!value)
-                        return;
-                    clear_range(value->sourceRange);
-                    clear_range(value->endRange);
-                    for (auto &caseNode : value->cases)
-                        strip_case_ranges(caseNode);
-                    if (value->defaultCase.has_value())
-                        strip_case_ranges(*value->defaultCase);
-                }
-                else if constexpr (std::is_same_v<T, std::shared_ptr<compiler::FunctionCallNode>>)
-                {
-                    if (value)
-                        clear_range(value->sourceRange);
-                }
-                else if constexpr (std::is_same_v<T, std::shared_ptr<compiler::RenderViaNode>>)
-                {
-                    if (value)
-                        clear_range(value->sourceRange);
-                }
-            }, node);
+    for (auto &enumDef : enums) {
+        clear_range(enumDef.sourceRange);
+        for (auto &variant : enumDef.variants) {
+            clear_range(variant.sourceRange);
         }
-    }
-
-    void strip_case_ranges(compiler::CaseNode &caseNode)
-    {
-        clear_range(caseNode.sourceRange);
-        clear_range(caseNode.endRange);
-        strip_ast_ranges(caseNode.body);
-    }
-
-    void strip_template_ranges(ParsedTemplateSource &templateSource)
-    {
-        clear_range(templateSource.sourceRange);
-        strip_ast_ranges(templateSource.body);
-    }
-
-    void strip_semantic_model_ranges(compiler::SemanticModel &semanticModel)
-    {
-        strip_type_ranges(semanticModel.structs, semanticModel.enums);
-        for (auto &structDef : semanticModel.structs)
-        {
-            clear_source_uri(structDef.sourceUri);
-            for (auto &field : structDef.fields)
-                clear_source_uri(field.sourceUri);
-        }
-        for (auto &enumDef : semanticModel.enums)
-        {
-            clear_source_uri(enumDef.sourceUri);
-            for (auto &variant : enumDef.variants)
-                clear_source_uri(variant.sourceUri);
-        }
-        for (auto &function : semanticModel.mutable_functions())
-        {
-            clear_range(function.sourceRange);
-            clear_source_uri(function.sourceUri);
-            strip_ast_ranges(function.body);
-        }
-        semanticModel.mutable_type_source_files().clear();
-    }
-
-    std::optional<Range> find_type_name_range(const std::vector<TypeSourceToken> &tokens,
-                                              const std::string &name)
-    {
-        for (std::size_t index = 0; index + 1 < tokens.size(); ++index)
-        {
-            const auto &current = tokens[index];
-            const auto &next = tokens[index + 1];
-            if ((current.kind == TypeSourceTokenKind::Struct || current.kind == TypeSourceTokenKind::Enum) &&
-                next.kind == TypeSourceTokenKind::Ident &&
-                next.text == name)
-            {
-                return next.range;
-            }
-        }
-        return std::nullopt;
-    }
-
-    void add_duplicate_type_diagnostic(std::vector<Diagnostic> &diagnostics,
-                                       const std::string &name,
-                                       const std::optional<Range> &range)
-    {
-        Diagnostic diagnostic;
-        if (range.has_value())
-            diagnostic.range = *range;
-        diagnostic.message = "type '" + name + "' is already defined";
-        diagnostic.severity = DiagnosticSeverity::Error;
-        diagnostics.push_back(std::move(diagnostic));
-    }
-
-    std::string extract_type_definition(const std::string &raw,
-                                        const std::string &keyword,
-                                        const std::string &name)
-    {
-        const std::string marker = keyword + " " + name;
-        const auto pos = raw.find(marker);
-        if (pos == std::string::npos)
-            return "";
-
-        auto start = pos;
-        while (start > 0)
-        {
-            const auto prevEnd = start - 1;
-            if (raw[prevEnd] != '\n')
-                break;
-
-            auto prevStart = raw.rfind('\n', prevEnd > 0 ? prevEnd - 1 : std::string::npos);
-            prevStart = (prevStart == std::string::npos) ? 0 : prevStart + 1;
-            const auto line = raw.substr(prevStart, prevEnd - prevStart);
-            const auto firstNonWhitespace = line.find_first_not_of(" \t");
-            if (firstNonWhitespace == std::string::npos)
-            {
-                start = prevStart;
-                continue;
-            }
-
-            if (line.substr(firstNonWhitespace, 2) == "//")
-            {
-                start = prevStart;
-                continue;
-            }
-
-            break;
-        }
-
-        while (start < pos && (raw[start] == '\n' || raw[start] == '\r'))
-            ++start;
-
-        const auto brace = raw.find('{', pos);
-        if (brace == std::string::npos)
-            return "";
-
-        int depth = 0;
-        auto end = brace;
-        for (; end < raw.size(); ++end)
-        {
-            if (raw[end] == '{')
-                ++depth;
-            else if (raw[end] == '}')
-            {
-                --depth;
-                if (depth == 0)
-                {
-                    ++end;
-                    break;
-                }
-            }
-        }
-
-        return raw.substr(start, end - start);
-    }
-
-    void populate_type_definitions(ParsedTypeArtifact &artifact)
-    {
-        for (auto &structDef : artifact.mutable_structs())
-            structDef.rawTypedefs = extract_type_definition(artifact.source().content, "struct", structDef.name);
-        for (auto &enumDef : artifact.mutable_enums())
-            enumDef.rawTypedefs = extract_type_definition(artifact.source().content, "enum", enumDef.name);
-    }
-
-    void merge_type_artifact(const ParsedTypeArtifact &artifact,
-                             compiler::SemanticModel &semanticModel,
-                             std::vector<Diagnostic> &diagnostics)
-    {
-        for (const auto &structDef : artifact.structs())
-        {
-            if (semanticModel.nameIndex.count(structDef.name) != 0)
-            {
-                add_duplicate_type_diagnostic(diagnostics,
-                                              structDef.name,
-                                              find_type_name_range(artifact.tokens(), structDef.name));
-                continue;
-            }
-
-            auto mergedStruct = structDef;
-            mergedStruct.sourceUri = artifact.source().uri;
-            for (auto &field : mergedStruct.fields)
-                field.sourceUri = artifact.source().uri;
-
-            const std::size_t index = semanticModel.structs.size();
-            semanticModel.structs.push_back(std::move(mergedStruct));
-            semanticModel.nameIndex[structDef.name] = {compiler::TypeKind::Struct, index};
-        }
-
-        for (const auto &enumDef : artifact.enums())
-        {
-            if (semanticModel.nameIndex.count(enumDef.name) != 0)
-            {
-                add_duplicate_type_diagnostic(diagnostics,
-                                              enumDef.name,
-                                              find_type_name_range(artifact.tokens(), enumDef.name));
-                continue;
-            }
-
-            auto mergedEnum = enumDef;
-            mergedEnum.sourceUri = artifact.source().uri;
-            for (auto &variant : mergedEnum.variants)
-                variant.sourceUri = artifact.source().uri;
-
-            const std::size_t index = semanticModel.enums.size();
-            semanticModel.enums.push_back(std::move(mergedEnum));
-            semanticModel.nameIndex[enumDef.name] = {compiler::TypeKind::Enum, index};
-        }
-    }
-
-    bool is_same_signature(const compiler::TemplateFunction &lhs,
-                           const compiler::TemplateFunction &rhs)
-    {
-        if (lhs.params.size() != rhs.params.size())
-            return false;
-
-        for (std::size_t index = 0; index < lhs.params.size(); ++index)
-        {
-            if (!(lhs.params[index].type == rhs.params[index].type))
-                return false;
-        }
-
-        return true;
-    }
-
-    compiler::TemplateFunction to_template_function(const ParsedTemplateSource &templateSource,
-                                                    const std::string &sourceUri)
-    {
-        compiler::TemplateFunction function;
-        function.name = templateSource.name;
-        function.params = templateSource.params;
-        function.body = templateSource.body;
-        function.policy = templateSource.policy;
-        function.doc = templateSource.doc;
-        function.sourceRange = templateSource.sourceRange;
-        function.sourceUri = sourceUri;
-        return function;
     }
 }
 
-void TppProject::clear() noexcept
-{
+void strip_case_ranges(compiler::CaseNode &caseNode);
+
+void strip_ast_ranges(std::vector<compiler::ASTNode> &nodes) {
+    for (auto &node : nodes) {
+        std::visit([&](auto &value) {
+            using T = std::decay_t<decltype(value)>;
+            if constexpr (std::is_same_v<T, compiler::TextNode>) {
+                return;
+            } else if constexpr (std::is_same_v<T, compiler::AlignmentCellNode>) {
+                clear_range(value.sourceRange);
+            } else if constexpr (std::is_same_v<T, compiler::CommentNode>) {
+                clear_range(value.startRange);
+                clear_range(value.endRange);
+            } else if constexpr (std::is_same_v<T, compiler::InterpolationNode>) {
+                clear_range(value.sourceRange);
+            } else if constexpr (std::is_same_v<T, std::shared_ptr<compiler::IndentNode>>) {
+                if (!value) {
+                    return;
+                }
+                strip_ast_ranges(value->body);
+            } else if constexpr (std::is_same_v<T, std::shared_ptr<compiler::ForNode>>) {
+                if (!value) {
+                    return;
+                }
+                clear_range(value->sourceRange);
+                clear_range(value->endRange);
+                strip_ast_ranges(value->body);
+            } else if constexpr (std::is_same_v<T, std::shared_ptr<compiler::IfNode>>) {
+                if (!value) {
+                    return;
+                }
+                clear_range(value->sourceRange);
+                clear_range(value->elseRange);
+                clear_range(value->endRange);
+                strip_ast_ranges(value->thenBody);
+                strip_ast_ranges(value->elseBody);
+            } else if constexpr (std::is_same_v<T, std::shared_ptr<compiler::SwitchNode>>) {
+                if (!value) {
+                    return;
+                }
+                clear_range(value->sourceRange);
+                clear_range(value->endRange);
+                for (auto &caseNode : value->cases) {
+                    strip_case_ranges(caseNode);
+                }
+                if (value->defaultCase.has_value()) {
+                    strip_case_ranges(*value->defaultCase);
+                }
+            } else if constexpr (std::is_same_v<T, std::shared_ptr<compiler::FunctionCallNode>>) {
+                if (value) {
+                    clear_range(value->sourceRange);
+                }
+            } else if constexpr (std::is_same_v<T, std::shared_ptr<compiler::RenderViaNode>>) {
+                if (value) {
+                    clear_range(value->sourceRange);
+                }
+            } else {
+                static_assert(always_false_v<T>, "Unhandled ASTNode alternative in strip_ast_ranges");
+            }
+        },
+                   node);
+    }
+}
+
+void strip_case_ranges(compiler::CaseNode &caseNode) {
+    clear_range(caseNode.sourceRange);
+    clear_range(caseNode.endRange);
+    strip_ast_ranges(caseNode.body);
+}
+
+void strip_template_ranges(ParsedTemplateSource &templateSource) {
+    clear_range(templateSource.sourceRange);
+    strip_ast_ranges(templateSource.body);
+}
+
+void strip_semantic_model_ranges(compiler::SemanticModel &semanticModel) {
+    strip_type_ranges(semanticModel.structs, semanticModel.enums);
+    for (auto &structDef : semanticModel.structs) {
+        clear_source_uri(structDef.sourceUri);
+        for (auto &field : structDef.fields) {
+            clear_source_uri(field.sourceUri);
+        }
+    }
+    for (auto &enumDef : semanticModel.enums) {
+        clear_source_uri(enumDef.sourceUri);
+        for (auto &variant : enumDef.variants) {
+            clear_source_uri(variant.sourceUri);
+        }
+    }
+    for (auto &function : semanticModel.mutable_functions()) {
+        clear_range(function.sourceRange);
+        clear_source_uri(function.sourceUri);
+        strip_ast_ranges(function.body);
+    }
+    semanticModel.mutable_type_source_files().clear();
+}
+
+std::optional<Range> find_type_name_range(const std::vector<TypeSourceToken> &tokens,
+                                          const std::string &name) {
+    for (std::size_t index = 0; index + 1 < tokens.size(); ++index) {
+        const auto &current = tokens[index];
+        const auto &next = tokens[index + 1];
+        if ((current.kind == TypeSourceTokenKind::Struct || current.kind == TypeSourceTokenKind::Enum) &&
+            next.kind == TypeSourceTokenKind::Ident &&
+            next.text == name) {
+            return next.range;
+        }
+    }
+    return std::nullopt;
+}
+
+void add_duplicate_type_diagnostic(std::vector<Diagnostic> &diagnostics,
+                                   const std::string &name,
+                                   const std::optional<Range> &range) {
+    Diagnostic diagnostic;
+    if (range.has_value()) {
+        diagnostic.range = *range;
+    }
+    diagnostic.message = "type '" + name + "' is already defined";
+    diagnostic.severity = DiagnosticSeverity::Error;
+    diagnostics.push_back(std::move(diagnostic));
+}
+
+std::string extract_type_definition(const std::string &raw,
+                                    const std::string &keyword,
+                                    const std::string &name) {
+    const std::string marker = keyword + " " + name;
+    const auto pos = raw.find(marker);
+    if (pos == std::string::npos) {
+        return "";
+    }
+
+    auto start = pos;
+    while (start > 0) {
+        const auto prevEnd = start - 1;
+        if (raw[prevEnd] != '\n') {
+            break;
+        }
+
+        auto prevStart = raw.rfind('\n', prevEnd > 0 ? prevEnd - 1 : std::string::npos);
+        prevStart = (prevStart == std::string::npos) ? 0 : prevStart + 1;
+        const auto line = raw.substr(prevStart, prevEnd - prevStart);
+        const auto firstNonWhitespace = line.find_first_not_of(" \t");
+        if (firstNonWhitespace == std::string::npos) {
+            start = prevStart;
+            continue;
+        }
+
+        if (line.substr(firstNonWhitespace, 2) == "//") {
+            start = prevStart;
+            continue;
+        }
+
+        break;
+    }
+
+    while (start < pos && (raw[start] == '\n' || raw[start] == '\r')) {
+        ++start;
+    }
+
+    const auto brace = raw.find('{', pos);
+    if (brace == std::string::npos) {
+        return "";
+    }
+
+    int depth = 0;
+    auto end = brace;
+    for (; end < raw.size(); ++end) {
+        if (raw[end] == '{') {
+            ++depth;
+        } else if (raw[end] == '}') {
+            --depth;
+            if (depth == 0) {
+                ++end;
+                break;
+            }
+        }
+    }
+
+    return raw.substr(start, end - start);
+}
+
+void populate_type_definitions(ParsedTypeArtifact &artifact) {
+    for (auto &structDef : artifact.mutable_structs()) {
+        structDef.rawTypedefs = extract_type_definition(artifact.source().content, "struct", structDef.name);
+    }
+    for (auto &enumDef : artifact.mutable_enums()) {
+        enumDef.rawTypedefs = extract_type_definition(artifact.source().content, "enum", enumDef.name);
+    }
+}
+
+void merge_type_artifact(const ParsedTypeArtifact &artifact,
+                         compiler::SemanticModel &semanticModel,
+                         std::vector<Diagnostic> &diagnostics) {
+    for (const auto &structDef : artifact.structs()) {
+        if (semanticModel.nameIndex.count(structDef.name) != 0) {
+            add_duplicate_type_diagnostic(diagnostics,
+                                          structDef.name,
+                                          find_type_name_range(artifact.tokens(), structDef.name));
+            continue;
+        }
+
+        auto mergedStruct = structDef;
+        mergedStruct.sourceUri = artifact.source().uri;
+        for (auto &field : mergedStruct.fields) {
+            field.sourceUri = artifact.source().uri;
+        }
+
+        const std::size_t index = semanticModel.structs.size();
+        semanticModel.structs.push_back(std::move(mergedStruct));
+        semanticModel.nameIndex[structDef.name] = {compiler::TypeKind::Struct, index};
+    }
+
+    for (const auto &enumDef : artifact.enums()) {
+        if (semanticModel.nameIndex.count(enumDef.name) != 0) {
+            add_duplicate_type_diagnostic(diagnostics,
+                                          enumDef.name,
+                                          find_type_name_range(artifact.tokens(), enumDef.name));
+            continue;
+        }
+
+        auto mergedEnum = enumDef;
+        mergedEnum.sourceUri = artifact.source().uri;
+        for (auto &variant : mergedEnum.variants) {
+            variant.sourceUri = artifact.source().uri;
+        }
+
+        const std::size_t index = semanticModel.enums.size();
+        semanticModel.enums.push_back(std::move(mergedEnum));
+        semanticModel.nameIndex[enumDef.name] = {compiler::TypeKind::Enum, index};
+    }
+}
+
+bool is_same_signature(const compiler::TemplateFunction &lhs,
+                       const compiler::TemplateFunction &rhs) {
+    if (lhs.params.size() != rhs.params.size()) {
+        return false;
+    }
+
+    for (std::size_t index = 0; index < lhs.params.size(); ++index) {
+        if (!(lhs.params[index].type == rhs.params[index].type)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+compiler::TemplateFunction to_template_function(const ParsedTemplateSource &templateSource,
+                                                const std::string &sourceUri) {
+    compiler::TemplateFunction function;
+    function.name = templateSource.name;
+    function.params = templateSource.params;
+    function.body = templateSource.body;
+    function.policy = templateSource.policy;
+    function.doc = templateSource.doc;
+    function.sourceRange = templateSource.sourceRange;
+    function.sourceUri = sourceUri;
+    return function;
+}
+} // namespace
+
+void TppProject::clear() noexcept {
     clear_type_sources();
     clear_template_sources();
     clear_policy_sources();
 }
 
-void TppProject::clear_type_sources() noexcept
-{
+void TppProject::clear_type_sources() noexcept {
     typeSources_.clear();
     nextTypeSourceIndex_ = 0;
 }
 
-void TppProject::clear_template_sources() noexcept
-{
+void TppProject::clear_template_sources() noexcept {
     templateSources_.clear();
     nextTemplateSourceIndex_ = 0;
 }
 
-void TppProject::clear_policy_sources() noexcept
-{
+void TppProject::clear_policy_sources() noexcept {
     policySources_.clear();
     nextPolicySourceIndex_ = 0;
 }
 
-std::string TppProject::make_default_uri(const std::string &prefix, std::size_t index)
-{
+std::string TppProject::make_default_uri(const std::string &prefix, std::size_t index) {
     return "memory://tpp/" + prefix + "/" + std::to_string(index);
 }
 
-void TppProject::add_type_source(std::string content, std::string uri) noexcept
-{
-    if (uri.empty())
+void TppProject::add_type_source(std::string content, std::string uri) noexcept {
+    if (uri.empty()) {
         uri = make_default_uri("types", nextTypeSourceIndex_);
+    }
     ++nextTypeSourceIndex_;
     typeSources_.push_back({std::move(uri), std::move(content)});
 }
 
-void TppProject::add_template_source(std::string content, std::string uri) noexcept
-{
-    if (uri.empty())
+void TppProject::add_template_source(std::string content, std::string uri) noexcept {
+    if (uri.empty()) {
         uri = make_default_uri("templates", nextTemplateSourceIndex_);
+    }
     ++nextTemplateSourceIndex_;
     templateSources_.push_back({std::move(uri), std::move(content)});
 }
 
-void TppProject::add_policy_source(std::string content, std::string uri) noexcept
-{
-    if (uri.empty())
+void TppProject::add_policy_source(std::string content, std::string uri) noexcept {
+    if (uri.empty()) {
         uri = make_default_uri("policies", nextPolicySourceIndex_);
+    }
     ++nextPolicySourceIndex_;
     policySources_.push_back({std::move(uri), std::move(content)});
 }
@@ -470,37 +478,28 @@ void TppProject::add_policy_source(std::string content, std::string uri) noexcep
 bool lex(const TppProject &project,
          LexedProject &output,
          std::vector<DiagnosticLSPMessage> &diagnostics,
-         CompileOptions) noexcept
-{
+         CompileOptions) noexcept {
     output = {};
 
-    try
-    {
-        for (const auto &source : project.type_sources())
-        {
+    try {
+        for (const auto &source : project.type_sources()) {
             output.add_type_source({source, tokenizeTypeSource(source.content)});
             diagnostics_for(diagnostics, source.uri);
         }
 
-        for (const auto &source : project.template_sources())
-        {
+        for (const auto &source : project.template_sources()) {
             output.add_template_source({source, tokenizeTemplateSource(source.content)});
             diagnostics_for(diagnostics, source.uri);
         }
 
-        for (const auto &source : project.policy_sources())
-        {
+        for (const auto &source : project.policy_sources()) {
             output.add_policy_source(source);
             diagnostics_for(diagnostics, source.uri);
         }
-    }
-    catch (const std::exception &error)
-    {
+    } catch (const std::exception &error) {
         add_project_diagnostic(diagnostics,
                                std::string("unexpected error while lexing project: ") + error.what());
-    }
-    catch (...)
-    {
+    } catch (...) {
         add_project_diagnostic(diagnostics, "unexpected error while lexing project");
     }
 
@@ -510,17 +509,15 @@ bool lex(const TppProject &project,
 bool parse(const LexedProject &project,
            ParsedProject &output,
            std::vector<DiagnosticLSPMessage> &diagnostics,
-           CompileOptions options) noexcept
-{
+           CompileOptions options) noexcept {
     output = {};
 
-    if (has_any_diagnostics(diagnostics))
+    if (has_any_diagnostics(diagnostics)) {
         return false;
+    }
 
-    try
-    {
-        for (const auto &source : project.type_sources())
-        {
+    try {
+        for (const auto &source : project.type_sources()) {
             ParsedTypeArtifact artifact;
             artifact.mutable_source() = source.source();
             artifact.mutable_tokens() = source.tokens();
@@ -534,22 +531,22 @@ bool parse(const LexedProject &project,
             artifact.mutable_structs() = std::move(semanticModel.structs);
             artifact.mutable_enums() = std::move(semanticModel.enums);
             populate_type_definitions(artifact);
-            if (!options.includeSourceRanges)
+            if (!options.includeSourceRanges) {
                 strip_type_ranges(artifact.mutable_structs(), artifact.mutable_enums());
+            }
 
             output.add_type_source(std::move(artifact));
         }
 
-        for (const auto &source : project.template_sources())
-        {
+        for (const auto &source : project.template_sources()) {
             std::vector<ParsedTemplateSource> templates;
             auto &sourceDiagnostics = diagnostics_for(diagnostics, source.source().uri);
             parseTemplateSource(source.source().content, templates, sourceDiagnostics);
 
-            for (auto &templateSource : templates)
-            {
-                if (!options.includeSourceRanges)
+            for (auto &templateSource : templates) {
+                if (!options.includeSourceRanges) {
                     strip_template_ranges(templateSource);
+                }
 
                 ParsedTemplateArtifact artifact;
                 artifact.mutable_source() = source.source();
@@ -559,38 +556,27 @@ bool parse(const LexedProject &project,
             }
         }
 
-        for (const auto &source : project.policy_sources())
-        {
+        for (const auto &source : project.policy_sources()) {
             ParsedPolicyArtifact artifact;
             artifact.mutable_source() = source;
 
             auto &sourceDiagnostics = diagnostics_for(diagnostics, source.uri);
-            if (source.content.empty())
-            {
+            if (source.content.empty()) {
                 sourceDiagnostics.push_back(makeErrorDiagnostic("policy file not found or empty"));
-            }
-            else
-            {
-                try
-                {
+            } else {
+                try {
                     artifact.mutable_value() = nlohmann::json::parse(source.content);
-                }
-                catch (const std::exception &error)
-                {
+                } catch (const std::exception &error) {
                     sourceDiagnostics.push_back(makeErrorDiagnostic(std::string("invalid JSON: ") + error.what()));
                 }
             }
 
             output.add_policy_source(std::move(artifact));
         }
-    }
-    catch (const std::exception &error)
-    {
+    } catch (const std::exception &error) {
         add_project_diagnostic(diagnostics,
                                std::string("unexpected error while parsing project: ") + error.what());
-    }
-    catch (...)
-    {
+    } catch (...) {
         add_project_diagnostic(diagnostics, "unexpected error while parsing project");
     }
 
@@ -600,14 +586,12 @@ bool parse(const LexedProject &project,
 bool compile(const TppProject &project,
              IR &output,
              std::vector<DiagnosticLSPMessage> &diagnostics,
-             CompileOptions options) noexcept
-{
+             CompileOptions options) noexcept {
     return compile(project, output, diagnostics, options, nullptr);
 }
 
 CompileResult compile(const TppProject &project,
-                      CompileOptions options) noexcept
-{
+                      CompileOptions options) noexcept {
     CompileResult result;
     result.success = compile(project, result.ir, result.diagnostics, options, nullptr);
     return result;
@@ -617,11 +601,11 @@ bool compile(const TppProject &project,
              IR &output,
              std::vector<DiagnosticLSPMessage> &diagnostics,
              CompileOptions options,
-             compiler::SemanticModel *semanticModelOut) noexcept
-{
+             compiler::SemanticModel *semanticModelOut) noexcept {
     output = {};
-    if (semanticModelOut != nullptr)
+    if (semanticModelOut != nullptr) {
         *semanticModelOut = {};
+    }
 
     LexedProject lexed;
     ParsedProject parsed;
@@ -635,15 +619,14 @@ bool compile(const ParsedProject &project,
              IR &output,
              std::vector<DiagnosticLSPMessage> &diagnostics,
              CompileOptions options,
-             compiler::SemanticModel *semanticModelOut) noexcept
-{
+             compiler::SemanticModel *semanticModelOut) noexcept {
     output = {};
 
-    if (has_any_diagnostics(diagnostics))
+    if (has_any_diagnostics(diagnostics)) {
         return false;
+    }
 
-    try
-    {
+    try {
         // ─────────────────────────────────────────────────────────────────
         // ANALYZE PHASE: Build semantic model
         // ─────────────────────────────────────────────────────────────────
@@ -651,60 +634,56 @@ bool compile(const ParsedProject &project,
         compiler::SemanticModel semanticModel;
         std::vector<compiler::TemplateFunction> pendingFunctions;
 
-        for (const auto &artifact : project.policy_sources())
-        {
-            if (!artifact.value().has_value())
+        for (const auto &artifact : project.policy_sources()) {
+            if (!artifact.value().has_value()) {
                 continue;
+            }
             auto &sourceDiagnostics = diagnostics_for(diagnostics, artifact.source().uri);
             compiler::load_policy_json(semanticModel.mutable_policies(),
                                        *artifact.value(),
                                        sourceDiagnostics);
         }
 
-        if (options.includeSourceRanges)
-        {
-            for (const auto &artifact : project.type_sources())
+        if (options.includeSourceRanges) {
+            for (const auto &artifact : project.type_sources()) {
                 semanticModel.mutable_type_source_files().push_back(classifyTypeSourceTokens(artifact.tokens()));
+            }
         }
 
-        for (const auto &artifact : project.type_sources())
-        {
+        for (const auto &artifact : project.type_sources()) {
             auto &sourceDiagnostics = diagnostics_for(diagnostics, artifact.source().uri);
             merge_type_artifact(artifact, semanticModel, sourceDiagnostics);
         }
 
         bool hasSemanticErrors = false;
-        if (!hasSemanticErrors)
-        {
-            for (const auto &artifact : project.type_sources())
-            {
+        if (!hasSemanticErrors) {
+            for (const auto &artifact : project.type_sources()) {
                 auto tokens = to_internal_tokens(artifact.tokens());
                 auto &sourceDiagnostics = diagnostics_for(diagnostics, artifact.source().uri);
                 compiler::TypedefParser validator{tokens, 0, semanticModel, sourceDiagnostics};
-                if (!validator.validateTypes())
+                if (!validator.validateTypes()) {
                     hasSemanticErrors = true;
+                }
             }
         }
 
-        if (!hasSemanticErrors)
-        {
-            for (const auto &artifact : project.type_sources())
-            {
+        if (!hasSemanticErrors) {
+            for (const auto &artifact : project.type_sources()) {
                 auto tokens = to_internal_tokens(artifact.tokens());
                 auto &sourceDiagnostics = diagnostics_for(diagnostics, artifact.source().uri);
                 compiler::TypedefParser validator{tokens, 0, semanticModel, sourceDiagnostics};
-                if (!validator.computeFiniteTypes())
+                if (!validator.computeFiniteTypes()) {
                     hasSemanticErrors = true;
+                }
             }
         }
 
-        if (!hasSemanticErrors && !project.type_sources().empty())
+        if (!hasSemanticErrors && !project.type_sources().empty()) {
             compiler::annotateRecursiveFields(semanticModel);
+        }
 
-        if (!hasSemanticErrors)
-        {
-            struct PendingTemplateValidation
-            {
+        if (!hasSemanticErrors) {
+            struct PendingTemplateValidation {
                 std::size_t functionIndex;
                 std::string uri;
                 std::size_t bodyStartLine;
@@ -713,18 +692,15 @@ bool compile(const ParsedProject &project,
             };
 
             std::vector<PendingTemplateValidation> pendingValidations;
-            for (const auto &artifact : project.template_sources())
-            {
+            for (const auto &artifact : project.template_sources()) {
                 const auto &templateSource = artifact.value();
                 auto function = to_template_function(templateSource, artifact.source().uri);
                 auto duplicate = std::find_if(pendingFunctions.begin(), pendingFunctions.end(),
-                                              [&](const compiler::TemplateFunction &existing)
-                {
-                    return existing.name == function.name && is_same_signature(existing, function);
-                });
+                                              [&](const compiler::TemplateFunction &existing) {
+                                                  return existing.name == function.name && is_same_signature(existing, function);
+                                              });
 
-                if (duplicate != pendingFunctions.end())
-                {
+                if (duplicate != pendingFunctions.end()) {
                     Diagnostic diagnostic;
                     diagnostic.range = templateSource.headerRange;
                     diagnostic.message = "function '" + function.name + "' is already defined";
@@ -735,17 +711,14 @@ bool compile(const ParsedProject &project,
                 }
 
                 pendingFunctions.push_back(std::move(function));
-                pendingValidations.push_back({
-                    pendingFunctions.size() - 1,
-                    artifact.source().uri,
-                    templateSource.bodyStartLine,
-                    compiler::parseTemplateLines(templateSource.bodyText),
-                    templateSource.headerText
-                });
+                pendingValidations.push_back({pendingFunctions.size() - 1,
+                                              artifact.source().uri,
+                                              templateSource.bodyStartLine,
+                                              compiler::parseTemplateLines(templateSource.bodyText),
+                                              templateSource.headerText});
             }
 
-            for (const auto &pendingValidation : pendingValidations)
-            {
+            for (const auto &pendingValidation : pendingValidations) {
                 auto &sourceDiagnostics = diagnostics_for(diagnostics, pendingValidation.uri);
                 compiler::validateTemplateSemantics(
                     pendingFunctions[pendingValidation.functionIndex],
@@ -762,14 +735,17 @@ bool compile(const ParsedProject &project,
 
         semanticModel.mutable_functions() = std::move(pendingFunctions);
 
-        if (!options.includeSourceRanges)
+        if (!options.includeSourceRanges) {
             strip_semantic_model_ranges(semanticModel);
+        }
 
-        if (semanticModelOut != nullptr)
+        if (semanticModelOut != nullptr) {
             *semanticModelOut = semanticModel;
+        }
 
-        if (has_any_diagnostics(diagnostics))
+        if (has_any_diagnostics(diagnostics)) {
             return false;
+        }
 
         // ─────────────────────────────────────────────────────────────────
         // COMPILE PHASE: Lower semantic model to IR
@@ -778,20 +754,16 @@ bool compile(const ParsedProject &project,
         if (!assemble_public_ir(semanticModel,
                                 output,
                                 options.includeSourceRanges,
-                                options.includeRawTypedefs))
-        {
+                                options.includeRawTypedefs)) {
             add_project_diagnostic(diagnostics, "failed to lower templates to IR");
             return false;
         }
     }
 
-    catch (const std::exception &error)
-    {
+    catch (const std::exception &error) {
         add_project_diagnostic(diagnostics,
                                std::string("unexpected error during compilation: ") + error.what());
-    }
-    catch (...)
-    {
+    } catch (...) {
         add_project_diagnostic(diagnostics, "unexpected error during compilation");
     }
 

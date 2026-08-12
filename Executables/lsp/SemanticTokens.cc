@@ -8,50 +8,50 @@
 #include <tuple>
 
 // Shorthand aliases for the token type indices (must match lsp::SemanticTokenType order).
-static constexpr int TT_KEYWORD   = lsp::tokenTypeIndex(lsp::SemanticTokenType::keyword);
-static constexpr int TT_TYPE      = lsp::tokenTypeIndex(lsp::SemanticTokenType::type);
-static constexpr int TT_VARIABLE  = lsp::tokenTypeIndex(lsp::SemanticTokenType::variable);
-static constexpr int TT_PROPERTY  = lsp::tokenTypeIndex(lsp::SemanticTokenType::property);
-static constexpr int TT_FUNCTION  = lsp::tokenTypeIndex(lsp::SemanticTokenType::function);
-[[maybe_unused]] static constexpr int TT_STRING    = lsp::tokenTypeIndex(lsp::SemanticTokenType::string_);
+static constexpr int TT_KEYWORD = lsp::tokenTypeIndex(lsp::SemanticTokenType::keyword);
+static constexpr int TT_TYPE = lsp::tokenTypeIndex(lsp::SemanticTokenType::type);
+static constexpr int TT_VARIABLE = lsp::tokenTypeIndex(lsp::SemanticTokenType::variable);
+static constexpr int TT_PROPERTY = lsp::tokenTypeIndex(lsp::SemanticTokenType::property);
+static constexpr int TT_FUNCTION = lsp::tokenTypeIndex(lsp::SemanticTokenType::function);
+[[maybe_unused]] static constexpr int TT_STRING = lsp::tokenTypeIndex(lsp::SemanticTokenType::string_);
 static constexpr int TT_PARAMETER = lsp::tokenTypeIndex(lsp::SemanticTokenType::parameter);
-static constexpr int TT_OPERATOR  = lsp::tokenTypeIndex(lsp::SemanticTokenType::operator_);
+static constexpr int TT_OPERATOR = lsp::tokenTypeIndex(lsp::SemanticTokenType::operator_);
 static constexpr int TT_ENUM_MEMBER = lsp::tokenTypeIndex(lsp::SemanticTokenType::enumMember);
-static constexpr int TT_COMMENT   = lsp::tokenTypeIndex(lsp::SemanticTokenType::comment);
+static constexpr int TT_COMMENT = lsp::tokenTypeIndex(lsp::SemanticTokenType::comment);
 
-namespace tpp
-{
+namespace tpp {
+
+template <typename>
+inline constexpr bool always_false_v = false;
 
 // ── Compiler type aliases (these live in tpp::compiler after the IR migration) ─
-using Expression        = compiler::Expression;
-using Variable          = compiler::Variable;
-using FieldAccess       = compiler::FieldAccess;
-using ASTNode           = compiler::ASTNode;
-using CaseNode          = compiler::CaseNode;
-using FunctionCallNode  = compiler::FunctionCallNode;
+using Expression = compiler::Expression;
+using Variable = compiler::Variable;
+using FieldAccess = compiler::FieldAccess;
+using ASTNode = compiler::ASTNode;
+using CaseNode = compiler::CaseNode;
+using FunctionCallNode = compiler::FunctionCallNode;
 using AlignmentCellNode = compiler::AlignmentCellNode;
-using CommentNode       = compiler::CommentNode;
+using CommentNode = compiler::CommentNode;
 using InterpolationNode = compiler::InterpolationNode;
-using IndentNode        = compiler::IndentNode;
-using ForNode           = compiler::ForNode;
-using IfNode            = compiler::IfNode;
-using SwitchNode        = compiler::SwitchNode;
-using RenderViaNode     = compiler::RenderViaNode;
-using CompilerParamDef  = compiler::ParamDef;
+using IndentNode = compiler::IndentNode;
+using ForNode = compiler::ForNode;
+using IfNode = compiler::IfNode;
+using SwitchNode = compiler::SwitchNode;
+using RenderViaNode = compiler::RenderViaNode;
+using CompilerParamDef = compiler::ParamDef;
 
 // Each raw token: {line, startChar, length, tokenType, modifiers}
 using RawToken = std::tuple<int, int, int, int, int>;
 
 // ── Delta-encode a sorted list of raw tokens ─────────────────────────────────
-static nlohmann::json encodeTokens(std::vector<RawToken> &tokens)
-{
+static nlohmann::json encodeTokens(std::vector<RawToken> &tokens) {
     // Sort by line then character
     std::sort(tokens.begin(), tokens.end());
 
     nlohmann::json data = nlohmann::json::array();
     int prevLine = 0, prevStartChar = 0;
-    for (const auto &[line, startChar, length, type, mods] : tokens)
-    {
+    for (const auto &[line, startChar, length, type, mods] : tokens) {
         int deltaLine = line - prevLine;
         int deltaChar = (deltaLine == 0) ? (startChar - prevStartChar) : startChar;
         data.push_back(deltaLine);
@@ -65,38 +65,29 @@ static nlohmann::json encodeTokens(std::vector<RawToken> &tokens)
     return {{"data", data}};
 }
 
-static int utf16ColumnForUtf8Prefix(std::string_view text, int byteCount)
-{
+static int utf16ColumnForUtf8Prefix(std::string_view text, int byteCount) {
     byteCount = std::clamp(byteCount, 0, static_cast<int>(text.size()));
     int utf16Column = 0;
     int index = 0;
 
-    while (index < byteCount)
-    {
+    while (index < byteCount) {
         const unsigned char lead = static_cast<unsigned char>(text[index]);
         int seqLen = 1;
         uint32_t codePoint = lead;
 
-        if ((lead & 0x80) == 0)
-        {
+        if ((lead & 0x80) == 0) {
             seqLen = 1;
             codePoint = lead;
-        }
-        else if ((lead & 0xE0) == 0xC0 && index + 1 < byteCount)
-        {
+        } else if ((lead & 0xE0) == 0xC0 && index + 1 < byteCount) {
             seqLen = 2;
             codePoint = ((lead & 0x1F) << 6) |
                         (static_cast<unsigned char>(text[index + 1]) & 0x3F);
-        }
-        else if ((lead & 0xF0) == 0xE0 && index + 2 < byteCount)
-        {
+        } else if ((lead & 0xF0) == 0xE0 && index + 2 < byteCount) {
             seqLen = 3;
             codePoint = ((lead & 0x0F) << 12) |
                         ((static_cast<unsigned char>(text[index + 1]) & 0x3F) << 6) |
                         (static_cast<unsigned char>(text[index + 2]) & 0x3F);
-        }
-        else if ((lead & 0xF8) == 0xF0 && index + 3 < byteCount)
-        {
+        } else if ((lead & 0xF8) == 0xF0 && index + 3 < byteCount) {
             seqLen = 4;
             codePoint = ((lead & 0x07) << 18) |
                         ((static_cast<unsigned char>(text[index + 1]) & 0x3F) << 12) |
@@ -111,16 +102,13 @@ static int utf16ColumnForUtf8Prefix(std::string_view text, int byteCount)
     return utf16Column;
 }
 
-static std::vector<std::string_view> splitLines(std::string_view src)
-{
+static std::vector<std::string_view> splitLines(std::string_view src) {
     std::vector<std::string_view> lines;
     size_t lineStart = 0;
 
-    while (lineStart <= src.size())
-    {
+    while (lineStart <= src.size()) {
         size_t lineEnd = src.find('\n', lineStart);
-        if (lineEnd == std::string_view::npos)
-        {
+        if (lineEnd == std::string_view::npos) {
             lines.push_back(src.substr(lineStart));
             break;
         }
@@ -128,30 +116,29 @@ static std::vector<std::string_view> splitLines(std::string_view src)
         lines.push_back(src.substr(lineStart, lineEnd - lineStart));
         lineStart = lineEnd + 1;
 
-        if (lineStart == src.size())
-        {
+        if (lineStart == src.size()) {
             lines.push_back(std::string_view{});
             break;
         }
     }
 
-    if (lines.empty())
+    if (lines.empty()) {
         lines.push_back(std::string_view{});
+    }
 
     return lines;
 }
 
-static void convertTokenColumnsToUtf16(std::vector<RawToken> &tokens, const std::string &src)
-{
+static void convertTokenColumnsToUtf16(std::vector<RawToken> &tokens, const std::string &src) {
     const auto lines = splitLines(src);
 
-    for (auto &[line, startChar, length, type, mods] : tokens)
-    {
+    for (auto &[line, startChar, length, type, mods] : tokens) {
         (void)type;
         (void)mods;
 
-        if (line < 0 || line >= static_cast<int>(lines.size()))
+        if (line < 0 || line >= static_cast<int>(lines.size())) {
             continue;
+        }
 
         const std::string_view lineText = lines[line];
         const int lineBytes = static_cast<int>(lineText.size());
@@ -163,34 +150,38 @@ static void convertTokenColumnsToUtf16(std::vector<RawToken> &tokens, const std:
         const int utf16End = utf16ColumnForUtf8Prefix(lineText, byteEnd);
 
         startChar = utf16Start;
-        if (!extendsPastLine)
+        if (!extendsPastLine) {
             length = utf16End - utf16Start;
+        }
     }
 
     tokens.erase(std::remove_if(tokens.begin(), tokens.end(),
-                                [](const RawToken &tok)
-                                {
+                                [](const RawToken &tok) {
                                     return std::get<2>(tok) <= 0;
                                 }),
                  tokens.end());
 }
 
 // ── Helper: emit a token if the range is valid ────────────────────────────────
-static void emitRange(std::vector<RawToken> &out, const Range &r, int type)
-{
-    if (r.start.line < 0 || r.start.character < 0) return;
+static void emitRange(std::vector<RawToken> &out, const Range &r, int type) {
+    if (r.start.line < 0 || r.start.character < 0) {
+        return;
+    }
     int len = r.end.character - r.start.character;
-    if (len <= 0) return;
+    if (len <= 0) {
+        return;
+    }
     out.push_back({r.start.line, r.start.character, len, type, 0});
 }
 
 // ── Convert an Expression back to source text (for positioning) ─────────────
-static std::string exprToText(const Expression &e)
-{
-    if (auto *v = std::get_if<Variable>(&e))
+static std::string exprToText(const Expression &e) {
+    if (auto *v = std::get_if<Variable>(&e)) {
         return v->name;
-    if (auto *fa = std::get_if<std::shared_ptr<FieldAccess>>(&e))
+    }
+    if (auto *fa = std::get_if<std::shared_ptr<FieldAccess>>(&e)) {
         return *fa ? exprToText((*fa)->base) + "." + (*fa)->field : std::string{};
+    }
     return {};
 }
 
@@ -198,227 +189,225 @@ static std::string exprToText(const Expression &e)
 // (Placeholder for future fine-grained highlighting; expression tokens are
 //  currently covered by emitRange on the whole directive.)
 [[maybe_unused]] static void emitExpression(std::vector<RawToken> &, const Expression &,
-                                             int /*baseLine*/, int /*baseChar*/) {}
+                                            int /*baseLine*/, int /*baseChar*/) {}
 
 // ── Walk AST nodes recursively ────────────────────────────────────────────────
 static void walkNodes(std::vector<RawToken> &out, const std::vector<ASTNode> &nodes);
 
-static std::string syntheticRenderCaseFunctionName(const std::vector<ASTNode> &body)
-{
-    if (body.empty())
+static std::string syntheticRenderCaseFunctionName(const std::vector<ASTNode> &body) {
+    if (body.empty()) {
         return {};
+    }
 
-    if (const auto *fn = std::get_if<std::shared_ptr<FunctionCallNode>>(&body.front()))
+    if (const auto *fn = std::get_if<std::shared_ptr<FunctionCallNode>>(&body.front())) {
         return (fn && *fn) ? (*fn)->functionName : std::string{};
+    }
 
-    if (const auto *indentNode = std::get_if<std::shared_ptr<IndentNode>>(&body.front()))
+    if (const auto *indentNode = std::get_if<std::shared_ptr<IndentNode>>(&body.front())) {
         return (indentNode && *indentNode) ? syntheticRenderCaseFunctionName((*indentNode)->body) : std::string{};
+    }
 
     return {};
 }
 
 // ── Emit sub-tokens for @case Tag[(binding)]@  ───────────────────────────────
-static void emitCaseDirective(std::vector<RawToken> &out, const CaseNode &c)
-{
-    if (c.sourceRange.start.line < 0 || c.sourceRange.start.character < 0) return;
-    const int ln  = c.sourceRange.start.line;
+static void emitCaseDirective(std::vector<RawToken> &out, const CaseNode &c) {
+    if (c.sourceRange.start.line < 0 || c.sourceRange.start.character < 0) {
+        return;
+    }
+    const int ln = c.sourceRange.start.line;
     const int col = c.sourceRange.start.character;
     const int end = c.sourceRange.end.character;
 
     out.push_back({ln, col, 6, TT_KEYWORD, 0}); // "@case "
 
     // tag name (variant tag → enumMember colour)
-    if (!c.tag.empty())
+    if (!c.tag.empty()) {
         out.push_back({ln, col + 6, (int)c.tag.size(), TT_ENUM_MEMBER, 0});
+    }
 
     int afterTag = col + 6 + (int)c.tag.size();
     // optional binding: (varname)
-    if (!c.bindingName.empty())
-    {
+    if (!c.bindingName.empty()) {
         out.push_back({ln, afterTag, 1, TT_OPERATOR, 0}); // (
         out.push_back({ln, afterTag + 1, (int)c.bindingName.size(), TT_VARIABLE, 0});
         out.push_back({ln, afterTag + 1 + (int)c.bindingName.size(), 1, TT_OPERATOR, 0}); // )
         afterTag += 2 + (int)c.bindingName.size();
     }
     // closing "@"
-    if (end > afterTag)
+    if (end > afterTag) {
         out.push_back({ln, afterTag, end - afterTag, TT_KEYWORD, 0});
+    }
 }
 
-static void emitDefaultDirective(std::vector<RawToken> &out, const CaseNode &c)
-{
-    if (c.sourceRange.start.line < 0 || c.sourceRange.start.character < 0) return;
-    const int ln  = c.sourceRange.start.line;
+static void emitDefaultDirective(std::vector<RawToken> &out, const CaseNode &c) {
+    if (c.sourceRange.start.line < 0 || c.sourceRange.start.character < 0) {
+        return;
+    }
+    const int ln = c.sourceRange.start.line;
     const int col = c.sourceRange.start.character;
     const int end = c.sourceRange.end.character;
-    if (end > col)
+    if (end > col) {
         out.push_back({ln, col, end - col, TT_KEYWORD, 0});
+    }
 }
 
 // ── Emit sub-tokens for a synthetic @render collExpr via func@ case ───────────
 // These arise from point-free function calls inside @switch@ blocks.
 // The CaseNode is marked explicitly and its body[0] is a FunctionCallNode
 // (with no sourceRange set) holding the function name.
-static void emitSyntheticRenderCase(std::vector<RawToken> &out, const CaseNode &c)
-{
-    if (c.sourceRange.start.line < 0 || c.sourceRange.start.character < 0) return;
-    const int ln    = c.sourceRange.start.line;
+static void emitSyntheticRenderCase(std::vector<RawToken> &out, const CaseNode &c) {
+    if (c.sourceRange.start.line < 0 || c.sourceRange.start.character < 0) {
+        return;
+    }
+    const int ln = c.sourceRange.start.line;
     const int start = c.sourceRange.start.character;
-    const int end   = c.sourceRange.end.character;
+    const int end = c.sourceRange.end.character;
 
-    out.push_back({ln, start, 8, TT_KEYWORD, 0}); // "@render "
+    out.push_back({ln, start, 8, TT_KEYWORD, 0});                      // "@render "
     out.push_back({ln, start + 8, (int)c.tag.size(), TT_VARIABLE, 0}); // collection expr
     const int viaStart = start + 8 + (int)c.tag.size();
     out.push_back({ln, viaStart, 5, TT_KEYWORD, 0}); // " via "
 
     const std::string funcName = syntheticRenderCaseFunctionName(c.body);
 
-    if (!funcName.empty())
+    if (!funcName.empty()) {
         out.push_back({ln, viaStart + 5, (int)funcName.size(), TT_FUNCTION, 0});
+    }
 
     const int restStart = viaStart + 5 + (int)funcName.size();
-    if (end > restStart)
+    if (end > restStart) {
         out.push_back({ln, restStart, end - restStart, TT_KEYWORD, 0}); // closing "@"
+    }
 }
 
-static void walkNode(std::vector<RawToken> &out, const ASTNode &node)
-{
-    std::visit([&](auto &&arg)
-    {
+static void walkNode(std::vector<RawToken> &out, const ASTNode &node) {
+    std::visit([&](auto &&arg) {
         using T = std::decay_t<decltype(arg)>;
 
-        if constexpr (std::is_same_v<T, AlignmentCellNode>)
-        {
+        if constexpr (std::is_same_v<T, TextNode>) {
+            return;
+        } else if constexpr (std::is_same_v<T, AlignmentCellNode>) {
             emitRange(out, arg.sourceRange, TT_OPERATOR);
-        }
-        else if constexpr (std::is_same_v<T, CommentNode>)
-        {
+        } else if constexpr (std::is_same_v<T, CommentNode>) {
             // Highlight every line of the block (opening, body, closing) as a comment
-            for (int ln = arg.startRange.start.line; ln <= arg.endRange.end.line; ++ln)
+            for (int ln = arg.startRange.start.line; ln <= arg.endRange.end.line; ++ln) {
                 out.push_back({ln, 0, 9999, TT_COMMENT, 0});
-        }
-        else if constexpr (std::is_same_v<T, std::shared_ptr<IndentNode>>)
-        {
-            walkNodes(out, arg->body);
-        }
-        else if constexpr (std::is_same_v<T, InterpolationNode>)
-        {
-            const int ln    = arg.sourceRange.start.line;
-            const int start = arg.sourceRange.start.character;
-            const int end   = arg.sourceRange.end.character;
-            if (arg.policy.empty())
-            {
-                emitRange(out, arg.sourceRange, TT_VARIABLE);
             }
-            else
-            {
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<IndentNode>>) {
+            walkNodes(out, arg->body);
+        } else if constexpr (std::is_same_v<T, InterpolationNode>) {
+            const int ln = arg.sourceRange.start.line;
+            const int start = arg.sourceRange.start.character;
+            const int end = arg.sourceRange.end.character;
+            if (arg.policy.empty()) {
+                emitRange(out, arg.sourceRange, TT_VARIABLE);
+            } else {
                 // @expr | policy=...@ — keep both interpolation delimiters variable-coloured
                 const std::string exprText = exprToText(arg.expr);
                 out.push_back({ln, start, 1 + (int)exprText.size(), TT_VARIABLE, 0});
                 const int tailStart = start + 1 + (int)exprText.size();
                 const int closingAt = end - 1;
-                if (closingAt > tailStart)
+                if (closingAt > tailStart) {
                     out.push_back({ln, tailStart, closingAt - tailStart, TT_KEYWORD, 0});
-                if (end > closingAt)
+                }
+                if (end > closingAt) {
                     out.push_back({ln, closingAt, end - closingAt, TT_VARIABLE, 0});
+                }
             }
-        }
-        else if constexpr (std::is_same_v<T, std::shared_ptr<FunctionCallNode>>)
-        {
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<FunctionCallNode>>) {
             // @funcName(arg1, arg2)@ — @funcName as function, punctuation as operators,
             // closing @ as keyword so it doesn't fall through as plain text.
-            const int ln    = arg->sourceRange.start.line;
+            const int ln = arg->sourceRange.start.line;
             const int start = arg->sourceRange.start.character;
-            const int end   = arg->sourceRange.end.character;
-            if (start < 0 || end <= start) return;
+            const int end = arg->sourceRange.end.character;
+            if (start < 0 || end <= start) {
+                return;
+            }
             const int nameLen = (int)arg->functionName.size();
-            out.push_back({ln, start, 1 + nameLen, TT_FUNCTION, 0}); // @funcName
+            out.push_back({ln, start, 1 + nameLen, TT_FUNCTION, 0});     // @funcName
             out.push_back({ln, start + 1 + nameLen, 1, TT_OPERATOR, 0}); // (
             int argCol = start + 1 + nameLen + 1;
             bool firstArg = true;
-            for (const auto &argExpr : arg->arguments)
-            {
-                if (!firstArg) { out.push_back({ln, argCol, 2, TT_OPERATOR, 0}); argCol += 2; }
+            for (const auto &argExpr : arg->arguments) {
+                if (!firstArg) {
+                    out.push_back({ln, argCol, 2, TT_OPERATOR, 0});
+                    argCol += 2;
+                }
                 firstArg = false;
                 const std::string argText = exprToText(argExpr);
-                if (!argText.empty())
-                { out.push_back({ln, argCol, (int)argText.size(), TT_VARIABLE, 0}); argCol += (int)argText.size(); }
+                if (!argText.empty()) {
+                    out.push_back({ln, argCol, (int)argText.size(), TT_VARIABLE, 0});
+                    argCol += (int)argText.size();
+                }
             }
-            if (end > argCol)
-            {
+            if (end > argCol) {
                 out.push_back({ln, argCol, 1, TT_OPERATOR, 0}); // )
-                if (end > argCol + 1)
+                if (end > argCol + 1) {
                     out.push_back({ln, argCol + 1, end - (argCol + 1), TT_FUNCTION, 0}); // @
+                }
             }
-        }
-        else if constexpr (std::is_same_v<T, std::shared_ptr<ForNode>>)
-        {
-            const int ln    = arg->sourceRange.start.line;
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<ForNode>>) {
+            const int ln = arg->sourceRange.start.line;
             const int start = arg->sourceRange.start.character;
-            const int end   = arg->sourceRange.end.character;
-            out.push_back({ln, start, 5, TT_KEYWORD, 0}); // "@for "
+            const int end = arg->sourceRange.end.character;
+            out.push_back({ln, start, 5, TT_KEYWORD, 0});                             // "@for "
             out.push_back({ln, start + 5, (int)arg->varName.size(), TT_VARIABLE, 0}); // var
             const int inStart = start + 5 + (int)arg->varName.size();
             out.push_back({ln, inStart, 4, TT_KEYWORD, 0}); // " in "
             const std::string collText = exprToText(arg->collectionExpr);
             out.push_back({ln, inStart + 4, (int)collText.size(), TT_VARIABLE, 0}); // coll
             const int restStart = inStart + 4 + (int)collText.size();
-            if (end > restStart)
+            if (end > restStart) {
                 out.push_back({ln, restStart, end - restStart, TT_KEYWORD, 0}); // "| opts@"
+            }
             emitRange(out, arg->endRange, TT_KEYWORD);
             walkNodes(out, arg->body);
-        }
-        else if constexpr (std::is_same_v<T, std::shared_ptr<IfNode>>)
-        {
-            const int ln    = arg->sourceRange.start.line;
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<IfNode>>) {
+            const int ln = arg->sourceRange.start.line;
             const int start = arg->sourceRange.start.character;
-            const int end   = arg->sourceRange.end.character;
+            const int end = arg->sourceRange.end.character;
             const int prefixLen = arg->negated ? 8 : 4; // "@if not " or "@if "
             out.push_back({ln, start, prefixLen, TT_KEYWORD, 0});
             out.push_back({ln, start + prefixLen, (int)arg->condText.size(), TT_VARIABLE, 0});
             const int condEnd = start + prefixLen + (int)arg->condText.size();
-            if (end > condEnd)
+            if (end > condEnd) {
                 out.push_back({ln, condEnd, end - condEnd, TT_KEYWORD, 0}); // closing "@"
+            }
             emitRange(out, arg->elseRange, TT_KEYWORD);
-            emitRange(out, arg->endRange,  TT_KEYWORD);
+            emitRange(out, arg->endRange, TT_KEYWORD);
             walkNodes(out, arg->thenBody);
             walkNodes(out, arg->elseBody);
-        }
-        else if constexpr (std::is_same_v<T, std::shared_ptr<SwitchNode>>)
-        {
-            const int ln    = arg->sourceRange.start.line;
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<SwitchNode>>) {
+            const int ln = arg->sourceRange.start.line;
             const int start = arg->sourceRange.start.character;
-            const int end   = arg->sourceRange.end.character;
+            const int end = arg->sourceRange.end.character;
             out.push_back({ln, start, 8, TT_KEYWORD, 0}); // "@switch "
             const std::string exprText = exprToText(arg->expr);
             out.push_back({ln, start + 8, (int)exprText.size(), TT_VARIABLE, 0});
             const int restStart = start + 8 + (int)exprText.size();
-            if (end > restStart)
+            if (end > restStart) {
                 out.push_back({ln, restStart, end - restStart, TT_KEYWORD, 0}); // "| opts@"
+            }
             emitRange(out, arg->endRange, TT_KEYWORD);
-            for (const auto &c : arg->cases)
-            {
-                if (c.isSyntheticRenderCase)
+            for (const auto &c : arg->cases) {
+                if (c.isSyntheticRenderCase) {
                     emitSyntheticRenderCase(out, c); // @render collExpr via func@
-                else
-                {
+                } else {
                     emitCaseDirective(out, c);
                     emitRange(out, c.endRange, TT_KEYWORD);
                     walkNodes(out, c.body);
                 }
             }
-            if (arg->defaultCase)
-            {
+            if (arg->defaultCase) {
                 emitDefaultDirective(out, *arg->defaultCase);
                 emitRange(out, arg->defaultCase->endRange, TT_KEYWORD);
                 walkNodes(out, arg->defaultCase->body);
             }
-        }
-        else if constexpr (std::is_same_v<T, std::shared_ptr<RenderViaNode>>)
-        {
-            const int ln    = arg->sourceRange.start.line;
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<RenderViaNode>>) {
+            const int ln = arg->sourceRange.start.line;
             const int start = arg->sourceRange.start.character;
-            const int end   = arg->sourceRange.end.character;
+            const int end = arg->sourceRange.end.character;
             out.push_back({ln, start, 8, TT_KEYWORD, 0}); // "@render "
             const std::string collText = exprToText(arg->collectionExpr);
             out.push_back({ln, start + 8, (int)collText.size(), TT_VARIABLE, 0}); // coll
@@ -426,16 +415,20 @@ static void walkNode(std::vector<RawToken> &out, const ASTNode &node)
             out.push_back({ln, viaStart, 5, TT_KEYWORD, 0}); // " via "
             out.push_back({ln, viaStart + 5, (int)arg->functionName.size(), TT_FUNCTION, 0});
             const int restStart = viaStart + 5 + (int)arg->functionName.size();
-            if (end > restStart)
+            if (end > restStart) {
                 out.push_back({ln, restStart, end - restStart, TT_KEYWORD, 0}); // "| opts@"
+            }
+        } else {
+            static_assert(always_false_v<T>, "Unhandled ASTNode alternative in walkNode");
         }
-    }, node);
+    },
+               node);
 }
 
-static void walkNodes(std::vector<RawToken> &out, const std::vector<ASTNode> &nodes)
-{
-    for (const auto &n : nodes)
+static void walkNodes(std::vector<RawToken> &out, const std::vector<ASTNode> &nodes) {
+    for (const auto &n : nodes) {
         walkNode(out, n);
+    }
 }
 
 // ── Helpers for template header tokenization ─────────────────────────────────
@@ -443,11 +436,10 @@ static void walkNodes(std::vector<RawToken> &out, const std::vector<ASTNode> &no
 // Emit: "template" as keyword, "main" as function, param names as parameter,
 // type names as type, and punctuation as operator.
 static void emitTemplateHeader(std::vector<RawToken> &out,
-                                const std::string &templateName,
-                                const std::vector<CompilerParamDef> &params,
-                                const std::string &headerText,
-                                int line)
-{
+                               const std::string &templateName,
+                               const std::vector<CompilerParamDef> &params,
+                               const std::string &headerText,
+                               int line) {
     // "template " keyword at col 0
     out.push_back({line, 0, 8, TT_KEYWORD, 0}); // "template"
 
@@ -457,139 +449,155 @@ static void emitTemplateHeader(std::vector<RawToken> &out,
 
     // Find '(' after name
     int col = (int)(nameStart + templateName.size());
-    if (col < (int)headerText.size() && headerText[col] == '(')
-    {
+    if (col < (int)headerText.size() && headerText[col] == '(') {
         out.push_back({line, col, 1, TT_OPERATOR, 0}); // '('
         ++col;
         bool first = true;
-        for (const auto &param : params)
-        {
-            if (!first)
-            {
+        for (const auto &param : params) {
+            if (!first) {
                 // find ','
                 size_t comma = headerText.find(',', col);
-                if (comma != std::string::npos)
-                {
+                if (comma != std::string::npos) {
                     out.push_back({line, (int)comma, 1, TT_OPERATOR, 0});
                     col = (int)comma + 1;
                 }
             }
             first = false;
             // find param name
-            while (col < (int)headerText.size() && headerText[col] == ' ') ++col;
+            while (col < (int)headerText.size() && headerText[col] == ' ') {
+                ++col;
+            }
             out.push_back({line, col, (int)param.name.size(), TT_PARAMETER, 0});
             col += (int)param.name.size();
             // ':'
             size_t colon = headerText.find(':', col);
-            if (colon != std::string::npos)
-            {
+            if (colon != std::string::npos) {
                 out.push_back({line, (int)colon, 1, TT_OPERATOR, 0});
                 col = (int)colon + 1;
-                while (col < (int)headerText.size() && headerText[col] == ' ') ++col;
+                while (col < (int)headerText.size() && headerText[col] == ' ') {
+                    ++col;
+                }
                 // type name (may be followed by '<...>')
                 int typeStart = col;
                 while (col < (int)headerText.size() &&
-                       headerText[col] != ',' && headerText[col] != ')' && headerText[col] != '<')
+                       headerText[col] != ',' && headerText[col] != ')' && headerText[col] != '<') {
                     ++col;
-                if (col > typeStart)
+                }
+                if (col > typeStart) {
                     out.push_back({line, (int)typeStart, (int)(col - typeStart), TT_TYPE, 0});
+                }
                 // optional '<' type '>'
-                if (col < (int)headerText.size() && headerText[col] == '<')
-                {
-                    out.push_back({line, col, 1, TT_OPERATOR, 0}); ++col;
+                if (col < (int)headerText.size() && headerText[col] == '<') {
+                    out.push_back({line, col, 1, TT_OPERATOR, 0});
+                    ++col;
                     int innerStart = col;
-                    while (col < (int)headerText.size() && headerText[col] != '>') ++col;
-                    if (col > innerStart)
+                    while (col < (int)headerText.size() && headerText[col] != '>') {
+                        ++col;
+                    }
+                    if (col > innerStart) {
                         out.push_back({line, (int)innerStart, (int)(col - innerStart), TT_TYPE, 0});
-                    if (col < (int)headerText.size())
+                    }
+                    if (col < (int)headerText.size()) {
                         out.push_back({line, col, 1, TT_OPERATOR, 0}); // '>'
-                    if (col < (int)headerText.size()) ++col;
+                    }
+                    if (col < (int)headerText.size()) {
+                        ++col;
+                    }
                 }
             }
         }
         // Emit any tail between last type and ')' as keyword (| policy="...")
         size_t rparen = headerText.find(')', col);
-        if (rparen != std::string::npos)
-        {
-            if ((int)rparen > col)
+        if (rparen != std::string::npos) {
+            if ((int)rparen > col) {
                 out.push_back({line, col, (int)rparen - col, TT_KEYWORD, 0});
+            }
             out.push_back({line, (int)rparen, 1, TT_OPERATOR, 0});
         }
     }
 }
 
-
-
 // ── Fill gaps between directives with TT_STRING for plain text ──────────────
 static void fillGaps(std::vector<RawToken> &out, const std::string &src,
-                     int bodyStart, int endLine)
-{
-    std::map<int, std::vector<std::pair<int,int>>> covered;
-    for (const auto &[line, startChar, length, type, mods] : out)
-        if (line >= bodyStart && line < endLine)
+                     int bodyStart, int endLine) {
+    std::map<int, std::vector<std::pair<int, int>>> covered;
+    for (const auto &[line, startChar, length, type, mods] : out) {
+        if (line >= bodyStart && line < endLine) {
             covered[line].emplace_back(startChar, startChar + length);
-    for (auto &[_, spans] : covered)
+        }
+    }
+    for (auto &[_, spans] : covered) {
         std::sort(spans.begin(), spans.end());
+    }
 
     int curLine = 0;
     size_t pos = 0;
-    while (pos < src.size() && curLine < bodyStart)
-        if (src[pos++] == '\n') ++curLine;
+    while (pos < src.size() && curLine < bodyStart) {
+        if (src[pos++] == '\n') {
+            ++curLine;
+        }
+    }
 
     std::vector<RawToken> gapTokens;
-    while (curLine < endLine && pos < src.size())
-    {
+    while (curLine < endLine && pos < src.size()) {
         size_t nl = src.find('\n', pos);
         size_t lineEnd = (nl == std::string::npos) ? src.size() : nl;
         int lineLen = (int)(lineEnd - pos);
         const char *lineData = src.data() + pos;
 
-        auto emitGap = [&](int gs, int ge)
-        {
-            if (ge <= gs || gs >= lineLen) return;
+        auto emitGap = [&](int gs, int ge) {
+            if (ge <= gs || gs >= lineLen) {
+                return;
+            }
             ge = std::min(ge, lineLen);
-            for (int i = gs; i < ge; ++i)
-                if (lineData[i] != ' ' && lineData[i] != '\t' && lineData[i] != '\r')
-                { gapTokens.push_back({curLine, gs, ge - gs, TT_STRING, 0}); return; }
+            for (int i = gs; i < ge; ++i) {
+                if (lineData[i] != ' ' && lineData[i] != '\t' && lineData[i] != '\r') {
+                    gapTokens.push_back({curLine, gs, ge - gs, TT_STRING, 0});
+                    return;
+                }
+            }
         };
 
         auto &spans = covered[curLine];
         int cursor = 0;
-        for (auto &[cs, ce] : spans) { emitGap(cursor, cs); cursor = std::max(cursor, ce); }
+        for (auto &[cs, ce] : spans) {
+            emitGap(cursor, cs);
+            cursor = std::max(cursor, ce);
+        }
         emitGap(cursor, lineLen);
 
         pos = (nl == std::string::npos) ? src.size() : nl + 1;
         ++curLine;
     }
-    for (auto &t : gapTokens) out.push_back(std::move(t));
+    for (auto &t : gapTokens) {
+        out.push_back(std::move(t));
+    }
 }
 
-static std::map<int, std::vector<std::pair<int, int>>> buildCoveredSpans(const std::vector<RawToken> &out)
-{
+static std::map<int, std::vector<std::pair<int, int>>> buildCoveredSpans(const std::vector<RawToken> &out) {
     std::map<int, std::vector<std::pair<int, int>>> covered;
-    for (const auto &[line, startChar, length, type, mods] : out)
-    {
+    for (const auto &[line, startChar, length, type, mods] : out) {
         (void)type;
         (void)mods;
         covered[line].emplace_back(startChar, startChar + length);
     }
 
-    for (auto &[line, spans] : covered)
-    {
+    for (auto &[line, spans] : covered) {
         (void)line;
-        if (spans.empty())
+        if (spans.empty()) {
             continue;
+        }
 
         std::sort(spans.begin(), spans.end());
         std::vector<std::pair<int, int>> merged;
         merged.push_back(spans.front());
-        for (size_t index = 1; index < spans.size(); ++index)
-        {
+        for (size_t index = 1; index < spans.size(); ++index) {
             auto &[lastStart, lastEnd] = merged.back();
-            if (spans[index].first <= lastEnd)
+            if (spans[index].first <= lastEnd) {
                 lastEnd = std::max(lastEnd, spans[index].second);
-            else
+            } else {
                 merged.push_back(spans[index]);
+            }
         }
         spans = std::move(merged);
     }
@@ -600,149 +608,159 @@ static std::map<int, std::vector<std::pair<int, int>>> buildCoveredSpans(const s
 static bool rangeFullyCovered(const std::map<int, std::vector<std::pair<int, int>>> &covered,
                               int line,
                               int start,
-                              int end)
-{
+                              int end) {
     auto it = covered.find(line);
-    if (it == covered.end())
+    if (it == covered.end()) {
         return false;
+    }
 
-    for (const auto &[coveredStart, coveredEnd] : it->second)
-        if (coveredStart <= start && coveredEnd >= end)
+    for (const auto &[coveredStart, coveredEnd] : it->second) {
+        if (coveredStart <= start && coveredEnd >= end) {
             return true;
+        }
+    }
 
     return false;
 }
 
 static void emitUncoveredStructuralDirectiveTokens(std::vector<RawToken> &out,
                                                    const std::string &bodyText,
-                                                   int bodyStartLine)
-{
+                                                   int bodyStartLine) {
     const auto directiveRanges = extractTemplateDirectiveRanges(bodyText, static_cast<size_t>(bodyStartLine));
     const auto covered = buildCoveredSpans(out);
 
-    for (const auto &directiveRange : directiveRanges)
-    {
-        if (!directiveRange.structural)
+    for (const auto &directiveRange : directiveRanges) {
+        if (!directiveRange.structural) {
             continue;
+        }
 
         const int tokenLine = directiveRange.range.start.line;
         const int tokenStart = directiveRange.range.start.character;
         const int tokenEnd = directiveRange.range.end.character;
-        if (tokenStart < 0 || tokenEnd <= tokenStart)
+        if (tokenStart < 0 || tokenEnd <= tokenStart) {
             continue;
+        }
 
-        if (rangeFullyCovered(covered, tokenLine, tokenStart, tokenEnd))
+        if (rangeFullyCovered(covered, tokenLine, tokenStart, tokenEnd)) {
             continue;
+        }
 
         out.push_back({tokenLine, tokenStart, tokenEnd - tokenStart, TT_KEYWORD, 0});
     }
 }
 
 // ── .tpp semantic tokens ────────────────────────────────────────────────
-static int tokenTypeForTypeSpan(TypeSourceSemanticKind kind)
-{
-    switch (kind)
-    {
+static int tokenTypeForTypeSpan(TypeSourceSemanticKind kind) {
+    switch (kind) {
     case TypeSourceSemanticKind::Keyword:
+    {
         return TT_KEYWORD;
+    }
     case TypeSourceSemanticKind::Type:
+    {
         return TT_TYPE;
+    }
     case TypeSourceSemanticKind::Property:
+    {
         return TT_PROPERTY;
+    }
     case TypeSourceSemanticKind::EnumMember:
+    {
         return TT_ENUM_MEMBER;
+    }
     case TypeSourceSemanticKind::Operator:
+    {
         return TT_OPERATOR;
+    }
     case TypeSourceSemanticKind::Comment:
+    {
         return TT_COMMENT;
+    }
     }
     return -1;
 }
 
-static void emitTypeTokens(std::vector<RawToken> &out, const std::vector<TypeSourceSemanticSpan> &spans)
-{
-    for (const auto &span : spans)
-    {
+static void emitTypeTokens(std::vector<RawToken> &out, const std::vector<TypeSourceSemanticSpan> &spans) {
+    for (const auto &span : spans) {
         int len = span.range.end.character - span.range.start.character;
-        if (len <= 0) continue;
+        if (len <= 0) {
+            continue;
+        }
         int type = tokenTypeForTypeSpan(span.kind);
 
-        if (type >= 0)
+        if (type >= 0) {
             out.push_back({span.range.start.line, span.range.start.character, len, type, 0});
+        }
     }
 }
 
-static void emitTypeTokens(std::vector<RawToken> &out, const std::string &src)
-{
+static void emitTypeTokens(std::vector<RawToken> &out, const std::string &src) {
     emitTypeTokens(out, classifyTypeSource(src));
 }
 
 static bool lineIsWithinTemplate(const std::vector<std::pair<int, int>> &templateLineRanges,
-                                 int line)
-{
-    for (const auto &[startLine, endLine] : templateLineRanges)
-        if (line >= startLine && line <= endLine)
+                                 int line) {
+    for (const auto &[startLine, endLine] : templateLineRanges) {
+        if (line >= startLine && line <= endLine) {
             return true;
+        }
+    }
     return false;
 }
 
 static void emitTopLevelCommentTokens(std::vector<RawToken> &out, const std::string &src,
-                                      const std::vector<std::pair<int, int>> &templateLineRanges)
-{
+                                      const std::vector<std::pair<int, int>> &templateLineRanges) {
     int line = 0;
     size_t pos = 0;
-    while (pos < src.size())
-    {
+    while (pos < src.size()) {
         size_t lineEnd = src.find('\n', pos);
-        if (lineEnd == std::string::npos)
+        if (lineEnd == std::string::npos) {
             lineEnd = src.size();
+        }
 
         std::string_view text(src.data() + pos, lineEnd - pos);
         const size_t firstNonWhitespace = text.find_first_not_of(" \t\r");
-        if (firstNonWhitespace != std::string::npos && !lineIsWithinTemplate(templateLineRanges, line))
-        {
+        if (firstNonWhitespace != std::string::npos && !lineIsWithinTemplate(templateLineRanges, line)) {
             std::string_view trimmed = text.substr(firstNonWhitespace);
-            if (trimmed.size() >= 2 && trimmed[0] == '/' && trimmed[1] == '/')
-            {
+            if (trimmed.size() >= 2 && trimmed[0] == '/' && trimmed[1] == '/') {
                 out.push_back({line, static_cast<int>(firstNonWhitespace),
                                static_cast<int>(text.size() - firstNonWhitespace), TT_COMMENT, 0});
-            }
-            else if (trimmed.size() >= 2 && trimmed[0] == '/' && trimmed[1] == '*')
-            {
+            } else if (trimmed.size() >= 2 && trimmed[0] == '/' && trimmed[1] == '*') {
                 size_t blockPos = pos + firstNonWhitespace;
                 size_t blockEnd = src.find("*/", blockPos + 2);
-                if (blockEnd == std::string::npos)
+                if (blockEnd == std::string::npos) {
                     blockEnd = src.size();
-                else
+                } else {
                     blockEnd += 2;
+                }
 
                 size_t segmentPos = blockPos;
                 int blockLine = line;
                 int blockColumn = static_cast<int>(firstNonWhitespace);
-                while (segmentPos < blockEnd)
-                {
+                while (segmentPos < blockEnd) {
                     size_t segmentEnd = src.find('\n', segmentPos);
-                    if (segmentEnd == std::string::npos || segmentEnd > blockEnd)
+                    if (segmentEnd == std::string::npos || segmentEnd > blockEnd) {
                         segmentEnd = blockEnd;
+                    }
 
-                    if (!lineIsWithinTemplate(templateLineRanges, blockLine) && segmentEnd > segmentPos)
-                    {
+                    if (!lineIsWithinTemplate(templateLineRanges, blockLine) && segmentEnd > segmentPos) {
                         out.push_back({blockLine, blockColumn,
                                        static_cast<int>(segmentEnd - segmentPos), TT_COMMENT, 0});
                     }
 
-                    if (segmentEnd == blockEnd)
+                    if (segmentEnd == blockEnd) {
                         break;
+                    }
 
                     segmentPos = segmentEnd + 1;
                     ++blockLine;
                     blockColumn = 0;
                 }
 
-                while (pos < blockEnd)
-                {
-                    if (src[pos] == '\n')
+                while (pos < blockEnd) {
+                    if (src[pos] == '\n') {
                         ++line;
+                    }
                     ++pos;
                 }
                 continue;
@@ -750,14 +768,16 @@ static void emitTopLevelCommentTokens(std::vector<RawToken> &out, const std::str
         }
 
         pos = (lineEnd == src.size()) ? src.size() : lineEnd + 1;
-        if (lineEnd != src.size())
+        if (lineEnd != src.size()) {
             ++line;
+        }
     }
 }
 
-static nlohmann::json tokensForTypes(const std::string &src)
-{
-    if (src.empty()) return {{"data", nlohmann::json::array()}};
+static nlohmann::json tokensForTypes(const std::string &src) {
+    if (src.empty()) {
+        return {{"data", nlohmann::json::array()}};
+    }
     std::vector<RawToken> out;
     emitTypeTokens(out, src);
     convertTokenColumnsToUtf16(out, src);
@@ -765,14 +785,16 @@ static nlohmann::json tokensForTypes(const std::string &src)
 }
 
 static nlohmann::json tokensForTypes(const std::string &src,
-                                     const std::vector<TypeSourceSemanticSpan> *tokens)
-{
-    if (src.empty()) return {{"data", nlohmann::json::array()}};
+                                     const std::vector<TypeSourceSemanticSpan> *tokens) {
+    if (src.empty()) {
+        return {{"data", nlohmann::json::array()}};
+    }
     std::vector<RawToken> out;
-    if (tokens)
+    if (tokens) {
         emitTypeTokens(out, *tokens);
-    else
+    } else {
         emitTypeTokens(out, src);
+    }
     convertTokenColumnsToUtf16(out, src);
     return encodeTokens(out);
 }
@@ -783,18 +805,20 @@ static nlohmann::json tokensForTypes(const std::string &src,
 // - @for@/@if@/@switch@ etc. keywords from AST
 // - @expr@ as variable
 // - END as keyword
-static nlohmann::json tokensForTemplate(const std::string &src)
-{
+static nlohmann::json tokensForTemplate(const std::string &src) {
     std::vector<RawToken> out;
     std::vector<ParsedTemplateSource> templates;
     parseTemplateSource(src, templates);
     std::vector<std::pair<int, int>> templateLineRanges;
 
-    for (size_t index = 0; index < templates.size(); ++index)
-    {
+    for (size_t index = 0; index < templates.size(); ++index) {
         const auto &tpl = templates[index];
         int bodyLineCount = 0;
-        for (char c : tpl.bodyText) if (c == '\n') ++bodyLineCount;
+        for (char c : tpl.bodyText) {
+            if (c == '\n') {
+                ++bodyLineCount;
+            }
+        }
         int endLine = (int)tpl.bodyStartLine + 1 + bodyLineCount;
         const int startLine = tpl.sourceRange.start.line;
         templateLineRanges.emplace_back(startLine, endLine);
@@ -819,33 +843,29 @@ static nlohmann::json tokensForTemplate(const std::string &src)
 }
 
 // ── Entry points ──────────────────────────────────────────────────────────────
-nlohmann::json computeSemanticTokens(const std::string &uri, const WorkspaceProject &project)
-{
-    if (project.isTypeUri(uri))
-    {
+nlohmann::json computeSemanticTokens(const std::string &uri, const WorkspaceProject &project) {
+    if (project.isTypeUri(uri)) {
         // Get the source for this specific file
         std::string src = project.getContent(uri);
         auto spans = classifyTypeSource(src);
         return tokensForTypes(src, &spans);
-    }
-    else
-    {
+    } else {
         std::string src = project.getContent(uri);
         return tokensForTemplate(src);
     }
 }
 
 // ── Standalone (no project) ───────────────────────────────────────────────────
-nlohmann::json computeSemanticTokensFromText(const std::string &uri, const std::string &text)
-{
+nlohmann::json computeSemanticTokensFromText(const std::string &uri, const std::string &text) {
     (void)uri;
     // Heuristic: if no "@" characters, likely a types file
     bool looksLikeTypes = text.find('@') == std::string::npos;
 
-    if (looksLikeTypes)
+    if (looksLikeTypes) {
         return tokensForTypes(text);
-    else
+    } else {
         return tokensForTemplate(text);
+    }
 }
 
 } // namespace tpp

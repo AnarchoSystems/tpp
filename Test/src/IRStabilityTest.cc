@@ -10,21 +10,17 @@
 // ── Path collection ──────────────────────────────────────────────────────────
 
 static void collectPaths(const nlohmann::json &j, const std::string &prefix,
-                         std::set<std::string> &out)
-{
-    if (j.is_object())
-    {
-        for (auto it = j.begin(); it != j.end(); ++it)
-        {
+                         std::set<std::string> &out) {
+    if (j.is_object()) {
+        for (auto it = j.begin(); it != j.end(); ++it) {
             std::string path = prefix.empty() ? it.key() : prefix + "." + it.key();
             out.insert(path);
             collectPaths(it.value(), path, out);
         }
-    }
-    else if (j.is_array())
-    {
-        for (const auto &el : j)
+    } else if (j.is_array()) {
+        for (const auto &el : j) {
             collectPaths(el, prefix + "[]", out);
+        }
     }
 }
 
@@ -35,129 +31,121 @@ static const std::set<std::string> kExcludedPaths = {
 
 // ── Generated code shape checks ──────────────────────────────────────────────
 
-static std::vector<std::filesystem::path> collectGeneratedImplFiles()
-{
+static std::vector<std::filesystem::path> collectGeneratedImplFiles() {
     const std::filesystem::path tppExePath(TPP_EXE);
     const auto buildDir = tppExePath.parent_path().parent_path();
     const auto generatedDir = buildDir / "Test";
 
-    if (!std::filesystem::exists(generatedDir))
+    if (!std::filesystem::exists(generatedDir)) {
         return {};
+    }
 
     constexpr std::string_view kSuffix = "_implementation.cc";
     std::vector<std::filesystem::path> result;
-    for (const auto &entry : std::filesystem::directory_iterator(generatedDir))
-    {
-        if (!entry.is_regular_file())
+    for (const auto &entry : std::filesystem::directory_iterator(generatedDir)) {
+        if (!entry.is_regular_file()) {
             continue;
+        }
         const auto fileName = entry.path().filename().string();
-        if (fileName.rfind("error_", 0) == 0)
+        if (fileName.rfind("error_", 0) == 0) {
             continue;
+        }
         if (fileName.size() >= kSuffix.size() &&
-            fileName.rfind(kSuffix) == fileName.size() - kSuffix.size())
-        {
+            fileName.rfind(kSuffix) == fileName.size() - kSuffix.size()) {
             result.push_back(entry.path());
         }
     }
     return result;
 }
 
-static void checkPatternInImplFiles(const std::string &pattern)
-{
+static void checkPatternInImplFiles(const std::string &pattern) {
     const auto generatedImplFiles = collectGeneratedImplFiles();
 
     ASSERT_FALSE(generatedImplFiles.empty())
         << "No generated *_implementation.cc files found";
 
     std::vector<std::filesystem::path> missing;
-    for (const auto &implPath : generatedImplFiles)
-    {
+    for (const auto &implPath : generatedImplFiles) {
         std::ifstream in(implPath);
         ASSERT_TRUE(in.good()) << "Cannot read generated implementation: " << implPath;
         std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-        if (content.find(pattern) == std::string::npos)
+        if (content.find(pattern) == std::string::npos) {
             missing.push_back(implPath);
+        }
     }
 
-    if (!missing.empty())
-    {
+    if (!missing.empty()) {
         std::string msg = "Missing \"" + pattern + "\" in generated implementation files:\n";
-        for (const auto &path : missing)
+        for (const auto &path : missing) {
             msg += "  - " + path.string() + "\n";
+        }
         FAIL() << msg;
     }
 }
 
-static void checkPatternInSomeImplFile(const std::string &pattern)
-{
+static void checkPatternInSomeImplFile(const std::string &pattern) {
     const auto generatedImplFiles = collectGeneratedImplFiles();
 
     ASSERT_FALSE(generatedImplFiles.empty())
         << "No generated *_implementation.cc files found";
 
-    for (const auto &implPath : generatedImplFiles)
-    {
+    for (const auto &implPath : generatedImplFiles) {
         std::ifstream in(implPath);
         ASSERT_TRUE(in.good()) << "Cannot read generated implementation: " << implPath;
         std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-        if (content.find(pattern) != std::string::npos)
+        if (content.find(pattern) != std::string::npos) {
             return;
+        }
     }
 
     FAIL() << "Missing \"" << pattern << "\" in all generated implementation files";
 }
 
-static void checkPatternAbsentInImplFiles(const std::string &pattern)
-{
+static void checkPatternAbsentInImplFiles(const std::string &pattern) {
     const auto generatedImplFiles = collectGeneratedImplFiles();
 
     ASSERT_FALSE(generatedImplFiles.empty())
         << "No generated *_implementation.cc files found";
 
     std::vector<std::filesystem::path> present;
-    for (const auto &implPath : generatedImplFiles)
-    {
+    for (const auto &implPath : generatedImplFiles) {
         std::ifstream in(implPath);
         ASSERT_TRUE(in.good()) << "Cannot read generated implementation: " << implPath;
         std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-        if (content.find(pattern) != std::string::npos)
+        if (content.find(pattern) != std::string::npos) {
             present.push_back(implPath);
+        }
     }
 
-    if (!present.empty())
-    {
+    if (!present.empty()) {
         std::string msg = "Unexpected \"" + pattern + "\" in generated implementation files:\n";
-        for (const auto &path : present)
+        for (const auto &path : present) {
             msg += "  - " + path.string() + "\n";
+        }
         FAIL() << msg;
     }
 }
 
-TEST(IRStability, GeneratedImplementationContainsTakeOutput)
-{
+TEST(IRStability, GeneratedImplementationContainsTakeOutput) {
     checkPatternInImplFiles(".takeOutput(");
 }
 
-TEST(IRStability, GeneratedImplementationContainsTppWriter)
-{
+TEST(IRStability, GeneratedImplementationContainsTppWriter) {
     checkPatternInImplFiles("tpp::Writer");
 }
 
-TEST(IRStability, GeneratedImplementationDoesNotContainTppVM)
-{
+TEST(IRStability, GeneratedImplementationDoesNotContainTppVM) {
     checkPatternAbsentInImplFiles("tpp::VM");
 }
 
-TEST(IRStability, GeneratedImplementationUsesNativeVmHelpers)
-{
+TEST(IRStability, GeneratedImplementationUsesNativeVmHelpers) {
     checkPatternInSomeImplFile(".emitForEach(");
     checkPatternInSomeImplFile(".emitCapturedBlockForEach(");
     checkPatternInSomeImplFile(".emitAlignedForEach(");
     checkPatternInSomeImplFile(".emitValue(");
 }
 
-TEST(IRStability, GeneratedImplementationDoesNotUseManualVmScaffolding)
-{
+TEST(IRStability, GeneratedImplementationDoesNotUseManualVmScaffolding) {
     checkPatternAbsentInImplFiles("std::vector<tpp::Slot> _emitFrame");
     checkPatternAbsentInImplFiles(".beginForEach(");
     checkPatternAbsentInImplFiles("std::vector<std::string> _row");
@@ -167,8 +155,7 @@ TEST(IRStability, GeneratedImplementationDoesNotUseManualVmScaffolding)
 
 // ── Single aggregate test ────────────────────────────────────────────────────
 
-TEST(IRStability, SchemaCheck)
-{
+TEST(IRStability, SchemaCheck) {
     auto cases = GetPositiveTestCases();
     ASSERT_FALSE(cases.empty()) << "No positive test cases found";
 
@@ -176,14 +163,13 @@ TEST(IRStability, SchemaCheck)
     std::set<std::string> allExpectedPaths;
     std::set<std::string> allActualPaths;
 
-    for (const auto &tc : cases)
-    {
+    for (const auto &tc : cases) {
         auto snapshotPath = tc.path / "expected_ir.json";
-        if (!std::filesystem::exists(snapshotPath))
+        if (!std::filesystem::exists(snapshotPath)) {
             continue;
+        }
 
-        try
-        {
+        try {
             // Load snapshot
             std::ifstream snapFile(snapshotPath);
             ASSERT_TRUE(snapFile.good()) << "Cannot read " << snapshotPath;
@@ -193,15 +179,16 @@ TEST(IRStability, SchemaCheck)
             // Compile in-process
             auto loaded = tc.extract();
             tpp::TppProject project;
-            for (const auto &src : loaded.sources)
-            {
-                if (src.isTypes)
+            for (const auto &src : loaded.sources) {
+                if (src.isTypes) {
                     project.add_type_source(src.content, src.url);
-                else
+                } else {
                     project.add_template_source(src.content, src.url);
+                }
             }
-            for (size_t index = 0; index < loaded.policies.size(); ++index)
+            for (size_t index = 0; index < loaded.policies.size(); ++index) {
                 project.add_policy_source(loaded.policies[index], loaded.name + "/policy_" + std::to_string(index) + ".json");
+            }
 
             const auto compileResult = tpp::compile(project);
             ASSERT_TRUE(compileResult) << "Failed to compile test case: " << tc.name;
@@ -216,9 +203,7 @@ TEST(IRStability, SchemaCheck)
             allExpectedPaths.insert(expectedPaths.begin(), expectedPaths.end());
             allActualPaths.insert(actualPaths.begin(), actualPaths.end());
             ++snapshotsChecked;
-        }
-        catch (const std::exception &e)
-        {
+        } catch (const std::exception &e) {
             FAIL() << "IR schema check failed for " << tc.name
                    << " (" << snapshotPath << "): " << e.what();
         }
@@ -228,8 +213,7 @@ TEST(IRStability, SchemaCheck)
         << "No IR snapshots found. Run: cmake --build build --target update_ir_snapshots";
 
     // Remove excluded paths
-    for (const auto &ex : kExcludedPaths)
-    {
+    for (const auto &ex : kExcludedPaths) {
         allExpectedPaths.erase(ex);
         allActualPaths.erase(ex);
     }
@@ -245,21 +229,21 @@ TEST(IRStability, SchemaCheck)
                         allExpectedPaths.begin(), allExpectedPaths.end(),
                         std::inserter(addedPaths, addedPaths.end()));
 
-    if (!missingPaths.empty())
-    {
+    if (!missingPaths.empty()) {
         std::string msg = "IR_SCHEMA_RESULT:MAJOR\nRemoved/renamed paths:\n";
-        for (const auto &p : missingPaths)
+        for (const auto &p : missingPaths) {
             msg += "  - " + p + "\n";
+        }
         msg += "Run: cmake --build build --target update_ir_snapshots";
         FAIL() << msg;
         return;
     }
 
-    if (!addedPaths.empty())
-    {
+    if (!addedPaths.empty()) {
         std::string msg = "IR_SCHEMA_RESULT:MINOR\nNew paths:\n";
-        for (const auto &p : addedPaths)
+        for (const auto &p : addedPaths) {
             msg += "  - " + p + "\n";
+        }
         msg += "Run: cmake --build build --target update_ir_snapshots";
         FAIL() << msg;
         return;

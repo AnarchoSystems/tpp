@@ -183,6 +183,18 @@ gtest_discover_tests(tpp_acceptance_test
                         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
                         PROPERTIES TIMEOUT 15)
 
+find_program(BASH_EXECUTABLE bash)
+if(BASH_EXECUTABLE)
+    add_test(
+        NAME lint/control_flow_braces
+        COMMAND ${BASH_EXECUTABLE} ${PROJECT_SOURCE_DIR}/scripts/check-control-flow-braces.sh)
+    set_tests_properties(lint/control_flow_braces PROPERTIES
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        ENVIRONMENT "TPP_CASE_BRACE_SCOPE=changed")
+else()
+    message(STATUS "bash not found; skipping lint/control_flow_braces test registration")
+endif()
+
 # ── Java tests (aggregated single-runner build) ──────────────────────────────
 
 find_program(JAVA_COMPILER javac)

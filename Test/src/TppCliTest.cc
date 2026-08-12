@@ -8,51 +8,44 @@
 #include <string>
 #include <vector>
 
-namespace
-{
+namespace {
 
-struct TemporaryProjectDirectory
-{
+struct TemporaryProjectDirectory {
     std::filesystem::path path;
 
-    TemporaryProjectDirectory()
-    {
+    TemporaryProjectDirectory() {
         const auto uniqueSuffix = std::to_string(
             std::chrono::steady_clock::now().time_since_epoch().count());
         path = std::filesystem::temp_directory_path() / ("tpp-print-inputs-" + uniqueSuffix);
         std::filesystem::create_directories(path);
     }
 
-    ~TemporaryProjectDirectory()
-    {
+    ~TemporaryProjectDirectory() {
         std::error_code error;
         std::filesystem::remove_all(path, error);
     }
 };
 
-void writeFile(const std::filesystem::path &path, const std::string &content)
-{
+void writeFile(const std::filesystem::path &path, const std::string &content) {
     std::filesystem::create_directories(path.parent_path());
     std::ofstream out(path);
     out << content;
 }
 
-std::vector<std::string> splitLines(const std::string &output)
-{
+std::vector<std::string> splitLines(const std::string &output) {
     std::vector<std::string> lines;
     std::stringstream stream(output);
     std::string line;
-    while (std::getline(stream, line))
-    {
-        if (!line.empty() && line.back() == '\r')
+    while (std::getline(stream, line)) {
+        if (!line.empty() && line.back() == '\r') {
             line.pop_back();
+        }
         lines.push_back(line);
     }
     return lines;
 }
 
-TEST(TppCliTest, PrintInputsEmitsResolvedSourcesAndPoliciesInStableOrder)
-{
+TEST(TppCliTest, PrintInputsEmitsResolvedSourcesAndPoliciesInStableOrder) {
     TemporaryProjectDirectory project;
     writeFile(project.path / "tpp-config.json", R"json({
   "types": ["types/*.tpp"],

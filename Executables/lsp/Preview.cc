@@ -5,86 +5,82 @@
 #include <fstream>
 #include <sstream>
 
-namespace tpp
-{
+namespace tpp {
 
-nlohmann::json renderPreview(const nlohmann::json &params, WorkspaceProject *project)
-{
-    if (!project)
+nlohmann::json renderPreview(const nlohmann::json &params, WorkspaceProject *project) {
+    if (!project) {
         return {{"error", "No tpp project found for the requested config path"}};
+    }
 
     // ── Read the tpp-config.json previews array ───────────────────────────────
     std::ifstream cfgFile(project->configPath());
-    if (!cfgFile)
+    if (!cfgFile) {
         return {{"error", "Cannot open tpp-config.json"}};
+    }
 
     nlohmann::json cfg;
-    try { cfg = nlohmann::json::parse(cfgFile); }
-    catch (const std::exception &e) { return {{"error", std::string("Config parse error: ") + e.what()}}; }
+    try {
+        cfg = nlohmann::json::parse(cfgFile);
+    } catch (const std::exception &e) {
+        return {{"error", std::string("Config parse error: ") + e.what()}};
+    }
 
-    if (!cfg.contains("previews") || !cfg["previews"].is_array())
+    if (!cfg.contains("previews") || !cfg["previews"].is_array()) {
         return {{"error", "No 'previews' array in tpp-config.json"}};
+    }
 
     int previewIndex = params.value("previewIndex", 0);
     const auto &previews = cfg["previews"];
-    if (previewIndex < 0 || previewIndex >= (int)previews.size())
+    if (previewIndex < 0 || previewIndex >= (int)previews.size()) {
         return {{"error", "previewIndex out of range"}};
+    }
 
     const auto &preview = previews[previewIndex];
     std::string templateName = preview.value("template", "");
-    if (templateName.empty())
+    if (templateName.empty()) {
         return {{"error", "Preview entry has no 'template' key"}};
+    }
 
     std::vector<std::string> signature;
-    if (preview.contains("signature") && preview["signature"].is_array())
-    {
-        for (const auto &entry : preview["signature"])
+    if (preview.contains("signature") && preview["signature"].is_array()) {
+        for (const auto &entry : preview["signature"]) {
             signature.push_back(entry.get<std::string>());
+        }
     }
 
     // ── Resolve input JSON ─────────────────────────────────────────────────────
     nlohmann::json inputJson;
-    if (preview.contains("input"))
-    {
+    if (preview.contains("input")) {
         inputJson = preview["input"];
-    }
-    else
-    {
+    } else {
         inputJson = nlohmann::json::array();
     }
 
     // ── Render with tracking ──────────────────────────────────────────────────
     std::vector<RenderMapping> mappings;
     std::string output;
-    try
-    {
+    try {
         output = renderTracked(project->output(), templateName, signature, inputJson, mappings);
-    }
-    catch (const std::exception &e)
-    {
+    } catch (const std::exception &e) {
         return {{"error", std::string("Render error: ") + e.what()}};
     }
 
     // ── Serialise mappings ────────────────────────────────────────────────────
     nlohmann::json mappingsJson = nlohmann::json::array();
-    for (const auto &m : mappings)
-    {
-        mappingsJson.push_back({
-            {"sourceUri", m.sourceUri},
-            {"sourceRange", {
-                {"start", {{"line", m.sourceRange.start.line}, {"character", m.sourceRange.start.character}}},
-                {"end",   {{"line", m.sourceRange.end.line},   {"character", m.sourceRange.end.character}}}
-            }},
-            {"outStart", m.outStart},
-            {"outEnd",   m.outEnd}
-        });
+    for (const auto &m : mappings) {
+        mappingsJson.push_back({{"sourceUri", m.sourceUri},
+                                {"sourceRange", {{"start", {{"line", m.sourceRange.start.line}, {"character", m.sourceRange.start.character}}}, {"end", {{"line", m.sourceRange.end.line}, {"character", m.sourceRange.end.character}}}}},
+                                {"outStart", m.outStart},
+                                {"outEnd", m.outEnd}});
     }
 
     nlohmann::json response{{"output", output}, {"mappings", mappingsJson}};
-    if (preview.contains("language") && preview["language"].is_string())
+    if (preview.contains("language") && preview["language"].is_string()) {
         response["language"] = preview["language"].get<std::string>();
-    if (preview.contains("fileExtension") && preview["fileExtension"].is_string())
+    }
+    if (preview.contains("fileExtension") && preview["fileExtension"].is_string()) {
         response["fileExtension"] = preview["fileExtension"].get<std::string>();
+    }
 
     return response;
 }

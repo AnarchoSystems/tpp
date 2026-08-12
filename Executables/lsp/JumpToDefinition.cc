@@ -4,121 +4,137 @@
 #include <cctype>
 #include <functional>
 
-namespace tpp
-{
+namespace tpp {
 
 // ── Compiler type aliases (these live in tpp::compiler after the IR migration) ─
-using TypeRef          = compiler::TypeRef;
-using NamedType        = compiler::NamedType;
-using ListType         = compiler::ListType;
-using OptionalType     = compiler::OptionalType;
-using TemplateSource   = ParsedTemplateSource;
-using Expression       = compiler::Expression;
-using Variable         = compiler::Variable;
-using FieldAccess      = compiler::FieldAccess;
-using ASTNode          = compiler::ASTNode;
+using TypeRef = compiler::TypeRef;
+using NamedType = compiler::NamedType;
+using ListType = compiler::ListType;
+using OptionalType = compiler::OptionalType;
+using TemplateSource = ParsedTemplateSource;
+using Expression = compiler::Expression;
+using Variable = compiler::Variable;
+using FieldAccess = compiler::FieldAccess;
+using ASTNode = compiler::ASTNode;
 using InterpolationNode = compiler::InterpolationNode;
-using FunctionCallNode  = compiler::FunctionCallNode;
-using IndentNode        = compiler::IndentNode;
-using ForNode           = compiler::ForNode;
-using IfNode            = compiler::IfNode;
-using SwitchNode        = compiler::SwitchNode;
-using RenderViaNode     = compiler::RenderViaNode;
+using FunctionCallNode = compiler::FunctionCallNode;
+using IndentNode = compiler::IndentNode;
+using ForNode = compiler::ForNode;
+using IfNode = compiler::IfNode;
+using SwitchNode = compiler::SwitchNode;
+using RenderViaNode = compiler::RenderViaNode;
+
+template <typename>
+inline constexpr bool always_false_v = false;
 
 // ── Range helpers ─────────────────────────────────────────────────────────────
 
-static bool rangeContains(const Range &r, int line, int character)
-{
-    if (line < r.start.line || line > r.end.line) return false;
-    if (line == r.start.line && character < r.start.character) return false;
-    if (line == r.end.line   && character > r.end.character)   return false;
+static bool rangeContains(const Range &r, int line, int character) {
+    if (line < r.start.line || line > r.end.line) {
+        return false;
+    }
+    if (line == r.start.line && character < r.start.character) {
+        return false;
+    }
+    if (line == r.end.line && character > r.end.character) {
+        return false;
+    }
     return true;
 }
 
-static nlohmann::json locationJson(const std::string &uri, const Range &r)
-{
+static nlohmann::json locationJson(const std::string &uri, const Range &r) {
     return {
         {"uri", uri},
-        {"range", {
-            {"start", {{"line", r.start.line}, {"character", r.start.character}}},
-            {"end",   {{"line", r.end.line},   {"character", r.end.character}}}
-        }}
-    };
+        {"range", {{"start", {{"line", r.start.line}, {"character", r.start.character}}}, {"end", {{"line", r.end.line}, {"character", r.end.character}}}}}};
 }
 
-static nlohmann::json locationJson(const std::string &uri, const SourceRange &r)
-{
+static nlohmann::json locationJson(const std::string &uri, const SourceRange &r) {
     return {
         {"uri", uri},
-        {"range", {
-            {"start", {{"line", r.start.line}, {"character", r.start.character}}},
-            {"end",   {{"line", r.end.line},   {"character", r.end.character}}}
-        }}
-    };
+        {"range", {{"start", {{"line", r.start.line}, {"character", r.start.character}}}, {"end", {{"line", r.end.line}, {"character", r.end.character}}}}}};
 }
 
 // ── Convert an Expression back to source text (for argument positioning) ─────
-static std::string exprToText(const Expression &e)
-{
-    if (auto *v = std::get_if<Variable>(&e))
+static std::string exprToText(const Expression &e) {
+    if (auto *v = std::get_if<Variable>(&e)) {
         return v->name;
-    if (auto *fa = std::get_if<std::shared_ptr<FieldAccess>>(&e))
+    }
+    if (auto *fa = std::get_if<std::shared_ptr<FieldAccess>>(&e)) {
         return *fa ? exprToText((*fa)->base) + "." + (*fa)->field : std::string{};
+    }
     return {};
 }
 
 // ── Word at (line, character) in source text ──────────────────────────────────
 // Extracts the identifier token (letters, digits, underscore) surrounding
 // the given column on the given line.
-static std::string wordAtPos(const std::string &source, int line, int character)
-{
+static std::string wordAtPos(const std::string &source, int line, int character) {
     int curLine = 0;
     size_t pos = 0;
-    while (pos < source.size() && curLine < line)
-    {
-        if (source[pos++] == '\n') ++curLine;
+    while (pos < source.size() && curLine < line) {
+        if (source[pos++] == '\n') {
+            ++curLine;
+        }
     }
-    if (curLine != line) return {};
+    if (curLine != line) {
+        return {};
+    }
 
     size_t lineEnd = source.find('\n', pos);
-    if (lineEnd == std::string::npos) lineEnd = source.size();
+    if (lineEnd == std::string::npos) {
+        lineEnd = source.size();
+    }
     const size_t lineLen = lineEnd - pos;
 
-    if (character < 0 || (size_t)character >= lineLen) return {};
+    if (character < 0 || (size_t)character >= lineLen) {
+        return {};
+    }
     const char *ln = source.data() + pos;
 
     auto isIdChar = [](char c) { return std::isalnum((unsigned char)c) || c == '_'; };
-    if (!isIdChar(ln[character])) return {};
+    if (!isIdChar(ln[character])) {
+        return {};
+    }
 
     size_t start = character;
-    while (start > 0 && isIdChar(ln[start - 1])) --start;
+    while (start > 0 && isIdChar(ln[start - 1])) {
+        --start;
+    }
     size_t end = character;
-    while (end < lineLen && isIdChar(ln[end])) ++end;
+    while (end < lineLen && isIdChar(ln[end])) {
+        ++end;
+    }
 
     return std::string(ln + start, end - start);
 }
 
-static std::string textForSingleLineRange(const std::string &source, const Range &range)
-{
-    if (range.start.line != range.end.line)
+static std::string textForSingleLineRange(const std::string &source, const Range &range) {
+    if (range.start.line != range.end.line) {
         return {};
+    }
 
     int curLine = 0;
     size_t pos = 0;
-    while (pos < source.size() && curLine < range.start.line)
-    {
-        if (source[pos++] == '\n') ++curLine;
+    while (pos < source.size() && curLine < range.start.line) {
+        if (source[pos++] == '\n') {
+            ++curLine;
+        }
     }
-    if (curLine != range.start.line) return {};
+    if (curLine != range.start.line) {
+        return {};
+    }
 
     size_t lineEnd = source.find('\n', pos);
-    if (lineEnd == std::string::npos) lineEnd = source.size();
+    if (lineEnd == std::string::npos) {
+        lineEnd = source.size();
+    }
     const size_t lineLen = lineEnd - pos;
 
     const int start = std::clamp(range.start.character, 0, static_cast<int>(lineLen));
     const int end = std::clamp(range.end.character, start, static_cast<int>(lineLen));
-    if (end <= start)
+    if (end <= start) {
         return {};
+    }
 
     return source.substr(pos + static_cast<size_t>(start), static_cast<size_t>(end - start));
 }
@@ -130,33 +146,33 @@ static nlohmann::json resolveTypeIdentifierInSource(const std::string &src,
                                                     int line,
                                                     int character,
                                                     const WorkspaceProject &project,
-                                                    const std::vector<TypeSourceSemanticSpan> *typeSpans = nullptr)
-{
-    if (typeSpans)
-    {
-        for (const auto &span : *typeSpans)
-        {
-            if (span.kind != TypeSourceSemanticKind::Type)
+                                                    const std::vector<TypeSourceSemanticSpan> *typeSpans = nullptr) {
+    if (typeSpans) {
+        for (const auto &span : *typeSpans) {
+            if (span.kind != TypeSourceSemanticKind::Type) {
                 continue;
-            if (!rangeContains(span.range, line, character))
+            }
+            if (!rangeContains(span.range, line, character)) {
                 continue;
+            }
 
             const std::string name = textForSingleLineRange(src, span.range);
-            if (!name.empty())
+            if (!name.empty()) {
                 return resolveTypeName(name, project);
+            }
             break;
         }
     }
 
     auto tokens = tokenizeTypeSource(src);
-    for (const auto &tok : tokens)
-    {
-        if (tok.kind == TypeSourceTokenKind::Eof) break;
+    for (const auto &tok : tokens) {
+        if (tok.kind == TypeSourceTokenKind::Eof) {
+            break;
+        }
         if (tok.kind == TypeSourceTokenKind::Ident &&
             tok.range.start.line == line &&
             tok.range.start.character <= character &&
-            character < tok.range.end.character)
-        {
+            character < tok.range.end.character) {
             return resolveTypeName(tok.text, project);
         }
     }
@@ -164,174 +180,182 @@ static nlohmann::json resolveTypeIdentifierInSource(const std::string &src,
 }
 
 // ── Extract the top-level named type from a TypeRef ───────────────────────────
-static std::string typeRefNamedType(const TypeRef &type)
-{
-    return std::visit([](auto &&arg) -> std::string
-    {
+static std::string typeRefNamedType(const TypeRef &type) {
+    return std::visit([](auto &&arg) -> std::string {
         using T = std::decay_t<decltype(arg)>;
-        if constexpr (std::is_same_v<T, NamedType>)
+        if constexpr (std::is_same_v<T, NamedType>) {
             return arg.name;
-        else if constexpr (std::is_same_v<T, std::shared_ptr<ListType>>)
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<ListType>>) {
             return arg ? typeRefNamedType(arg->elementType) : std::string{};
-        else if constexpr (std::is_same_v<T, std::shared_ptr<OptionalType>>)
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<OptionalType>>) {
             return arg ? typeRefNamedType(arg->innerType) : std::string{};
-        else
-            return {};
-    }, type);
+        } else {
+            static_assert(always_false_v<T>, "Unhandled TypeRef alternative in typeRefNamedType");
+        }
+    },
+                      type);
 }
 
-static std::string typeRefToString(const TypeRef &type)
-{
-    return std::visit([](auto &&arg) -> std::string
-    {
+static std::string typeRefToString(const TypeRef &type) {
+    return std::visit([](auto &&arg) -> std::string {
         using T = std::decay_t<decltype(arg)>;
-        if constexpr (std::is_same_v<T, compiler::StringType>)
+        if constexpr (std::is_same_v<T, compiler::StringType>) {
             return "string";
-        else if constexpr (std::is_same_v<T, compiler::IntType>)
+        } else if constexpr (std::is_same_v<T, compiler::IntType>) {
             return "int";
-        else if constexpr (std::is_same_v<T, compiler::BoolType>)
+        } else if constexpr (std::is_same_v<T, compiler::BoolType>) {
             return "bool";
-        else if constexpr (std::is_same_v<T, NamedType>)
+        } else if constexpr (std::is_same_v<T, NamedType>) {
             return arg.name;
-        else if constexpr (std::is_same_v<T, std::shared_ptr<ListType>>)
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<ListType>>) {
             return arg ? "list<" + typeRefToString(arg->elementType) + ">" : "list<?>";
-        else if constexpr (std::is_same_v<T, std::shared_ptr<OptionalType>>)
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<OptionalType>>) {
             return arg ? "optional<" + typeRefToString(arg->innerType) + ">" : "optional<?>";
-        else
-            return "unknown";
-    }, type);
+        } else {
+            static_assert(always_false_v<T>, "Unhandled TypeRef alternative in typeRefToString");
+        }
+    },
+                      type);
 }
 
-static std::string typeKindToString(const tpp::TypeKind &type)
-{
-    switch (type.value.index())
-    {
+static std::string typeKindToString(const tpp::TypeKind &type) {
+    switch (type.value.index()) {
     case 0:
-        return "string";
-    case 1:
-        return "int";
-    case 2:
-        return "bool";
-    case 3:
-        return std::get<3>(type.value);
-    case 4:
     {
+        return "string";
+    }
+    case 1:
+    {
+        return "int";
+    }
+    case 2:
+    {
+        return "bool";
+    }
+    case 3:
+    {
+        return std::get<3>(type.value);
+    }
+    case 4: {
         const auto &inner = std::get<4>(type.value);
         return inner ? "list<" + typeKindToString(*inner) + ">" : "list<?>";
     }
-    case 5:
-    {
+    case 5: {
         const auto &inner = std::get<5>(type.value);
         return inner ? "optional<" + typeKindToString(*inner) + ">" : "optional<?>";
     }
     default:
+    {
         return "unknown";
+    }
     }
 }
 
-static TypeRef typeRefFromPublicType(const tpp::TypeKind &type)
-{
-    switch (type.value.index())
-    {
+static TypeRef typeRefFromPublicType(const tpp::TypeKind &type) {
+    switch (type.value.index()) {
     case 0:
-        return compiler::StringType{};
-    case 1:
-        return compiler::IntType{};
-    case 2:
-        return compiler::BoolType{};
-    case 3:
-        return NamedType{std::get<3>(type.value)};
-    case 4:
     {
+        return compiler::StringType{};
+    }
+    case 1:
+    {
+        return compiler::IntType{};
+    }
+    case 2:
+    {
+        return compiler::BoolType{};
+    }
+    case 3:
+    {
+        return NamedType{std::get<3>(type.value)};
+    }
+    case 4: {
         const auto &inner = std::get<4>(type.value);
         auto listType = std::make_shared<ListType>();
         listType->elementType = inner ? typeRefFromPublicType(*inner) : TypeRef{compiler::StringType{}};
         return listType;
     }
-    case 5:
-    {
+    case 5: {
         const auto &inner = std::get<5>(type.value);
         auto optionalType = std::make_shared<OptionalType>();
         optionalType->innerType = inner ? typeRefFromPublicType(*inner) : TypeRef{compiler::StringType{}};
         return optionalType;
     }
     default:
+    {
         return compiler::StringType{};
+    }
     }
 }
 
-static std::string markdownBlock(const std::string &code, const std::string &doc = {})
-{
+static std::string markdownBlock(const std::string &code, const std::string &doc = {}) {
     std::string markdown = "```tpp\n" + code + "\n```";
-    if (!doc.empty())
+    if (!doc.empty()) {
         markdown += "\n\n" + doc;
+    }
     return markdown;
 }
 
-static nlohmann::json hoverJson(const std::string &markdown)
-{
+static nlohmann::json hoverJson(const std::string &markdown) {
     return {{"contents", {{"kind", "markdown"}, {"value", markdown}}}};
 }
 
-static std::string functionSignature(const TemplateSource &function)
-{
+static std::string functionSignature(const TemplateSource &function) {
     std::string signature = "template " + function.name + "(";
-    for (size_t index = 0; index < function.params.size(); ++index)
-    {
-        if (index > 0)
+    for (size_t index = 0; index < function.params.size(); ++index) {
+        if (index > 0) {
             signature += ", ";
+        }
         signature += function.params[index].name + ": " + typeRefToString(function.params[index].type);
     }
     signature += ")";
     return signature;
 }
 
-static std::string functionSignature(const FunctionDef &function)
-{
+static std::string functionSignature(const FunctionDef &function) {
     std::string signature = "template " + function.name + "(";
-    for (size_t index = 0; index < function.params.size(); ++index)
-    {
-        if (index > 0)
+    for (size_t index = 0; index < function.params.size(); ++index) {
+        if (index > 0) {
             signature += ", ";
+        }
         signature += function.params[index].name + ": " +
-            (function.params[index].type ? typeKindToString(*function.params[index].type) : std::string{"unknown"});
+                     (function.params[index].type ? typeKindToString(*function.params[index].type) : std::string{"unknown"});
     }
     signature += ")";
     return signature;
 }
 
 static nlohmann::json hoverForNamedType(const std::string &name,
-                                        const WorkspaceProject &project)
-{
-    if (const auto *sd = project.find_struct(name))
+                                        const WorkspaceProject &project) {
+    if (const auto *sd = project.find_struct(name)) {
         return hoverJson(markdownBlock("struct " + sd->name, sd->doc));
-    if (const auto *ed = project.find_enum(name))
+    }
+    if (const auto *ed = project.find_enum(name)) {
         return hoverJson(markdownBlock("enum " + ed->name, ed->doc));
+    }
     return nullptr;
 }
 
-static nlohmann::json hoverForTypeRef(const TypeRef &type, const std::string &doc = {})
-{
+static nlohmann::json hoverForTypeRef(const TypeRef &type, const std::string &doc = {}) {
     return hoverJson(markdownBlock(typeRefToString(type), doc));
 }
 
-static nlohmann::json hoverForTypeKind(const tpp::TypeKind &type, const std::string &doc = {})
-{
+static nlohmann::json hoverForTypeKind(const tpp::TypeKind &type, const std::string &doc = {}) {
     return hoverJson(markdownBlock(typeKindToString(type), doc));
 }
 
 static nlohmann::json hoverForFunctionName(const std::string &name,
-                                           const WorkspaceProject &project)
-{
+                                           const WorkspaceProject &project) {
     const auto overloads = project.find_template_overloads(name);
-    if (overloads.empty())
+    if (overloads.empty()) {
         return nullptr;
+    }
 
     std::string markdown;
-    for (const auto *function : overloads)
-    {
-        if (!markdown.empty())
+    for (const auto *function : overloads) {
+        if (!markdown.empty()) {
             markdown += "\n\n";
+        }
         markdown += markdownBlock(functionSignature(*function), function->doc);
     }
     return hoverJson(markdown);
@@ -345,49 +369,48 @@ static std::optional<TypeRef> exprTypeRef(const Expression &expr,
 
 static nlohmann::json hoverForExpr(const Expression &expr,
                                    const TemplateScope &scope,
-                                   const WorkspaceProject &project)
-{
+                                   const WorkspaceProject &project) {
     auto type = exprTypeRef(expr, scope, project);
-    if (!type)
+    if (!type) {
         return nullptr;
+    }
     return hoverForTypeRef(*type);
 }
 
 // ── Resolve a type name to its Location in the types file ─────────────────────
 static nlohmann::json resolveTypeName(const std::string &name,
-                                       const WorkspaceProject &project)
-{
-    if (auto location = project.find_named_type_location(name))
+                                      const WorkspaceProject &project) {
+    if (auto location = project.find_named_type_location(name)) {
         return locationJson(location->uri, location->range);
+    }
 
     const SourceRange *range = nullptr;
-    if (const auto *sd = project.find_struct(name))
-    {
-        if (sd->sourceRange)
+    if (const auto *sd = project.find_struct(name)) {
+        if (sd->sourceRange) {
             range = &*sd->sourceRange;
-    }
-    else if (const auto *ed = project.find_enum(name))
-    {
-        if (ed->sourceRange)
+        }
+    } else if (const auto *ed = project.find_enum(name)) {
+        if (ed->sourceRange) {
             range = &*ed->sourceRange;
+        }
+    } else {
+        return nullptr;
     }
-    else
-        return nullptr;
 
-    if (!range)
+    if (!range) {
         return nullptr;
+    }
 
-    for (const auto &pUri : project.uris())
-    {
-        if (project.isTypeUri(pUri))
+    for (const auto &pUri : project.uris()) {
+        if (project.isTypeUri(pUri)) {
             return locationJson(pUri, *range);
+        }
     }
     return nullptr;
 }
 
 // ── Scope: bindings in scope at the cursor position ───────────────────────────
-struct TemplateScope
-{
+struct TemplateScope {
     // For-loop variable bindings: varName → location of the @for@ directive
     std::map<std::string, std::pair<std::string /*uri*/, Range>> forBindings;
     // Template parameter types: paramName → type name string
@@ -399,36 +422,44 @@ struct TemplateScope
 // ── Resolve the TypeRef of an expression given the scope ─────────────────────
 // Returns nullopt if type cannot be determined.
 static std::optional<TypeRef> exprTypeRef(const Expression &expr,
-                                           const TemplateScope &scope,
-                                           const WorkspaceProject &project)
-{
-    if (auto *v = std::get_if<Variable>(&expr))
-    {
+                                          const TemplateScope &scope,
+                                          const WorkspaceProject &project) {
+    if (auto *v = std::get_if<Variable>(&expr)) {
         auto it = scope.varTypes.find(v->name);
-        if (it != scope.varTypes.end()) return it->second;
+        if (it != scope.varTypes.end()) {
+            return it->second;
+        }
         return {};
     }
-    if (auto *fa = std::get_if<std::shared_ptr<FieldAccess>>(&expr))
-    {
-        if (!*fa) return {};
+    if (auto *fa = std::get_if<std::shared_ptr<FieldAccess>>(&expr)) {
+        if (!*fa) {
+            return {};
+        }
         auto baseType = exprTypeRef((*fa)->base, scope, project);
-        if (!baseType) return {};
+        if (!baseType) {
+            return {};
+        }
         // Unwrap list/optional to get the named struct
         auto unwrap = [](const TypeRef &t) -> TypeRef {
-            if (auto *lst = std::get_if<std::shared_ptr<ListType>>(&t))
-                if (*lst) return (*lst)->elementType;
-            if (auto *opt = std::get_if<std::shared_ptr<OptionalType>>(&t))
-                if (*opt) return (*opt)->innerType;
+            if (auto *lst = std::get_if<std::shared_ptr<ListType>>(&t)) {
+                if (*lst) {
+                    return (*lst)->elementType;
+                }
+            }
+            if (auto *opt = std::get_if<std::shared_ptr<OptionalType>>(&t)) {
+                if (*opt) {
+                    return (*opt)->innerType;
+                }
+            }
             return t;
         };
         TypeRef inner = unwrap(*baseType);
         const std::string structName = typeRefNamedType(inner);
-        if (!structName.empty())
-        {
-            if (const auto *field = project.find_struct_field(structName, (*fa)->field))
-            {
-                if (field->type)
+        if (!structName.empty()) {
+            if (const auto *field = project.find_struct_field(structName, (*fa)->field)) {
+                if (field->type) {
                     return typeRefFromPublicType(*field->type);
+                }
             }
         }
     }
@@ -437,34 +468,39 @@ static std::optional<TypeRef> exprTypeRef(const Expression &expr,
 
 // ── Resolve jump to a named field inside a container type ────────────────────
 static nlohmann::json resolveFieldLocation(const TypeRef &containerType,
-                                            const std::string &fieldName,
-                                            const WorkspaceProject &project)
-{
+                                           const std::string &fieldName,
+                                           const WorkspaceProject &project) {
     // Unwrap list/optional to get the named struct
     auto unwrap = [](const TypeRef &t) -> TypeRef {
-        if (auto *lst = std::get_if<std::shared_ptr<ListType>>(&t))
-            if (*lst) return (*lst)->elementType;
-        if (auto *opt = std::get_if<std::shared_ptr<OptionalType>>(&t))
-            if (*opt) return (*opt)->innerType;
+        if (auto *lst = std::get_if<std::shared_ptr<ListType>>(&t)) {
+            if (*lst) {
+                return (*lst)->elementType;
+            }
+        }
+        if (auto *opt = std::get_if<std::shared_ptr<OptionalType>>(&t)) {
+            if (*opt) {
+                return (*opt)->innerType;
+            }
+        }
         return t;
     };
     TypeRef inner = unwrap(containerType);
     const std::string structName = typeRefNamedType(inner);
-    if (auto location = project.find_struct_field_location(structName, fieldName))
+    if (auto location = project.find_struct_field_location(structName, fieldName)) {
         return locationJson(location->uri, location->range);
+    }
 
-    if (const auto *field = project.find_struct_field(structName, fieldName))
-    {
-        if (field->sourceRange)
-        {
-            for (const auto &pUri : project.uris())
-                if (project.isTypeUri(pUri))
+    if (const auto *field = project.find_struct_field(structName, fieldName)) {
+        if (field->sourceRange) {
+            for (const auto &pUri : project.uris()) {
+                if (project.isTypeUri(pUri)) {
                     return locationJson(pUri, *field->sourceRange);
+                }
+            }
         }
     }
     return nullptr;
 }
-
 
 // ── Resolve an expression root to a jump target ──────────────────────────────
 // Given an expression and the current scope, return the definition location:
@@ -472,35 +508,32 @@ static nlohmann::json resolveFieldLocation(const TypeRef &containerType,
 //  - If root var is a template param  → jump to the param's type definition
 //  - Otherwise return null.
 static nlohmann::json resolveExpr(const Expression &expr,
-                                   const TemplateScope &scope,
-                                   const WorkspaceProject &project,
-                                   const std::string &uri)
-{
+                                  const TemplateScope &scope,
+                                  const WorkspaceProject &project,
+                                  const std::string &uri) {
     // Walk to root variable
     const Expression *cur = &expr;
-    while (true)
-    {
-        if (auto *v = std::get_if<Variable>(cur))
-        {
+    while (true) {
+        if (auto *v = std::get_if<Variable>(cur)) {
             // 1. For-loop binding → jump to @for@ directive
             auto fIt = scope.forBindings.find(v->name);
-            if (fIt != scope.forBindings.end())
+            if (fIt != scope.forBindings.end()) {
                 return locationJson(fIt->second.first, fIt->second.second);
+            }
 
             // 2. Template param → resolve the param's type
             auto pIt = scope.paramTypes.find(v->name);
-            if (pIt != scope.paramTypes.end())
+            if (pIt != scope.paramTypes.end()) {
                 return resolveTypeName(pIt->second, project);
+            }
 
             return nullptr;
-        }
-        else if (auto *fa = std::get_if<std::shared_ptr<FieldAccess>>(cur))
-        {
-            if (!*fa) return nullptr;
+        } else if (auto *fa = std::get_if<std::shared_ptr<FieldAccess>>(cur)) {
+            if (!*fa) {
+                return nullptr;
+            }
             cur = &(*fa)->base;
-        }
-        else
-        {
+        } else {
             return nullptr;
         }
     }
@@ -509,11 +542,11 @@ static nlohmann::json resolveExpr(const Expression &expr,
 // ── Resolve expression at cursor, honouring which segment of a.b.c is active ─
 // exprStartChar: column of the first character of the expression (after the '@')
 static nlohmann::json resolveExprAtCursor(const Expression &expr,
-                                           int line, int character,
-                                           int exprStartChar,
-                                           const TemplateScope &scope,
-                                           const WorkspaceProject &project,
-                                           const std::string &uri);
+                                          int line, int character,
+                                          int exprStartChar,
+                                          const TemplateScope &scope,
+                                          const WorkspaceProject &project,
+                                          const std::string &uri);
 
 static nlohmann::json resolveExprHoverAtCursor(const Expression &expr,
                                                int character,
@@ -529,71 +562,58 @@ static nlohmann::json hoverWalkNodes(const std::vector<ASTNode> &nodes,
 
 // ── Walk AST nodes with scope to find the definition under (line, char) ────────
 static nlohmann::json walkNodes(const std::vector<ASTNode> &nodes,
-                                 int line, int character,
-                                 TemplateScope scope,
-                                 const WorkspaceProject &project,
-                                 const std::string &uri);
+                                int line, int character,
+                                TemplateScope scope,
+                                const WorkspaceProject &project,
+                                const std::string &uri);
 
 static nlohmann::json walkNode(const ASTNode &node,
-                                int line, int character,
-                                TemplateScope &scope,
-                                const WorkspaceProject &project,
-                                const std::string &uri)
-{
-    return std::visit([&](auto &&arg) -> nlohmann::json
-    {
+                               int line, int character,
+                               TemplateScope &scope,
+                               const WorkspaceProject &project,
+                               const std::string &uri) {
+    return std::visit([&](auto &&arg) -> nlohmann::json {
         using T = std::decay_t<decltype(arg)>;
 
-        if constexpr (std::is_same_v<T, InterpolationNode>)
-        {
-            if (rangeContains(arg.sourceRange, line, character))
-            {
+        if constexpr (std::is_same_v<T, InterpolationNode>) {
+            if (rangeContains(arg.sourceRange, line, character)) {
                 const int exprStart = arg.sourceRange.start.character + 1; // skip '@'
                 return resolveExprAtCursor(arg.expr, line, character, exprStart,
                                            scope, project, uri);
             }
-        }
-        else if constexpr (std::is_same_v<T, std::shared_ptr<FunctionCallNode>>)
-        {
-            if (rangeContains(arg->sourceRange, line, character))
-            {
-                const int sc      = arg->sourceRange.start.character;
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<FunctionCallNode>>) {
+            if (rangeContains(arg->sourceRange, line, character)) {
+                const int sc = arg->sourceRange.start.character;
                 const int nameEnd = sc + 1 + (int)arg->functionName.size();
-                if (character >= sc && character <= nameEnd)
-                {
+                if (character >= sc && character <= nameEnd) {
                     // Cursor on function name — jump to definition
-                    for (const auto *func : project.find_template_overloads(arg->functionName))
-                    {
-                        if (func->sourceUri && func->sourceRange)
+                    for (const auto *func : project.find_template_overloads(arg->functionName)) {
+                        if (func->sourceUri && func->sourceRange) {
                             return locationJson(*func->sourceUri, *func->sourceRange);
+                        }
                     }
-                }
-                else
-                {
+                } else {
                     // Cursor on an argument — reconstruct positions and resolve
                     int argCol = sc + 1 + (int)arg->functionName.size() + 1;
                     bool firstArg = true;
-                    for (const auto &argExpr : arg->arguments)
-                    {
-                        if (!firstArg) argCol += 2;
+                    for (const auto &argExpr : arg->arguments) {
+                        if (!firstArg) {
+                            argCol += 2;
+                        }
                         firstArg = false;
                         const std::string argText = exprToText(argExpr);
-                        if (character >= argCol && character < argCol + (int)argText.size())
+                        if (character >= argCol && character < argCol + (int)argText.size()) {
                             return resolveExprAtCursor(argExpr, line, character, argCol,
-                                                        scope, project, uri);
+                                                       scope, project, uri);
+                        }
                         argCol += (int)argText.size();
                     }
                 }
             }
-        }
-        else if constexpr (std::is_same_v<T, std::shared_ptr<IndentNode>>)
-        {
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<IndentNode>>) {
             return walkNodes(arg->body, line, character, scope, project, uri);
-        }
-        else if constexpr (std::is_same_v<T, std::shared_ptr<ForNode>>)
-        {
-            if (rangeContains(arg->sourceRange, line, character))
-            {
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<ForNode>>) {
+            if (rangeContains(arg->sourceRange, line, character)) {
                 // Cursor is on the @for@ directive itself.
                 // Resolve the collection expression (cursor may be on the collection var).
                 return resolveExpr(arg->collectionExpr, scope, project, uri);
@@ -603,54 +623,58 @@ static nlohmann::json walkNode(const ASTNode &node,
             innerScope.forBindings[arg->varName] = {uri, arg->sourceRange};
             // Compute element TypeRef for the for-loop variable
             auto colType = exprTypeRef(arg->collectionExpr, scope, project);
-            if (colType)
-            {
-                if (auto *lst = std::get_if<std::shared_ptr<ListType>>(&*colType))
-                    { if (*lst) innerScope.varTypes[arg->varName] = (*lst)->elementType; }
-                else
+            if (colType) {
+                if (auto *lst = std::get_if<std::shared_ptr<ListType>>(&*colType)) {
+                    if (*lst) {
+                        innerScope.varTypes[arg->varName] = (*lst)->elementType;
+                    }
+                } else {
                     innerScope.varTypes[arg->varName] = *colType;
+                }
             }
             return walkNodes(arg->body, line, character, std::move(innerScope), project, uri);
-        }
-        else if constexpr (std::is_same_v<T, std::shared_ptr<IfNode>>)
-        {
-            if (rangeContains(arg->sourceRange, line, character))
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<IfNode>>) {
+            if (rangeContains(arg->sourceRange, line, character)) {
                 return resolveExpr(arg->condExpr, scope, project, uri);
-            auto r = walkNodes(arg->thenBody, line, character, scope, project, uri);
-            if (!r.is_null()) return r;
-            return walkNodes(arg->elseBody, line, character, scope, project, uri);
-        }
-        else if constexpr (std::is_same_v<T, std::shared_ptr<SwitchNode>>)
-        {
-            if (rangeContains(arg->sourceRange, line, character))
-                return resolveExpr(arg->expr, scope, project, uri);
-            for (const auto &c : arg->cases)
-            {
-                auto r = walkNodes(c.body, line, character, scope, project, uri);
-                if (!r.is_null()) return r;
             }
-            if (arg->defaultCase)
+            auto r = walkNodes(arg->thenBody, line, character, scope, project, uri);
+            if (!r.is_null()) {
+                return r;
+            }
+            return walkNodes(arg->elseBody, line, character, scope, project, uri);
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<SwitchNode>>) {
+            if (rangeContains(arg->sourceRange, line, character)) {
+                return resolveExpr(arg->expr, scope, project, uri);
+            }
+            for (const auto &c : arg->cases) {
+                auto r = walkNodes(c.body, line, character, scope, project, uri);
+                if (!r.is_null()) {
+                    return r;
+                }
+            }
+            if (arg->defaultCase) {
                 return walkNodes(arg->defaultCase->body, line, character, scope, project, uri);
-        }
-        else if constexpr (std::is_same_v<T, std::shared_ptr<RenderViaNode>>)
-        {
-            if (rangeContains(arg->sourceRange, line, character))
+            }
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<RenderViaNode>>) {
+            if (rangeContains(arg->sourceRange, line, character)) {
                 return resolveExpr(arg->collectionExpr, scope, project, uri);
+            }
         }
         return nullptr;
-    }, node);
+    },
+                      node);
 }
 
 static nlohmann::json walkNodes(const std::vector<ASTNode> &nodes,
-                                 int line, int character,
-                                 TemplateScope scope,
-                                 const WorkspaceProject &project,
-                                 const std::string &uri)
-{
-    for (const auto &n : nodes)
-    {
+                                int line, int character,
+                                TemplateScope scope,
+                                const WorkspaceProject &project,
+                                const std::string &uri) {
+    for (const auto &n : nodes) {
         auto r = walkNode(n, line, character, scope, project, uri);
-        if (!r.is_null()) return r;
+        if (!r.is_null()) {
+            return r;
+        }
     }
     return nullptr;
 }
@@ -659,112 +683,100 @@ static nlohmann::json hoverWalkNode(const ASTNode &node,
                                     int line, int character,
                                     TemplateScope &scope,
                                     const WorkspaceProject &project,
-                                    const std::string &uri)
-{
-    return std::visit([&](auto &&arg) -> nlohmann::json
-    {
+                                    const std::string &uri) {
+    return std::visit([&](auto &&arg) -> nlohmann::json {
         using T = std::decay_t<decltype(arg)>;
 
-        if constexpr (std::is_same_v<T, InterpolationNode>)
-        {
-            if (rangeContains(arg.sourceRange, line, character))
-            {
+        if constexpr (std::is_same_v<T, InterpolationNode>) {
+            if (rangeContains(arg.sourceRange, line, character)) {
                 const int exprStart = arg.sourceRange.start.character + 1;
                 return resolveExprHoverAtCursor(arg.expr, character, exprStart, scope, project);
             }
-        }
-        else if constexpr (std::is_same_v<T, std::shared_ptr<FunctionCallNode>>)
-        {
-            if (rangeContains(arg->sourceRange, line, character))
-            {
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<FunctionCallNode>>) {
+            if (rangeContains(arg->sourceRange, line, character)) {
                 const int sc = arg->sourceRange.start.character;
                 const int nameEnd = sc + 1 + static_cast<int>(arg->functionName.size());
-                if (character >= sc && character <= nameEnd)
+                if (character >= sc && character <= nameEnd) {
                     return hoverForFunctionName(arg->functionName, project);
+                }
 
                 int argCol = sc + 1 + static_cast<int>(arg->functionName.size()) + 1;
                 bool firstArg = true;
-                for (const auto &argExpr : arg->arguments)
-                {
-                    if (!firstArg)
+                for (const auto &argExpr : arg->arguments) {
+                    if (!firstArg) {
                         argCol += 2;
+                    }
                     firstArg = false;
                     const std::string argText = exprToText(argExpr);
-                    if (character >= argCol && character < argCol + static_cast<int>(argText.size()))
+                    if (character >= argCol && character < argCol + static_cast<int>(argText.size())) {
                         return resolveExprHoverAtCursor(argExpr, character, argCol, scope, project);
+                    }
                     argCol += static_cast<int>(argText.size());
                 }
             }
-        }
-        else if constexpr (std::is_same_v<T, std::shared_ptr<IndentNode>>)
-        {
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<IndentNode>>) {
             return hoverWalkNodes(arg->body, line, character, scope, project, uri);
-        }
-        else if constexpr (std::is_same_v<T, std::shared_ptr<ForNode>>)
-        {
-            if (rangeContains(arg->sourceRange, line, character))
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<ForNode>>) {
+            if (rangeContains(arg->sourceRange, line, character)) {
                 return hoverForExpr(arg->collectionExpr, scope, project);
+            }
 
             TemplateScope innerScope = scope;
             innerScope.forBindings[arg->varName] = {uri, arg->sourceRange};
             auto colType = exprTypeRef(arg->collectionExpr, scope, project);
-            if (colType)
-            {
-                if (auto *lst = std::get_if<std::shared_ptr<ListType>>(&*colType))
-                {
-                    if (*lst)
+            if (colType) {
+                if (auto *lst = std::get_if<std::shared_ptr<ListType>>(&*colType)) {
+                    if (*lst) {
                         innerScope.varTypes[arg->varName] = (*lst)->elementType;
-                }
-                else
-                {
+                    }
+                } else {
                     innerScope.varTypes[arg->varName] = *colType;
                 }
             }
             return hoverWalkNodes(arg->body, line, character, std::move(innerScope), project, uri);
-        }
-        else if constexpr (std::is_same_v<T, std::shared_ptr<IfNode>>)
-        {
-            if (rangeContains(arg->sourceRange, line, character))
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<IfNode>>) {
+            if (rangeContains(arg->sourceRange, line, character)) {
                 return hoverForExpr(arg->condExpr, scope, project);
-            auto result = hoverWalkNodes(arg->thenBody, line, character, scope, project, uri);
-            if (!result.is_null())
-                return result;
-            return hoverWalkNodes(arg->elseBody, line, character, scope, project, uri);
-        }
-        else if constexpr (std::is_same_v<T, std::shared_ptr<SwitchNode>>)
-        {
-            if (rangeContains(arg->sourceRange, line, character))
-                return hoverForExpr(arg->expr, scope, project);
-            for (const auto &caseNode : arg->cases)
-            {
-                auto result = hoverWalkNodes(caseNode.body, line, character, scope, project, uri);
-                if (!result.is_null())
-                    return result;
             }
-            if (arg->defaultCase)
+            auto result = hoverWalkNodes(arg->thenBody, line, character, scope, project, uri);
+            if (!result.is_null()) {
+                return result;
+            }
+            return hoverWalkNodes(arg->elseBody, line, character, scope, project, uri);
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<SwitchNode>>) {
+            if (rangeContains(arg->sourceRange, line, character)) {
+                return hoverForExpr(arg->expr, scope, project);
+            }
+            for (const auto &caseNode : arg->cases) {
+                auto result = hoverWalkNodes(caseNode.body, line, character, scope, project, uri);
+                if (!result.is_null()) {
+                    return result;
+                }
+            }
+            if (arg->defaultCase) {
                 return hoverWalkNodes(arg->defaultCase->body, line, character, scope, project, uri);
-        }
-        else if constexpr (std::is_same_v<T, std::shared_ptr<RenderViaNode>>)
-        {
-            if (rangeContains(arg->sourceRange, line, character))
+            }
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<RenderViaNode>>) {
+            if (rangeContains(arg->sourceRange, line, character)) {
                 return hoverForExpr(arg->collectionExpr, scope, project);
+            }
         }
 
         return nullptr;
-    }, node);
+    },
+                      node);
 }
 
 static nlohmann::json hoverWalkNodes(const std::vector<ASTNode> &nodes,
                                      int line, int character,
                                      TemplateScope scope,
                                      const WorkspaceProject &project,
-                                     const std::string &uri)
-{
-    for (const auto &node : nodes)
-    {
+                                     const std::string &uri) {
+    for (const auto &node : nodes) {
         auto result = hoverWalkNode(node, line, character, scope, project, uri);
-        if (!result.is_null())
+        if (!result.is_null()) {
             return result;
+        }
     }
     return nullptr;
 }
@@ -772,11 +784,9 @@ static nlohmann::json hoverWalkNodes(const std::vector<ASTNode> &nodes,
 // ── Entry point ───────────────────────────────────────────────────────────────
 nlohmann::json jumpToDefinition(const std::string &uri,
                                 int line, int character,
-                                const WorkspaceProject &project)
-{
+                                const WorkspaceProject &project) {
     // ── Types file ────────────────────────────────────────────────────────────
-    if (project.isTypeUri(uri))
-    {
+    if (project.isTypeUri(uri)) {
         std::string src = project.getContent(uri);
         auto typeSpans = classifyTypeSource(src);
         return resolveTypeIdentifierInSource(src, line, character, project, &typeSpans);
@@ -787,26 +797,27 @@ nlohmann::json jumpToDefinition(const std::string &uri,
     std::vector<ParsedTemplateSource> templates;
     parseTemplateSource(src, templates);
 
-    for (const auto &func : templates)
-    {
+    for (const auto &func : templates) {
         // ── Header line ───────────────────────────────────────────────────────
-        if (line == func.sourceRange.start.line)
-        {
+        if (line == func.sourceRange.start.line) {
             std::string word = wordAtPos(src, line, character);
-            if (word.empty()) return nullptr;
+            if (word.empty()) {
+                return nullptr;
+            }
 
             // Is the word a type name? → jump to type definition
             auto loc = resolveTypeName(word, project);
-            if (!loc.is_null()) return loc;
+            if (!loc.is_null()) {
+                return loc;
+            }
 
             // Is the word a parameter name? → jump to the parameter's type
-            for (const auto &p : func.params)
-            {
-                if (p.name == word)
-                {
+            for (const auto &p : func.params) {
+                if (p.name == word) {
                     std::string typeName = typeRefNamedType(p.type);
-                    if (!typeName.empty())
+                    if (!typeName.empty()) {
                         return resolveTypeName(typeName, project);
+                    }
                 }
             }
             return nullptr;
@@ -818,16 +829,18 @@ nlohmann::json jumpToDefinition(const std::string &uri,
         // (func.sourceRange only covers the header; we rely on the walk returning
         //  null quickly for out-of-range directives.)
         TemplateScope scope;
-        for (const auto &p : func.params)
-        {
+        for (const auto &p : func.params) {
             std::string typeName = typeRefNamedType(p.type);
-            if (!typeName.empty())
+            if (!typeName.empty()) {
                 scope.paramTypes[p.name] = typeName;
+            }
             scope.varTypes[p.name] = p.type;
         }
 
         auto result = walkNodes(func.body, line, character, scope, project, uri);
-        if (!result.is_null()) return result;
+        if (!result.is_null()) {
+            return result;
+        }
     }
 
     return nullptr;
@@ -836,43 +849,47 @@ nlohmann::json jumpToDefinition(const std::string &uri,
 // ── resolveExprAtCursor implementation ───────────────────────────────────────
 // Defined after walkNode/walkNodes since it only uses helpers already declared.
 static nlohmann::json resolveExprAtCursor(const Expression &expr,
-                                           int /*line*/, int character,
-                                           int exprStartChar,
-                                           const TemplateScope &scope,
-                                           const WorkspaceProject &project,
-                                           const std::string &uri)
-{
+                                          int /*line*/, int character,
+                                          int exprStartChar,
+                                          const TemplateScope &scope,
+                                          const WorkspaceProject &project,
+                                          const std::string &uri) {
     // Build segment chain from the field-access expression.
     // For "a.b.c": chain = [("a",&var), ("b",&fa1), ("c",&fa2)]
     std::vector<std::pair<std::string, const Expression *>> chain;
     std::function<void(const Expression &)> build = [&](const Expression &e) {
-        if (auto *v = std::get_if<Variable>(&e))
+        if (auto *v = std::get_if<Variable>(&e)) {
             chain.push_back({v->name, &e});
-        else if (auto *fa = std::get_if<std::shared_ptr<FieldAccess>>(&e))
-            if (*fa) { build((*fa)->base); chain.push_back({(*fa)->field, &e}); }
+        } else if (auto *fa = std::get_if<std::shared_ptr<FieldAccess>>(&e)) {
+            if (*fa) {
+                build((*fa)->base);
+                chain.push_back({(*fa)->field, &e});
+            }
+        }
     };
     build(expr);
-    if (chain.empty()) return resolveExpr(expr, scope, project, uri);
+    if (chain.empty()) {
+        return resolveExpr(expr, scope, project, uri);
+    }
 
     // Find which segment the cursor falls on.
     int col = exprStartChar;
-    for (size_t i = 0; i < chain.size(); ++i)
-    {
+    for (size_t i = 0; i < chain.size(); ++i) {
         int segEnd = col + (int)chain[i].first.size();
-        if (character >= col && character < segEnd)
-        {
-            if (i == 0)
-            {
+        if (character >= col && character < segEnd) {
+            if (i == 0) {
                 // Cursor on root variable — existing scope resolution
                 return resolveExpr(*chain[i].second, scope, project, uri);
-            }
-            else
-            {
+            } else {
                 // Cursor on a field name — resolve the container type then jump to field
                 const auto *fa = std::get_if<std::shared_ptr<FieldAccess>>(chain[i].second);
-                if (!fa || !*fa) return nullptr;
+                if (!fa || !*fa) {
+                    return nullptr;
+                }
                 auto containerType = exprTypeRef((*fa)->base, scope, project);
-                if (!containerType) return nullptr;
+                if (!containerType) {
+                    return nullptr;
+                }
                 return resolveFieldLocation(*containerType, chain[i].first, project);
             }
         }
@@ -886,41 +903,46 @@ static nlohmann::json resolveExprHoverAtCursor(const Expression &expr,
                                                int character,
                                                int exprStartChar,
                                                const TemplateScope &scope,
-                                               const WorkspaceProject &project)
-{
+                                               const WorkspaceProject &project) {
     std::vector<std::pair<std::string, const Expression *>> chain;
     std::function<void(const Expression &)> build = [&](const Expression &e) {
-        if (auto *v = std::get_if<Variable>(&e))
+        if (auto *v = std::get_if<Variable>(&e)) {
             chain.push_back({v->name, &e});
-        else if (auto *fa = std::get_if<std::shared_ptr<FieldAccess>>(&e))
-            if (*fa) { build((*fa)->base); chain.push_back({(*fa)->field, &e}); }
+        } else if (auto *fa = std::get_if<std::shared_ptr<FieldAccess>>(&e)) {
+            if (*fa) {
+                build((*fa)->base);
+                chain.push_back({(*fa)->field, &e});
+            }
+        }
     };
     build(expr);
-    if (chain.empty())
+    if (chain.empty()) {
         return hoverForExpr(expr, scope, project);
+    }
 
     int col = exprStartChar;
-    for (size_t i = 0; i < chain.size(); ++i)
-    {
+    for (size_t i = 0; i < chain.size(); ++i) {
         const int segEnd = col + static_cast<int>(chain[i].first.size());
-        if (character >= col && character < segEnd)
-        {
-            if (i == 0)
+        if (character >= col && character < segEnd) {
+            if (i == 0) {
                 return hoverForExpr(*chain[i].second, scope, project);
+            }
 
             const auto *fa = std::get_if<std::shared_ptr<FieldAccess>>(chain[i].second);
-            if (!fa || !*fa)
+            if (!fa || !*fa) {
                 return nullptr;
+            }
 
             auto containerType = exprTypeRef((*fa)->base, scope, project);
-            if (!containerType)
+            if (!containerType) {
                 return nullptr;
+            }
 
             const std::string structName = typeRefNamedType(*containerType);
-            if (const auto *field = project.find_struct_field(structName, chain[i].first))
-            {
-                if (field->type)
+            if (const auto *field = project.find_struct_field(structName, chain[i].first)) {
+                if (field->type) {
                     return hoverForTypeKind(*field->type, field->doc);
+                }
             }
             return nullptr;
         }
@@ -932,56 +954,57 @@ static nlohmann::json resolveExprHoverAtCursor(const Expression &expr,
 
 nlohmann::json hoverAtPosition(const std::string &uri,
                                int line, int character,
-                               const WorkspaceProject &project)
-{
+                               const WorkspaceProject &project) {
     std::string src = project.getContent(uri);
 
-    if (project.isTypeUri(uri))
-    {
+    if (project.isTypeUri(uri)) {
         const std::string word = wordAtPos(src, line, character);
-        if (word.empty())
+        if (word.empty()) {
             return nullptr;
+        }
         return hoverForNamedType(word, project);
     }
 
     std::vector<ParsedTemplateSource> templates;
     parseTemplateSource(src, templates);
 
-    for (const auto &func : templates)
-    {
-        if (line == func.sourceRange.start.line)
-        {
+    for (const auto &func : templates) {
+        if (line == func.sourceRange.start.line) {
             const std::string word = wordAtPos(src, line, character);
-            if (word.empty())
+            if (word.empty()) {
                 return nullptr;
-            if (word == func.name)
+            }
+            if (word == func.name) {
                 return hoverJson(markdownBlock(functionSignature(func), func.doc));
+            }
 
             auto typeHover = hoverForNamedType(word, project);
-            if (!typeHover.is_null())
+            if (!typeHover.is_null()) {
                 return typeHover;
+            }
 
-            for (const auto &param : func.params)
-            {
-                if (param.name == word)
+            for (const auto &param : func.params) {
+                if (param.name == word) {
                     return hoverForTypeRef(param.type);
+                }
             }
 
             return nullptr;
         }
 
         TemplateScope scope;
-        for (const auto &param : func.params)
-        {
+        for (const auto &param : func.params) {
             std::string typeName = typeRefNamedType(param.type);
-            if (!typeName.empty())
+            if (!typeName.empty()) {
                 scope.paramTypes[param.name] = typeName;
+            }
             scope.varTypes[param.name] = param.type;
         }
 
         auto result = hoverWalkNodes(func.body, line, character, scope, project, uri);
-        if (!result.is_null())
+        if (!result.is_null()) {
             return result;
+        }
     }
 
     return nullptr;
