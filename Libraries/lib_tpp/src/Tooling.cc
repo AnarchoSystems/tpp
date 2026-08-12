@@ -397,7 +397,7 @@ std::vector<TypeSourceSemanticSpan> classifyTypeSourceTokens(const std::vector<T
         if (token.kind == TypeSourceTokenKind::Eof)
             break;
 
-        TypeSourceSemanticKind kind;
+        TypeSourceSemanticKind kind = TypeSourceSemanticKind::Keyword;
         bool emit = true;
 
         switch (token.kind)
