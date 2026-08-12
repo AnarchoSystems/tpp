@@ -355,7 +355,12 @@ static nlohmann::json to_render_cpp_functions_input(const tpp::IR &iRep,
     }
 
     nlohmann::json ns = namespaceName.empty() ? nlohmann::json() : nlohmann::json(namespaceName);
-    return nlohmann::json::array({functions, nlohmann::json(includes), ns, ""});
+    nlohmann::json result = nlohmann::json::array();
+    result.push_back(std::move(functions));
+    result.push_back(includes);
+    result.push_back(std::move(ns));
+    result.push_back("");
+    return result;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
