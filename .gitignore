@@ -21,6 +21,7 @@ install_manifest.txt
 vscode-extension/out/
 vscode-extension/node_modules/
 vscode-extension/*.vsix
+vscode-extension/resources/lsp/
 
 # dev
 tmp/

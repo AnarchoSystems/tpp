@@ -13,8 +13,68 @@ import { findTppConfigs } from './configScanner';
 
 let client: LanguageClient | undefined;
 let outputChannel: vscode.OutputChannel | undefined;
-const DEFAULT_LSP_PATH = 'build/bin/tpp-lsp';
+const DEFAULT_LSP_PATH = '';
 type PreviewMode = 'editor' | 'webview';
+
+function getBundledLanguageServerPlatformCandidates(): string[] {
+  return [
+    `${process.platform}-${process.arch}`,
+    process.platform
+  ];
+}
+
+function getLanguageServerBinaryName(): string {
+  return process.platform === 'win32' ? 'tpp-lsp.exe' : 'tpp-lsp';
+}
+
+function getBundledLanguageServerCandidates(context: vscode.ExtensionContext): string[] {
+  const binaryName = getLanguageServerBinaryName();
+  return getBundledLanguageServerPlatformCandidates().map(platformFolder =>
+    context.asAbsolutePath(path.join('resources', 'lsp', platformFolder, binaryName))
+  );
+}
+
+function resolveWorkspaceRelativePath(candidatePath: string): string {
+  if (path.isAbsolute(candidatePath)) {
+    return candidatePath;
+  }
+
+  const workspaceFolders = vscode.workspace.workspaceFolders;
+  if (workspaceFolders && workspaceFolders.length > 0) {
+    return path.join(workspaceFolders[0].uri.fsPath, candidatePath);
+  }
+
+  return path.resolve(candidatePath);
+}
+
+function resolveLanguageServerPath(context: vscode.ExtensionContext): { path: string; source: string } | null {
+  const config = vscode.workspace.getConfiguration('tpp');
+  const configuredLspPath = config.get<string>('lspServerPath')?.trim();
+  const explicitPath = configuredLspPath && configuredLspPath.length > 0
+    ? resolveWorkspaceRelativePath(configuredLspPath)
+    : undefined;
+
+  const candidates: Array<{ path: string; source: string }> = [];
+
+  if (explicitPath) {
+    candidates.push({ path: explicitPath, source: 'configured setting' });
+  }
+
+  for (const bundledPath of getBundledLanguageServerCandidates(context)) {
+    candidates.push({ path: bundledPath, source: 'bundled extension asset' });
+  }
+
+  const workspaceBinaryPath = resolveWorkspaceRelativePath(path.join('build', 'bin', getLanguageServerBinaryName()));
+  candidates.push({ path: workspaceBinaryPath, source: 'workspace build output' });
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate.path)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
 
 function getCurrentPreviewMode(): PreviewMode {
   const configuredMode = vscode.workspace.getConfiguration('tpp').get<string>('previewMode');
@@ -43,31 +103,22 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   outputChannel.appendLine('[tpp] Extension activating...');
 
   // ── Resolve LSP binary path ────────────────────────────────────────────────
-  const config = vscode.workspace.getConfiguration('tpp');
-  const configuredLspPath = config.get<string>('lspServerPath');
-  let lspPath = configuredLspPath?.trim() || DEFAULT_LSP_PATH;
-
-  if (!lspPath) {
-    lspPath = DEFAULT_LSP_PATH;
-  }
-
- if (!path.isAbsolute(lspPath)) {
-    // Workspace-relative
-    const folders = vscode.workspace.workspaceFolders;
-    if (folders && folders.length > 0) {
-      lspPath = path.join(folders[0].uri.fsPath, lspPath);
-    }
-  }
-
-  outputChannel!.appendLine(`[tpp] LSP binary path: ${lspPath}`);
-
-  if (!fs.existsSync(lspPath)) {
-    outputChannel!.appendLine('[tpp] ERROR: LSP binary not found.');
+  const resolvedLanguageServer = resolveLanguageServerPath(context);
+  if (!resolvedLanguageServer) {
+    const bundledCandidates = getBundledLanguageServerCandidates(context).join(', ');
+    const workspaceBinaryPath = resolveWorkspaceRelativePath(path.join('build', 'bin', getLanguageServerBinaryName()));
+    outputChannel!.appendLine('[tpp] ERROR: No language server binary found.');
+    outputChannel!.appendLine(`[tpp] Checked bundled paths: ${bundledCandidates}`);
+    outputChannel!.appendLine(`[tpp] Checked workspace path: ${workspaceBinaryPath}`);
     vscode.window.showWarningMessage(
-      `tpp: LSP binary not found at "${lspPath}". Build tpp-lsp or override the "tpp.lspServerPath" setting.`
+      'tpp: No language server binary was found. Install a packaged extension build or build tpp-lsp in the workspace.'
     );
     return;
   }
+
+  const lspPath = resolvedLanguageServer.path;
+  outputChannel!.appendLine(`[tpp] LSP binary path: ${lspPath}`);
+  outputChannel!.appendLine(`[tpp] LSP source: ${resolvedLanguageServer.source}`);
 
   // ── Start Language Client ─────────────────────────────────────────────────
   const serverOptions: ServerOptions = {

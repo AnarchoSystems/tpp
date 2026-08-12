@@ -1,0 +1,299 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+AVAILABLE_TARGETS=(
+  tpp
+  tpp2cpp
+  tpp2java
+  tpp2swift
+  render-tpp
+  tpp-lsp
+)
+
+usage() {
+  cat <<'EOF'
+Usage:
+  get-tpp -o <output> <target> [target...]
+  get-tpp -o <output> all
+
+Targets:
+  tpp, tpp2cpp, tpp2java, tpp2swift, render-tpp, tpp-lsp
+
+Notes:
+  - Use a directory with multiple targets.
+  - With a single target, -o may be either a directory or a file path.
+  - If no matching release artifact exists for the current OS/arch, the
+    script pulls the repo and builds the requested targets from source.
+EOF
+}
+
+die() {
+  printf 'get-tpp: %s\n' "$*" >&2
+  exit 1
+}
+
+is_dir_like() {
+  [[ -d "$1" || "$1" == */ ]]
+}
+
+normalize_os() {
+  case "$(uname -s)" in
+    Linux*) printf 'linux' ;;
+    Darwin*) printf 'darwin' ;;
+    MINGW*|MSYS*|CYGWIN*|Windows_NT) printf 'win32' ;;
+    *) printf '%s' "$(uname -s | tr '[:upper:]' '[:lower:]')" ;;
+  esac
+}
+
+normalize_arch() {
+  case "$(uname -m)" in
+    x86_64|amd64) printf 'x64' ;;
+    arm64|aarch64) printf 'arm64' ;;
+    *) printf '%s' "$(uname -m | tr '[:upper:]' '[:lower:]')" ;;
+  esac
+}
+
+repo_slug() {
+  local origin_url
+  origin_url=$(git remote get-url origin 2>/dev/null) || return 1
+  case "$origin_url" in
+    git@github.com:*) printf '%s' "${origin_url#git@github.com:}" | sed 's#\.git$##' ;;
+    https://github.com/*) printf '%s' "${origin_url#https://github.com/}" | sed 's#\.git$##' ;;
+    http://github.com/*) printf '%s' "${origin_url#http://github.com/}" | sed 's#\.git$##' ;;
+    *) return 1 ;;
+  esac
+}
+
+latest_release_tag() {
+  local repo="$1"
+  curl -fsSL "https://api.github.com/repos/${repo}/releases/latest" \
+    | sed -n 's/^[[:space:]]*"tag_name": "\([^"]*\)".*/\1/p' \
+    | head -n1
+}
+
+release_asset_url() {
+  local repo="$1"
+  local tag="$2"
+  local target="$3"
+  local os_name="$4"
+  local arch_name="$5"
+  printf 'https://github.com/%s/releases/download/%s/%s-%s-%s.tar.gz' "$repo" "$tag" "$target" "$os_name" "$arch_name"
+}
+
+validate_targets() {
+  local target
+  for target in "$@"; do
+    local ok=false
+    for available in "${AVAILABLE_TARGETS[@]}"; do
+      if [[ "$target" == "$available" ]]; then
+        ok=true
+        break
+      fi
+    done
+    if [[ "$ok" == false ]]; then
+      die "unknown target '$target'"
+    fi
+  done
+}
+
+download_release_artifact() {
+  local url="$1"
+  local destination="$2"
+  curl -fL --retry 2 --retry-delay 1 -o "$destination" "$url"
+}
+
+extract_single_binary() {
+  local archive="$1"
+  local destination="$2"
+  local temp_dir
+  temp_dir=$(mktemp -d)
+  tar -xzf "$archive" -C "$temp_dir"
+
+  local extracted
+  extracted=$(find "$temp_dir" -maxdepth 1 -type f | head -n1)
+  [[ -n "$extracted" ]] || die "archive '$archive' did not contain a binary"
+  mkdir -p "$(dirname "$destination")"
+  cp "$extracted" "$destination"
+  chmod +x "$destination"
+  rm -rf "$temp_dir"
+}
+
+copy_binary_to_dir() {
+  local archive="$1"
+  local output_dir="$2"
+  local temp_dir
+  temp_dir=$(mktemp -d)
+  tar -xzf "$archive" -C "$temp_dir"
+
+  local extracted
+  extracted=$(find "$temp_dir" -maxdepth 1 -type f | head -n1)
+  [[ -n "$extracted" ]] || die "archive '$archive' did not contain a binary"
+  mkdir -p "$output_dir"
+  cp "$extracted" "$output_dir/"
+  chmod +x "$output_dir/$(basename "$extracted")"
+  rm -rf "$temp_dir"
+}
+
+build_from_source() {
+  local -a targets=("$@")
+
+  if command -v git >/dev/null 2>&1; then
+    git pull --ff-only || true
+  fi
+}
+
+main() {
+  local output_path=""
+  local -a requested_targets=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -o)
+        [[ $# -ge 2 ]] || die "-o requires a path"
+        output_path="$2"
+        shift 2
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      --)
+        shift
+        break
+        ;;
+      -*)
+        die "unknown option '$1'"
+        ;;
+      *)
+        requested_targets+=("$1")
+        shift
+        ;;
+    esac
+  done
+
+  while [[ $# -gt 0 ]]; do
+    requested_targets+=("$1")
+    shift
+  done
+
+  [[ -n "$output_path" ]] || die "missing -o output path"
+  [[ ${#requested_targets[@]} -gt 0 ]] || die "missing target name"
+
+  if [[ ${#requested_targets[@]} -eq 1 && ${requested_targets[0]} == all ]]; then
+    requested_targets=("${AVAILABLE_TARGETS[@]}")
+  fi
+
+  validate_targets "${requested_targets[@]}"
+
+  local os_name arch_name repo tag
+  os_name=$(normalize_os)
+  arch_name=$(normalize_arch)
+  repo=$(repo_slug) || repo=""
+  tag=""
+
+  if [[ -n "$repo" ]]; then
+    tag=$(latest_release_tag "$repo" || true)
+  fi
+
+  local use_release=true
+  local -a release_urls=()
+  local target
+  if [[ -n "$tag" ]]; then
+    for target in "${requested_targets[@]}"; do
+      local url
+      url=$(release_asset_url "$repo" "$tag" "$target" "$os_name" "$arch_name")
+      if curl -fsI "$url" >/dev/null 2>&1; then
+        release_urls+=("$url")
+      else
+        use_release=false
+        break
+      fi
+    done
+  else
+    use_release=false
+  fi
+
+  if [[ "$use_release" == true ]]; then
+    local temp_dir
+    temp_dir=$(mktemp -d)
+    trap 'rm -rf "$temp_dir"' EXIT
+
+    if [[ ${#requested_targets[@]} -eq 1 ]]; then
+      local archive_path="$temp_dir/${requested_targets[0]}.tar.gz"
+      download_release_artifact "${release_urls[0]}" "$archive_path"
+      if is_dir_like "$output_path"; then
+        copy_binary_to_dir "$archive_path" "$output_path"
+      else
+        extract_single_binary "$archive_path" "$output_path"
+      fi
+      printf 'downloaded %s from %s\n' "${requested_targets[0]}" "$tag"
+      return 0
+    fi
+
+    is_dir_like "$output_path" || die "multiple targets require -o to point to a directory"
+    mkdir -p "$output_path"
+
+    local index=0
+    for target in "${requested_targets[@]}"; do
+      local archive_path="$temp_dir/${target}.tar.gz"
+      download_release_artifact "${release_urls[$index]}" "$archive_path"
+      copy_binary_to_dir "$archive_path" "$output_path"
+      index=$((index + 1))
+    done
+
+    printf 'downloaded %d targets from %s\n' "${#requested_targets[@]}" "$tag"
+    return 0
+  fi
+
+  printf 'no matching release artifacts found for %s/%s; building from source\n' "$os_name" "$arch_name" >&2
+  local build_dir
+  build_dir=$(mktemp -d)
+  trap 'rm -rf "$build_dir"' EXIT
+  build_from_source "${requested_targets[@]}"
+  cmake -S . -B "$build_dir" -DCMAKE_BUILD_TYPE=Release
+  cmake --build "$build_dir" --config Release --target "${requested_targets[@]}" --parallel
+
+  local build_output
+  build_output="$build_dir/bin"
+
+  if [[ ${#requested_targets[@]} -eq 1 ]]; then
+    local binary_name="${requested_targets[0]}"
+    if [[ "$os_name" == win32 ]]; then
+      binary_name+='.exe'
+    fi
+    local source_path="$build_output/$binary_name"
+    [[ -f "$source_path" ]] || die "built binary not found at $source_path"
+    local destination_path
+    if is_dir_like "$output_path"; then
+      mkdir -p "$output_path"
+      destination_path="$output_path/$binary_name"
+    else
+      mkdir -p "$(dirname "$output_path")"
+      destination_path="$output_path"
+    fi
+    cp "$source_path" "$destination_path"
+    chmod +x "$destination_path"
+    rm -rf "$build_dir"
+    trap - EXIT
+    return 0
+  fi
+
+  is_dir_like "$output_path" || die "multiple targets require -o to point to a directory"
+  mkdir -p "$output_path"
+  local built_target source_path output_name
+  for built_target in "${requested_targets[@]}"; do
+    output_name="$built_target"
+    if [[ "$os_name" == win32 ]]; then
+      output_name+='.exe'
+    fi
+    source_path="$build_output/$output_name"
+    [[ -f "$source_path" ]] || die "built binary not found at $source_path"
+    cp "$source_path" "$output_path/"
+    chmod +x "$output_path/$output_name"
+  done
+
+  rm -rf "$build_dir"
+  trap - EXIT
+}
+
+main "$@"

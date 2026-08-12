@@ -1,0 +1,149 @@
+name: Release VS Code Extension
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-lsp:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            platform: linux
+            arch: x64
+          - runner: ubuntu-24.04-arm
+            platform: linux
+            arch: arm64
+          - runner: macos-13
+            platform: darwin
+            arch: x64
+          - runner: macos-latest
+            platform: darwin
+            arch: arm64
+          - runner: windows-latest
+            platform: win32
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        shell: bash
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build tpp-lsp
+        shell: bash
+        run: cmake --build build --config Release --target tpp-lsp --parallel
+
+      - name: Package tpp-lsp
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-artifacts
+          binary_name=tpp-lsp
+          if [ "${{ matrix.platform }}" = "win32" ]; then
+            binary_name=tpp-lsp.exe
+          fi
+
+          tar -czf "release-artifacts/tpp-lsp-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz" -C build/bin "${binary_name}"
+
+      - name: Upload tpp-lsp artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tpp-lsp-${{ matrix.platform }}-${{ matrix.arch }}
+          path: release-artifacts/*.tar.gz
+
+  package-extension:
+    needs: build-lsp
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: vscode-extension/package-lock.json
+
+      - name: Download LSP artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: Stage bundled LSP binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p vscode-extension/resources/lsp
+
+          find release-artifacts -name '*.tar.gz' -print0 | while IFS= read -r -d '' archive; do
+            base_name=$(basename "$archive" .tar.gz)
+            platform_name=${base_name#tpp-lsp-}
+            target_dir="vscode-extension/resources/lsp/${platform_name}"
+            mkdir -p "$target_dir"
+            tar -xzf "$archive" -C "$target_dir"
+          done
+
+      - name: Install extension dependencies
+        working-directory: vscode-extension
+        run: npm ci
+
+      - name: Package VS Code extension
+        working-directory: vscode-extension
+        run: npm run package-release
+
+      - name: Upload VS Code extension artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vscode-extension
+          path: vscode-extension/*.vsix
+
+  publish-release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: package-extension
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Collect extension artifact
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/**/*.vsix
+
+  # publish-marketplace:
+  #   if: startsWith(github.ref, 'refs/tags/v')
+  #   needs: package-extension
+  #   runs-on: ubuntu-latest
+  #
+  #   steps:
+  #     - name: Collect extension artifact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         path: release-assets
+  #         merge-multiple: true
+  #
+  #     - name: Publish to VS Code Marketplace
+  #       env:
+  #         VSCE_PAT: ${{ secrets.VSCE_PAT }}
+  #       run: |
+  #         set -euo pipefail
+  #         if [ -z "${VSCE_PAT:-}" ]; then
+  #           echo "VSCE_PAT is not configured; skipping Marketplace publish."
+  #           exit 0
+  #         fi
+  #
+  #         npx @vscode/vsce publish --packagePath release-assets/**/*.vsix -p "$VSCE_PAT"

@@ -1,16 +1,29 @@
 {
   "name": "tpp-language-support",
+  "publisher": "AnarchoSystems",
   "displayName": "tpp Template Language Support",
-  "description": "Language support for tpp template files (.tpp) with LSP backend.",
+  "description": "Language support for tpp template files with bundled language-server binaries, render previews, and tpp-config schema validation.",
   "version": "0.13.0",
   "author": "AnarchoSystems",
+  "license": "SEE LICENSE IN ../LICENSE",
   "engines": {
     "vscode": "^1.85.0"
   },
+  "keywords": [
+    "tpp",
+    "template",
+    "code-generation",
+    "language-server",
+    "schema"
+  ],
   "categories": [
     "Programming Languages",
     "Other"
   ],
+  "galleryBanner": {
+    "color": "#1d3557",
+    "theme": "dark"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/AnarchoSystems/tpp.git"
@@ -63,8 +76,8 @@
       "properties": {
         "tpp.lspServerPath": {
           "type": "string",
-          "default": "build/bin/tpp-lsp",
-          "description": "Path to the tpp-lsp binary. Defaults to build/bin/tpp-lsp relative to the workspace root. Override it if your language server binary lives elsewhere. Build it with: cmake -S . -B build && cmake --build build --target tpp-lsp"
+          "default": "",
+          "description": "Optional path to a custom tpp-lsp binary. Leave it empty to use the bundled language server for the current platform when available, then fall back to the workspace build output. Build it with: cmake -S . -B build && cmake --build build --target tpp-lsp"
         },
         "tpp.trace.server": {
           "type": "string",
@@ -89,12 +102,13 @@
     }
   },
   "scripts": {
-    "build-lsp": "bash scripts/build-lsp.sh",
+    "build-lsp": "node scripts/build-lsp.mjs",
     "sync-version": "node scripts/sync-version.mjs",
     "compile": "esbuild src/extension.ts --bundle --minify --outfile=out/extension.js --external:vscode --format=cjs --platform=node",
     "typecheck": "tsc --noEmit -p .",
     "watch": "npm run compile -- --watch",
-    "package": "npm run sync-version && npm run compile && echo y | vsce package --no-dependencies"
+    "package": "npm run sync-version && npm run compile && npm run build-lsp && echo y | vsce package --no-dependencies",
+    "package-release": "npm run sync-version && npm run compile && echo y | vsce package --no-dependencies"
   },
   "dependencies": {
     "highlight.js": "^11.11.1",
