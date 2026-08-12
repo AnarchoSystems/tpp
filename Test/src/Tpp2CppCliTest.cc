@@ -22,7 +22,12 @@ TEST(Tpp2CppCliTest, EmitsDocCommentsInTypesAndFunctions)
 {
     const auto projectPath = fixtureProjectPath();
 
-    auto typesOutput = runCommand(std::string(TPP_EXE) + " '" + projectPath + "' | " + TPP2CPP_EXE + " types 2>&1");
+    const auto compileOutput = runCommandDirect({TPP_EXE, projectPath});
+    ASSERT_TRUE(compileOutput.success)
+        << "Output: " << compileOutput.output
+        << "\nDiagnostics: " << nlohmann::json(compileOutput.diagnostics).dump(2);
+
+    auto typesOutput = runCommandDirect({TPP2CPP_EXE, "types"}, compileOutput.output);
     ASSERT_TRUE(typesOutput.success)
         << "Output: " << typesOutput.output
         << "\nDiagnostics: " << nlohmann::json(typesOutput.diagnostics).dump(2);
@@ -31,7 +36,7 @@ TEST(Tpp2CppCliTest, EmitsDocCommentsInTypesAndFunctions)
     EXPECT_NE(typesOutput.output.find("    /**\n    The person's full name.\n     */\n    std::string name;"), std::string::npos);
     EXPECT_NE(typesOutput.output.find("    /**\n    The person's age in years.\n     */\n    int age;"), std::string::npos);
 
-    auto functionsOutput = runCommand(std::string(TPP_EXE) + " '" + projectPath + "' | " + TPP2CPP_EXE + " functions 2>&1");
+    auto functionsOutput = runCommandDirect({TPP2CPP_EXE, "functions"}, compileOutput.output);
     ASSERT_TRUE(functionsOutput.success)
         << "Output: " << functionsOutput.output
         << "\nDiagnostics: " << nlohmann::json(functionsOutput.diagnostics).dump(2);
@@ -43,7 +48,12 @@ TEST(Tpp2CppCliTest, FunctionsHandlesMakeJavaTestFixture)
 {
     const auto projectPath = makeJavaTestProjectPath();
 
-    auto functionsOutput = runCommand(std::string(TPP_EXE) + " '" + projectPath + "' | " + TPP2CPP_EXE + " functions 2>&1");
+    const auto compileOutput = runCommandDirect({TPP_EXE, projectPath});
+    ASSERT_TRUE(compileOutput.success)
+        << "Output: " << compileOutput.output
+        << "\nDiagnostics: " << nlohmann::json(compileOutput.diagnostics).dump(2);
+
+    auto functionsOutput = runCommandDirect({TPP2CPP_EXE, "functions"}, compileOutput.output);
     ASSERT_TRUE(functionsOutput.success)
         << "Output: " << functionsOutput.output
         << "\nDiagnostics: " << nlohmann::json(functionsOutput.diagnostics).dump(2);
