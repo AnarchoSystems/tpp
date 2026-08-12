@@ -11,7 +11,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+          - macos-13
+          - macos-latest
+          - windows-latest
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -29,9 +34,14 @@ jobs:
           swift-version: '5.10'
 
       - name: Show toolchain versions
+        shell: bash
         run: |
           java -version
-          swift --version
+          if command -v swift >/dev/null 2>&1; then
+            swift --version
+          else
+            echo "swift not installed on this runner"
+          fi
 
       - name: Configure
         run: cmake -B build -DCMAKE_BUILD_TYPE=Debug
