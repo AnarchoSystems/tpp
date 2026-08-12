@@ -10,7 +10,7 @@ TEST(static_tests, @defs.testName@_compiled)
     @for input in defs.inputs | enumerator=idx sep="\n"@
     @input.type@ input@idx@ = nlohmann::json::parse(R"_(@input.value@)_").get<@input.type@>();
     @end for@
-    auto output = @defs.testName@::main(@for input in defs.inputs | enumerator=idx sep=", "@input@idx@ /* @input.type@ */@end for@);
+    auto output = @defs.testName@::main(@for input in defs.inputs | enumerator=idx sep=", "@input@idx@@end for@);
     EXPECT_EQ(output, @defs.expectedOutput@);
 }
 
