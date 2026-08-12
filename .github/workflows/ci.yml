@@ -19,7 +19,7 @@ jobs:
           - windows-latest
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Java
         uses: actions/setup-java@v5
@@ -74,7 +74,7 @@ jobs:
         if: runner.os != 'Windows'
         run: cmake --build build --parallel
 
-      - name: Build (Windows, concise diagnostics)
+      - name: Build (Windows, verbose diagnostics)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -82,19 +82,11 @@ jobs:
           $parallelLog = 'build/windows-build-parallel.log'
           $serialLog = 'build/windows-build-serial.log'
 
-          cmake --build build --config Debug --parallel *>&1 | Tee-Object -FilePath $parallelLog
+          cmake --build build --config Debug --parallel -- /v:detailed *>&1 | Tee-Object -FilePath $parallelLog
           if ($LASTEXITCODE -ne 0) {
-            Write-Host 'Parallel build failed; retrying serialized with minimal MSBuild verbosity...'
-            cmake --build build --config Debug -- /m:1 /v:minimal *>&1 | Tee-Object -FilePath $serialLog
+            Write-Host 'Parallel build failed; retrying serialized with detailed MSBuild verbosity...'
+            cmake --build build --config Debug -- /m:1 /v:detailed *>&1 | Tee-Object -FilePath $serialLog
             $buildExitCode = $LASTEXITCODE
-
-            Write-Host '--- Filtered compiler diagnostics ---'
-            $diag = Select-String -Path $serialLog -Pattern 'error C[0-9]{4}|warning C[0-9]{4}|fatal error|treated as an error|Build FAILED' -CaseSensitive:$false
-            if ($diag) {
-              $diag | ForEach-Object { $_.Line }
-            } else {
-              Write-Host 'No compiler diagnostics matched filter. See full log artifact/files.'
-            }
 
             exit $buildExitCode
           }
@@ -103,7 +95,7 @@ jobs:
         if: runner.os != 'Windows'
         run: cmake --build build --target build_all_tests --parallel
 
-      - name: Build Java & Swift tests (Windows, concise diagnostics)
+      - name: Build Java & Swift tests (Windows, verbose diagnostics)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -111,19 +103,11 @@ jobs:
           $parallelLog = 'build/windows-tests-build-parallel.log'
           $serialLog = 'build/windows-tests-build-serial.log'
 
-          cmake --build build --config Debug --target build_all_tests --parallel *>&1 | Tee-Object -FilePath $parallelLog
+          cmake --build build --config Debug --target build_all_tests --parallel -- /v:detailed *>&1 | Tee-Object -FilePath $parallelLog
           if ($LASTEXITCODE -ne 0) {
-            Write-Host 'Parallel test-target build failed; retrying serialized with minimal MSBuild verbosity...'
-            cmake --build build --config Debug --target build_all_tests -- /m:1 /v:minimal *>&1 | Tee-Object -FilePath $serialLog
+            Write-Host 'Parallel test-target build failed; retrying serialized with detailed MSBuild verbosity...'
+            cmake --build build --config Debug --target build_all_tests -- /m:1 /v:detailed *>&1 | Tee-Object -FilePath $serialLog
             $buildExitCode = $LASTEXITCODE
-
-            Write-Host '--- Filtered compiler diagnostics ---'
-            $diag = Select-String -Path $serialLog -Pattern 'error C[0-9]{4}|warning C[0-9]{4}|fatal error|treated as an error|Build FAILED' -CaseSensitive:$false
-            if ($diag) {
-              $diag | ForEach-Object { $_.Line }
-            } else {
-              Write-Host 'No compiler diagnostics matched filter. See full log artifact/files.'
-            }
 
             exit $buildExitCode
           }

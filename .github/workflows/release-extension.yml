@@ -39,7 +39,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Configure
         shell: bash
@@ -62,7 +62,7 @@ jobs:
           tar -czf "release-artifacts/tpp-lsp-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz" -C build/bin "${binary_name}"
 
       - name: Upload tpp-lsp artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: tpp-lsp-${{ matrix.platform }}-${{ matrix.arch }}
           path: release-artifacts/*.tar.gz
@@ -72,16 +72,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           cache-dependency-path: vscode-extension/package-lock.json
 
       - name: Download LSP artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           path: release-artifacts
 
@@ -108,7 +108,7 @@ jobs:
         run: npm run package-release
 
       - name: Upload VS Code extension artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: vscode-extension
           path: vscode-extension/*.vsix
@@ -120,7 +120,7 @@ jobs:
 
     steps:
       - name: Collect extension artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           path: release-assets
           merge-multiple: true
@@ -137,7 +137,7 @@ jobs:
   #
   #   steps:
   #     - name: Collect extension artifact
-  #       uses: actions/download-artifact@v4
+  #       uses: actions/download-artifact@v5
   #       with:
   #         path: release-assets
   #         merge-multiple: true
