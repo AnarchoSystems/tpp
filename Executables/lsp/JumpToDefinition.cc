@@ -516,7 +516,7 @@ static nlohmann::json resolveFieldLocation(const TypeRef &containerType,
 static nlohmann::json resolveExpr(const Expression &expr,
                                   const TemplateScope &scope,
                                   const WorkspaceProject &project,
-                                  const std::string &uri) {
+                                  const std::string &) {
     // Walk to root variable
     const Expression *cur = &expr;
     while (true) {

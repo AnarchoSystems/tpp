@@ -39,7 +39,7 @@ static nlohmann::json foldsForTypes(const WorkspaceProject &project) {
 }
 
 // ── .tpp fold ranges ──────────────────────────────────────────────────────────
-static nlohmann::json foldsForTemplate(const std::string &src, const WorkspaceProject &project) {
+static nlohmann::json foldsForTemplate(const std::string &src, const WorkspaceProject &) {
     nlohmann::json result = nlohmann::json::array();
     for (const auto &fold : computeTemplateFoldingRanges(src)) {
         result.push_back(makeRange(fold.startLine, fold.endLine, fold.kind));
