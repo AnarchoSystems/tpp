@@ -33,6 +33,39 @@ jobs:
         with:
           swift-version: '5.10'
 
+      - name: Install Swift (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $swiftVersion = '5.10'
+          $swiftUrl = "https://download.swift.org/swift-$swiftVersion-release/windows10/swift-$swiftVersion-RELEASE/swift-$swiftVersion-RELEASE-windows10.exe"
+          $installerPath = Join-Path $env:RUNNER_TEMP 'swift-installer.exe'
+          $swiftRoot = Join-Path $env:RUNNER_TEMP 'Swift'
+
+          Invoke-WebRequest -Uri $swiftUrl -OutFile $installerPath
+          Start-Process -FilePath $installerPath `
+            -ArgumentList '/passive', '/quiet', '/norestart', "InstallRoot=$swiftRoot" `
+            -Wait -NoNewWindow
+
+          $swiftBin = Get-ChildItem -Path (Join-Path $swiftRoot 'Toolchains') -Directory |
+            Sort-Object Name -Descending |
+            Select-Object -First 1 |
+            ForEach-Object { Join-Path $_.FullName 'usr/bin' }
+
+          if (-not $swiftBin) {
+            throw 'Swift install did not produce a toolchain directory.'
+          }
+
+          if (-not (Test-Path (Join-Path $swiftBin 'swift.exe'))) {
+            throw "Swift install did not produce swift.exe under $swiftBin."
+          }
+
+          if (-not (Test-Path (Join-Path $swiftBin 'swiftc.exe'))) {
+            throw "Swift install did not produce swiftc.exe under $swiftBin."
+          }
+
+          Add-Content -Path $env:GITHUB_PATH -Value $swiftBin
+
       - name: Install Swift (Ubuntu ARM)
         if: matrix.os == 'ubuntu-24.04-arm'
         shell: bash
