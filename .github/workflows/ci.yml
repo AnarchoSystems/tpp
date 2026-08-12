@@ -115,8 +115,8 @@ jobs:
         if: runner.os != 'Windows'
         run: ctest --parallel --progress --output-on-failure --test-dir build
 
-      - name: Test (Windows)
+      - name: Test (Windows - skipped pending POSIX harness portability)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Write-Host 'Skipping ctest on Windows: current C++ test harness depends on POSIX APIs.'
+          Write-Host 'Skipping ctest on Windows until POSIX-only test harness pieces are made portable.'
