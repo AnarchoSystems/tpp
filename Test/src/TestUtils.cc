@@ -2,14 +2,21 @@
 #include "TestCaseIO.h"
 #include <tpp/ProjectConfigResolver.h>
 
-#ifdef _WIN32
+#include <array>
+#include <cstring>
+
+#if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #else
-#include <sys/wait.h>
-#include <unistd.h>
 #include <fcntl.h>
 #include <spawn.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
+
+#if !defined(_WIN32)
+extern char **environ;
 #endif
 
 namespace tpp {
@@ -307,156 +314,336 @@ std::vector<LspHoverSpec> GetLspHoverSpecs() {
 }
 
 // ── CLI runner ────────────────────────────────────────────────────────────────
+namespace
+{
 
-#ifdef _WIN32
+std::string normalize_cli_text(std::string text)
+{
+    std::string normalized;
+    normalized.reserve(text.size());
 
-// Build a properly-quoted Windows command line from an argv-style array.
-// Follows the quoting rules understood by CommandLineToArgvW / the MSVC CRT.
-static std::string buildWindowsCmdLine(const char *const argv[]) {
-    std::string result;
-    for (int i = 0; argv[i] != nullptr; ++i) {
-        if (i > 0) {
-            result += ' ';
-        }
-        const char *arg = argv[i];
-        // Determine whether quoting is needed.
-        bool needsQuote = (arg[0] == '\0');
-        for (const char *p = arg; *p && !needsQuote; ++p) {
-            if (*p == ' ' || *p == '\t' || *p == '"') {
-                needsQuote = true;
+    for (size_t index = 0; index < text.size(); ++index) {
+        if (text[index] == '\r') {
+            if (index + 1 < text.size() && text[index + 1] == '\n') {
+                continue;
             }
+            normalized.push_back('\n');
+            continue;
         }
-        if (!needsQuote) {
-            result += arg;
-        } else {
-            result += '"';
-            for (const char *p = arg; ; ) {
-                size_t numBackslashes = 0;
-                while (*p == '\\') {
-                    ++numBackslashes;
-                    ++p;
-                }
-                if (*p == '\0') {
-                    // Backslashes at end of arg: double them before the closing quote.
-                    for (size_t k = 0; k < numBackslashes * 2; ++k) {
-                        result += '\\';
-                    }
-                    break;
-                }
-                if (*p == '"') {
-                    // Backslashes before a literal quote: double them, then escape the quote.
-                    for (size_t k = 0; k < numBackslashes * 2; ++k) {
-                        result += '\\';
-                    }
-                    result += "\\\"";
-                    ++p;
-                } else {
-                    for (size_t k = 0; k < numBackslashes; ++k) {
-                        result += '\\';
-                    }
-                    result += *p++;
-                }
-            }
-            result += '"';
-        }
+        normalized.push_back(text[index]);
     }
-    return result;
+
+    return normalized;
 }
 
-static tCLIOutput runCommandArgv(const char *const argv[], const std::string *stdinData = nullptr) {
-    std::string cmdLine = buildWindowsCmdLine(argv);
-
-    SECURITY_ATTRIBUTES sa{};
-    sa.nLength = sizeof(sa);
-    sa.bInheritHandle = TRUE;
-    sa.lpSecurityDescriptor = nullptr;
-
-    HANDLE hStdoutRead  = INVALID_HANDLE_VALUE;
-    HANDLE hStdoutWrite = INVALID_HANDLE_VALUE;
-    if (!CreatePipe(&hStdoutRead, &hStdoutWrite, &sa, 0)) {
-        throw std::runtime_error("CreatePipe() failed for stdout");
-    }
-    SetHandleInformation(hStdoutRead, HANDLE_FLAG_INHERIT, 0);
-
-    HANDLE hStdinRead  = INVALID_HANDLE_VALUE;
-    HANDLE hStdinWrite = INVALID_HANDLE_VALUE;
-    if (stdinData) {
-        if (!CreatePipe(&hStdinRead, &hStdinWrite, &sa, 0)) {
-            CloseHandle(hStdoutRead);
-            CloseHandle(hStdoutWrite);
-            throw std::runtime_error("CreatePipe() failed for stdin");
-        }
-        SetHandleInformation(hStdinWrite, HANDLE_FLAG_INHERIT, 0);
-    }
-
-    STARTUPINFOA si{};
-    si.cb        = sizeof(si);
-    si.dwFlags   = STARTF_USESTDHANDLES;
-    si.hStdInput  = stdinData ? hStdinRead : GetStdHandle(STD_INPUT_HANDLE);
-    si.hStdOutput = hStdoutWrite;
-    si.hStdError  = hStdoutWrite;
-
-    PROCESS_INFORMATION pi{};
-    BOOL ok = CreateProcessA(
-        nullptr, cmdLine.data(),
-        nullptr, nullptr,
-        TRUE, 0, nullptr, nullptr,
-        &si, &pi);
-
-    CloseHandle(hStdoutWrite);
-    if (stdinData) {
-        CloseHandle(hStdinRead);
-    }
-
-    if (!ok) {
-        CloseHandle(hStdoutRead);
-        if (stdinData) {
-            CloseHandle(hStdinWrite);
-        }
-        throw std::runtime_error("CreateProcess() failed");
-    }
-
-    if (stdinData && !stdinData->empty()) {
-        DWORD written = 0;
-        WriteFile(hStdinWrite, stdinData->data(),
-                  static_cast<DWORD>(stdinData->size()), &written, nullptr);
-    }
-    if (stdinData) {
-        CloseHandle(hStdinWrite);
-    }
-
-    std::string result;
-    {
-        char buf[4096];
-        DWORD bytesRead = 0;
-        while (ReadFile(hStdoutRead, buf, sizeof(buf), &bytesRead, nullptr) && bytesRead > 0) {
-            result.append(buf, bytesRead);
-        }
-    }
-    CloseHandle(hStdoutRead);
-
-    WaitForSingleObject(pi.hProcess, INFINITE);
-    DWORD exitCode = 0;
-    GetExitCodeProcess(pi.hProcess, &exitCode);
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
+tCLIOutput make_cli_output(int exitCode, std::string result)
+{
+    result = normalize_cli_text(std::move(result));
 
     tCLIOutput output;
     if (exitCode == 0) {
         output.success = true;
-        output.output  = result;
-    } else {
-        output.success = false;
-        std::istringstream iss(result);
-        std::string line;
-        while (std::getline(iss, line)) {
-            output.diagnostics.push_back(line);
-        }
+        output.output = std::move(result);
+        return output;
+    }
+
+    output.success = false;
+    std::istringstream iss(result);
+    std::string line;
+    while (std::getline(iss, line)) {
+        output.diagnostics.push_back(line);
     }
     return output;
 }
 
-#else // POSIX
+#if defined(_WIN32)
+
+std::wstring widen(const std::string &value)
+{
+    if (value.empty()) {
+        return {};
+    }
+
+    const int required = MultiByteToWideChar(CP_UTF8, 0, value.c_str(),
+                                             static_cast<int>(value.size()),
+                                             nullptr, 0);
+    if (required <= 0) {
+        throw std::runtime_error("MultiByteToWideChar() failed");
+    }
+
+    std::wstring result(static_cast<size_t>(required), L'\0');
+    const int converted = MultiByteToWideChar(CP_UTF8, 0, value.c_str(),
+                                              static_cast<int>(value.size()),
+                                              result.data(), required);
+    if (converted != required) {
+        throw std::runtime_error("MultiByteToWideChar() produced incomplete output");
+    }
+
+    return result;
+}
+
+std::string format_windows_error(const std::string &context, DWORD errorCode)
+{
+    LPWSTR rawMessage = nullptr;
+    const DWORD size = FormatMessageW(
+        FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+        nullptr,
+        errorCode,
+        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+        reinterpret_cast<LPWSTR>(&rawMessage),
+        0,
+        nullptr);
+
+    std::string message = context + " (error " + std::to_string(errorCode) + ")";
+    if (size == 0 || rawMessage == nullptr) {
+        return message;
+    }
+
+    std::wstring wideMessage(rawMessage, rawMessage + size);
+    LocalFree(rawMessage);
+
+    while (!wideMessage.empty() &&
+           (wideMessage.back() == L'\r' || wideMessage.back() == L'\n' || wideMessage.back() == L' ')) {
+        wideMessage.pop_back();
+    }
+
+    const int utf8Size = WideCharToMultiByte(CP_UTF8, 0, wideMessage.c_str(),
+                                             static_cast<int>(wideMessage.size()),
+                                             nullptr, 0, nullptr, nullptr);
+    if (utf8Size <= 0) {
+        return message;
+    }
+
+    std::string utf8Message(static_cast<size_t>(utf8Size), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, wideMessage.c_str(),
+                        static_cast<int>(wideMessage.size()),
+                        utf8Message.data(), utf8Size, nullptr, nullptr);
+    return message + ": " + utf8Message;
+}
+
+std::wstring quote_windows_arg(const std::string &arg)
+{
+    const std::wstring wideArg = widen(arg);
+    const bool needsQuotes = wideArg.empty() ||
+                             wideArg.find_first_of(L" \t\n\v\"") != std::wstring::npos;
+    if (!needsQuotes) {
+        return wideArg;
+    }
+
+    std::wstring quoted = L"\"";
+    size_t backslashCount = 0;
+    for (wchar_t ch : wideArg) {
+        if (ch == L'\\') {
+            ++backslashCount;
+            continue;
+        }
+
+        if (ch == L'"') {
+            quoted.append(backslashCount * 2 + 1, L'\\');
+            quoted.push_back(L'"');
+            backslashCount = 0;
+            continue;
+        }
+
+        quoted.append(backslashCount, L'\\');
+        backslashCount = 0;
+        quoted.push_back(ch);
+    }
+
+    quoted.append(backslashCount * 2, L'\\');
+    quoted.push_back(L'"');
+    return quoted;
+}
+
+std::wstring build_windows_command_line(const std::vector<std::string> &args)
+{
+    std::wstring commandLine;
+    for (size_t index = 0; index < args.size(); ++index) {
+        if (index > 0) {
+            commandLine.push_back(L' ');
+        }
+        commandLine += quote_windows_arg(args[index]);
+    }
+    return commandLine;
+}
+
+class ScopedHandle
+{
+  public:
+    ScopedHandle() = default;
+
+    explicit ScopedHandle(HANDLE handle)
+        : handle_(handle)
+    {
+    }
+
+    ~ScopedHandle()
+    {
+        reset();
+    }
+
+    ScopedHandle(const ScopedHandle &) = delete;
+    ScopedHandle &operator=(const ScopedHandle &) = delete;
+
+    ScopedHandle(ScopedHandle &&other) noexcept
+        : handle_(other.release())
+    {
+    }
+
+    ScopedHandle &operator=(ScopedHandle &&other) noexcept
+    {
+        if (this != &other) {
+            reset(other.release());
+        }
+        return *this;
+    }
+
+    HANDLE get() const
+    {
+        return handle_;
+    }
+
+    HANDLE release()
+    {
+        HANDLE released = handle_;
+        handle_ = nullptr;
+        return released;
+    }
+
+    void reset(HANDLE handle = nullptr)
+    {
+        if (handle_ != nullptr && handle_ != INVALID_HANDLE_VALUE) {
+            CloseHandle(handle_);
+        }
+        handle_ = handle;
+    }
+
+  private:
+    HANDLE handle_ = nullptr;
+};
+
+tCLIOutput run_command_windows(const std::vector<std::string> &args,
+                               const std::string *stdinData = nullptr)
+{
+    SECURITY_ATTRIBUTES securityAttributes = {};
+    securityAttributes.nLength = sizeof(securityAttributes);
+    securityAttributes.bInheritHandle = TRUE;
+
+    HANDLE stdoutReadRaw = nullptr;
+    HANDLE stdoutWriteRaw = nullptr;
+    if (!CreatePipe(&stdoutReadRaw, &stdoutWriteRaw, &securityAttributes, 0)) {
+        throw std::runtime_error(format_windows_error("CreatePipe(stdout) failed", GetLastError()));
+    }
+    ScopedHandle stdoutRead(stdoutReadRaw);
+    ScopedHandle stdoutWrite(stdoutWriteRaw);
+    if (!SetHandleInformation(stdoutRead.get(), HANDLE_FLAG_INHERIT, 0)) {
+        throw std::runtime_error(format_windows_error("SetHandleInformation(stdoutRead) failed", GetLastError()));
+    }
+
+    ScopedHandle stdinRead;
+    ScopedHandle stdinWrite;
+    if (stdinData != nullptr) {
+        HANDLE stdinReadRaw = nullptr;
+        HANDLE stdinWriteRaw = nullptr;
+        if (!CreatePipe(&stdinReadRaw, &stdinWriteRaw, &securityAttributes, 0)) {
+            throw std::runtime_error(format_windows_error("CreatePipe(stdin) failed", GetLastError()));
+        }
+        stdinRead.reset(stdinReadRaw);
+        stdinWrite.reset(stdinWriteRaw);
+        if (!SetHandleInformation(stdinWrite.get(), HANDLE_FLAG_INHERIT, 0)) {
+            throw std::runtime_error(format_windows_error("SetHandleInformation(stdinWrite) failed", GetLastError()));
+        }
+    }
+
+    ScopedHandle nullInput(CreateFileW(L"NUL", GENERIC_READ,
+                                       FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                       nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
+    if (nullInput.get() == INVALID_HANDLE_VALUE) {
+        throw std::runtime_error(format_windows_error("CreateFileW(NUL) failed", GetLastError()));
+    }
+
+    STARTUPINFOW startupInfo = {};
+    startupInfo.cb = sizeof(startupInfo);
+    startupInfo.dwFlags = STARTF_USESTDHANDLES;
+    startupInfo.hStdInput = stdinRead.get() != nullptr ? stdinRead.get() : nullInput.get();
+    startupInfo.hStdOutput = stdoutWrite.get();
+    startupInfo.hStdError = stdoutWrite.get();
+
+    PROCESS_INFORMATION processInfo = {};
+    std::wstring commandLine = build_windows_command_line(args);
+    std::vector<wchar_t> mutableCommandLine(commandLine.begin(), commandLine.end());
+    mutableCommandLine.push_back(L'\0');
+
+    const BOOL created = CreateProcessW(nullptr,
+                                        mutableCommandLine.data(),
+                                        nullptr,
+                                        nullptr,
+                                        TRUE,
+                                        0,
+                                        nullptr,
+                                        nullptr,
+                                        &startupInfo,
+                                        &processInfo);
+    if (!created) {
+        throw std::runtime_error(format_windows_error("CreateProcessW() failed", GetLastError()));
+    }
+
+    ScopedHandle process(processInfo.hProcess);
+    ScopedHandle thread(processInfo.hThread);
+    stdoutWrite.reset();
+    stdinRead.reset();
+    nullInput.reset();
+
+    if (stdinData != nullptr) {
+        size_t offset = 0;
+        while (offset < stdinData->size()) {
+            const DWORD remaining = static_cast<DWORD>(
+                std::min<size_t>(stdinData->size() - offset, 64 * 1024));
+            DWORD written = 0;
+            if (!WriteFile(stdinWrite.get(), stdinData->data() + offset, remaining, &written, nullptr)) {
+                const DWORD error = GetLastError();
+                if (error != ERROR_BROKEN_PIPE) {
+                    throw std::runtime_error(format_windows_error("WriteFile(stdin) failed", error));
+                }
+                break;
+            }
+            if (written == 0) {
+                break;
+            }
+            offset += written;
+        }
+        stdinWrite.reset();
+    }
+
+    std::string result;
+    std::array<char, 4096> buffer = {};
+    while (true) {
+        DWORD bytesRead = 0;
+        if (!ReadFile(stdoutRead.get(), buffer.data(),
+                      static_cast<DWORD>(buffer.size()), &bytesRead, nullptr)) {
+            const DWORD error = GetLastError();
+            if (error == ERROR_BROKEN_PIPE) {
+                break;
+            }
+            throw std::runtime_error(format_windows_error("ReadFile(stdout) failed", error));
+        }
+        if (bytesRead == 0) {
+            break;
+        }
+        result.append(buffer.data(), bytesRead);
+    }
+    stdoutRead.reset();
+
+    WaitForSingleObject(process.get(), INFINITE);
+    DWORD exitCode = EXIT_FAILURE;
+    if (!GetExitCodeProcess(process.get(), &exitCode)) {
+        throw std::runtime_error(format_windows_error("GetExitCodeProcess() failed", GetLastError()));
+    }
+
+    return make_cli_output(static_cast<int>(exitCode), std::move(result));
+}
+
+#else
 
 // agent went into full nervous breakdown because of a hang
 // code works, so whatever...
@@ -499,7 +686,6 @@ static tCLIOutput runCommandArgv(const char *const argv[], const std::string *st
     posix_spawnattr_setflags(&attr, POSIX_SPAWN_CLOEXEC_DEFAULT);
 #endif
 
-    extern char **environ;
     pid_t pid = -1;
     int err = posix_spawn(&pid, argv[0], &fa, &attr,
                           const_cast<char *const *>(argv), environ);
@@ -544,29 +730,31 @@ static tCLIOutput runCommandArgv(const char *const argv[], const std::string *st
     waitpid(pid, &status, 0);
     int exitCode = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
 
-    tCLIOutput output;
-    if (exitCode == 0) {
-        output.success = true;
-        output.output = result;
-    } else {
-        output.success = false;
-        std::istringstream iss(result);
-        std::string line;
-        while (std::getline(iss, line)) {
-            output.diagnostics.push_back(line);
-        }
-    }
-    return output;
+    return make_cli_output(exitCode, std::move(result));
 }
 
-#endif // _WIN32
+#endif
+
+} // namespace
+
+#if defined(_WIN32)
 
 tCLIOutput runCommand(const std::string &command) {
-#ifdef _WIN32
-    const char *argv[] = {"cmd.exe", "/C", command.c_str(), nullptr};
+    return run_command_windows({"cmd.exe", "/d", "/s", "/c", command});
+}
+
+tCLIOutput runCommandDirect(const std::vector<std::string> &args) {
+    return run_command_windows(args);
+}
+
+tCLIOutput runCommandDirect(const std::vector<std::string> &args, const std::string &stdinData) {
+    return run_command_windows(args, &stdinData);
+}
+
 #else
+
+tCLIOutput runCommand(const std::string &command) {
     const char *argv[] = {"/bin/sh", "-c", command.c_str(), nullptr};
-#endif
     return runCommandArgv(argv);
 }
 
@@ -589,3 +777,5 @@ tCLIOutput runCommandDirect(const std::vector<std::string> &args, const std::str
     argv.push_back(nullptr);
     return runCommandArgv(argv.data(), &stdinData);
 }
+
+#endif
