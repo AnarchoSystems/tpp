@@ -14,6 +14,10 @@
 #include <unistd.h>
 #endif
 
+#if !defined(_WIN32)
+extern char **environ;
+#endif
+
 namespace tpp {
 void PrintTo(const Diagnostic &d, std::ostream *os) {
     nlohmann::json j = d;
@@ -681,7 +685,6 @@ static tCLIOutput runCommandArgv(const char *const argv[], const std::string *st
     posix_spawnattr_setflags(&attr, POSIX_SPAWN_CLOEXEC_DEFAULT);
 #endif
 
-    extern char **environ;
     pid_t pid = -1;
     int err = posix_spawn(&pid, argv[0], &fa, &attr,
                           const_cast<char *const *>(argv), environ);
