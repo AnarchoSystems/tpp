@@ -563,7 +563,6 @@ namespace tpp::compiler
                     return true;
                 else if constexpr (std::is_same_v<T, NamedType>)
                     return finite.count(arg.name) > 0;
-                return false;
             }, tr);
         };
 
