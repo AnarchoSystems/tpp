@@ -17,7 +17,12 @@ TEST(Tpp2SwiftCliTest, SourceEmitsDocsAndOmitsRuntime)
 {
     const auto projectPath = fixtureProjectPath();
 
-    auto sourceOutput = runCommand(std::string(TPP_EXE) + " '" + projectPath + "' | " + TPP2SWIFT_EXE + " source 2>&1");
+    // Run tpp to get the IR, then pipe it into tpp2swift source via stdin.
+    auto irOutput = runCommandDirect({TPP_EXE, projectPath});
+    ASSERT_TRUE(irOutput.success)
+        << "tpp failed:\n" << nlohmann::json(irOutput.diagnostics).dump(2);
+
+    auto sourceOutput = runCommandDirect({TPP2SWIFT_EXE, "source"}, irOutput.output);
     ASSERT_TRUE(sourceOutput.success)
         << "Output: " << sourceOutput.output
         << "\nDiagnostics: " << nlohmann::json(sourceOutput.diagnostics).dump(2);
@@ -37,7 +42,7 @@ TEST(Tpp2SwiftCliTest, SourceEmitsDocsAndOmitsRuntime)
 
 TEST(Tpp2SwiftCliTest, SharedRuntimeContainsOnlyRuntimeSupport)
 {
-    auto runtimeOutput = runCommand(std::string(TPP2SWIFT_EXE) + " runtime-shared 2>&1");
+    auto runtimeOutput = runCommandDirect({TPP2SWIFT_EXE, "runtime-shared"});
     ASSERT_TRUE(runtimeOutput.success)
         << "Output: " << runtimeOutput.output
         << "\nDiagnostics: " << nlohmann::json(runtimeOutput.diagnostics).dump(2);

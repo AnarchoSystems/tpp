@@ -3,7 +3,12 @@
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#else
 #include <sys/types.h>
+#endif
 
 namespace tpp_test
 {
@@ -53,9 +58,16 @@ public:
     void shutdown();
 
 private:
+#ifdef _WIN32
+    HANDLE toChildWrite_  = INVALID_HANDLE_VALUE; // parent writes to child stdin
+    HANDLE fromChildRead_ = INVALID_HANDLE_VALUE; // parent reads from child stdout
+    HANDLE processHandle_ = INVALID_HANDLE_VALUE;
+    HANDLE threadHandle_  = INVALID_HANDLE_VALUE;
+#else
     int toChild_[2]   = {-1, -1}; // parent writes [1], child reads [0]
     int fromChild_[2] = {-1, -1}; // child writes [1], parent reads [0]
     pid_t childPid_ = -1;
+#endif
     int nextId_ = 1;
 
     void        sendMsg(const nlohmann::json &msg);

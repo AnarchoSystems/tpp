@@ -14,6 +14,7 @@ jobs:
         os:
           - ubuntu-latest
           - ubuntu-24.04-arm
+          - macos-13
           - macos-latest
           - windows-latest
     runs-on: ${{ matrix.os }}
@@ -115,8 +116,7 @@ jobs:
         if: runner.os != 'Windows'
         run: ctest --parallel --progress --output-on-failure --test-dir build
 
-      - name: Test (Windows - skipped pending POSIX harness portability)
+      - name: Test (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: |
-          Write-Host 'Skipping ctest on Windows until POSIX-only test harness pieces are made portable.'
+        run: ctest --build-config Debug --parallel --progress --output-on-failure --test-dir build

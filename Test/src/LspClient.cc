@@ -1,6 +1,173 @@
 #include "LspClient.h"
 #include <stdexcept>
 #include <string>
+
+#ifdef _WIN32
+
+// ── Windows implementation ────────────────────────────────────────────────────
+
+#include <chrono>
+
+namespace tpp_test {
+
+LspClient::LspClient(const std::string &lspExePath) {
+    SECURITY_ATTRIBUTES sa{};
+    sa.nLength = sizeof(sa);
+    sa.bInheritHandle = TRUE;
+    sa.lpSecurityDescriptor = nullptr;
+
+    HANDLE toChildRead   = INVALID_HANDLE_VALUE;
+    HANDLE fromChildWrite = INVALID_HANDLE_VALUE;
+
+    if (!CreatePipe(&toChildRead, &toChildWrite_, &sa, 0)) {
+        throw std::runtime_error("CreatePipe() failed for stdin pipe");
+    }
+    SetHandleInformation(toChildWrite_, HANDLE_FLAG_INHERIT, 0);
+
+    if (!CreatePipe(&fromChildRead_, &fromChildWrite, &sa, 0)) {
+        CloseHandle(toChildRead);
+        CloseHandle(toChildWrite_);
+        toChildWrite_ = INVALID_HANDLE_VALUE;
+        throw std::runtime_error("CreatePipe() failed for stdout pipe");
+    }
+    SetHandleInformation(fromChildRead_, HANDLE_FLAG_INHERIT, 0);
+
+    STARTUPINFOA si{};
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESTDHANDLES;
+    si.hStdInput  = toChildRead;
+    si.hStdOutput = fromChildWrite;
+    si.hStdError  = GetStdHandle(STD_ERROR_HANDLE);
+
+    // Mutable copy required by CreateProcessA
+    std::string exePath = lspExePath;
+
+    PROCESS_INFORMATION pi{};
+    BOOL ok = CreateProcessA(
+        nullptr, exePath.data(),
+        nullptr, nullptr,
+        TRUE, 0, nullptr, nullptr,
+        &si, &pi);
+
+    CloseHandle(toChildRead);
+    CloseHandle(fromChildWrite);
+
+    if (!ok) {
+        CloseHandle(toChildWrite_);
+        CloseHandle(fromChildRead_);
+        toChildWrite_ = INVALID_HANDLE_VALUE;
+        fromChildRead_ = INVALID_HANDLE_VALUE;
+        throw std::runtime_error("CreateProcess() failed to spawn tpp-lsp");
+    }
+
+    processHandle_ = pi.hProcess;
+    threadHandle_  = pi.hThread;
+}
+
+LspClient::~LspClient() {
+    if (processHandle_ != INVALID_HANDLE_VALUE) {
+        TerminateProcess(processHandle_, 1);
+        WaitForSingleObject(processHandle_, INFINITE);
+        CloseHandle(processHandle_);
+        CloseHandle(threadHandle_);
+        processHandle_ = INVALID_HANDLE_VALUE;
+        threadHandle_  = INVALID_HANDLE_VALUE;
+    }
+    if (toChildWrite_ != INVALID_HANDLE_VALUE) {
+        CloseHandle(toChildWrite_);
+        toChildWrite_ = INVALID_HANDLE_VALUE;
+    }
+    if (fromChildRead_ != INVALID_HANDLE_VALUE) {
+        CloseHandle(fromChildRead_);
+        fromChildRead_ = INVALID_HANDLE_VALUE;
+    }
+}
+
+void LspClient::sendMsg(const nlohmann::json &msg) {
+    std::string body  = msg.dump();
+    std::string frame = "Content-Length: " + std::to_string(body.size()) + "\r\n\r\n" + body;
+    const char *ptr   = frame.c_str();
+    DWORD remaining   = static_cast<DWORD>(frame.size());
+    while (remaining > 0) {
+        DWORD written = 0;
+        if (!WriteFile(toChildWrite_, ptr, remaining, &written, nullptr) || written == 0) {
+            throw std::runtime_error("WriteFile() to tpp-lsp pipe failed");
+        }
+        ptr       += written;
+        remaining -= written;
+    }
+}
+
+nlohmann::json LspClient::readMsg() {
+    // ── Read headers ─────────────────────────────────────────────────────────
+    size_t contentLength = 0;
+    while (true) {
+        std::string line;
+        while (true) {
+            char c;
+            DWORD bytesRead = 0;
+            if (!ReadFile(fromChildRead_, &c, 1, &bytesRead, nullptr) || bytesRead == 0) {
+                throw std::runtime_error("ReadFile() from tpp-lsp pipe failed");
+            }
+            if (c == '\n') {
+                break;
+            }
+            if (c != '\r') {
+                line += c;
+            }
+        }
+        if (line.empty()) {
+            break;
+        }
+        const std::string prefix = "Content-Length: ";
+        if (line.rfind(prefix, 0) == 0) {
+            contentLength = std::stoull(line.substr(prefix.size()));
+        }
+    }
+    if (contentLength == 0) {
+        throw std::runtime_error("LSP message with missing or zero Content-Length");
+    }
+
+    // ── Read body ─────────────────────────────────────────────────────────────
+    std::string body(contentLength, '\0');
+    size_t received = 0;
+    while (received < contentLength) {
+        DWORD bytesRead = 0;
+        DWORD toRead = static_cast<DWORD>(contentLength - received);
+        if (!ReadFile(fromChildRead_, &body[received], toRead, &bytesRead, nullptr) || bytesRead == 0) {
+            throw std::runtime_error("ReadFile() body from tpp-lsp pipe failed");
+        }
+        received += static_cast<size_t>(bytesRead);
+    }
+    return nlohmann::json::parse(body);
+}
+
+bool LspClient::tryReadMsg(nlohmann::json &out, int timeoutMs) {
+    // PeekNamedPipe does not block — poll with a short sleep until deadline.
+    auto deadline = std::chrono::steady_clock::now() +
+                    std::chrono::milliseconds(timeoutMs);
+    while (true) {
+        DWORD bytesAvail = 0;
+        if (!PeekNamedPipe(fromChildRead_, nullptr, 0, nullptr, &bytesAvail, nullptr)) {
+            return false;
+        }
+        if (bytesAvail > 0) {
+            out = readMsg();
+            return true;
+        }
+        if (std::chrono::steady_clock::now() >= deadline) {
+            return false;
+        }
+        Sleep(10);
+    }
+}
+
+} // namespace tpp_test
+
+#else
+
+// ── POSIX implementation ──────────────────────────────────────────────────────
+
 #include <unistd.h>
 #include <poll.h>
 #include <fcntl.h>
@@ -145,6 +312,14 @@ bool LspClient::tryReadMsg(nlohmann::json &out, int timeoutMs) {
     return true;
 }
 
+} // namespace tpp_test
+
+#endif // _WIN32
+
+// ── High-level protocol helpers (platform-independent) ───────────────────────
+
+namespace tpp_test {
+
 std::vector<nlohmann::json> LspClient::drainNotifications(int timeoutMs) {
     std::vector<nlohmann::json> result;
     nlohmann::json msg;
@@ -153,8 +328,6 @@ std::vector<nlohmann::json> LspClient::drainNotifications(int timeoutMs) {
     }
     return result;
 }
-
-// ── High-level protocol helpers ───────────────────────────────────────────────
 
 std::vector<nlohmann::json> LspClient::initialize(const std::string &rootUri) {
     int id = nextId_++;
