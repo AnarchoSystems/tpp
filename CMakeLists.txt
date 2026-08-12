@@ -22,7 +22,17 @@ if(CMAKE_CONFIGURATION_TYPES)
   endforeach()
 endif()
 
-message(STATUS "Building arm 64Bit")
+set(_tpp_arch "${CMAKE_SYSTEM_PROCESSOR}")
+if(MSVC)
+  if(CMAKE_VS_PLATFORM_NAME)
+    set(_tpp_arch "${CMAKE_VS_PLATFORM_NAME}")
+  elseif(CMAKE_GENERATOR_PLATFORM)
+    set(_tpp_arch "${CMAKE_GENERATOR_PLATFORM}")
+  endif()
+endif()
+
+math(EXPR _tpp_ptr_bits "${CMAKE_SIZEOF_VOID_P} * 8")
+message(STATUS "Building ${_tpp_arch} ${_tpp_ptr_bits}Bit")
 
 include(FetchContent)
 
