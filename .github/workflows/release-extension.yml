@@ -125,27 +125,3 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: release-assets/**/*.vsix
-
-  # publish-marketplace:
-  #   if: startsWith(github.ref, 'refs/tags/v')
-  #   needs: package-extension
-  #   runs-on: ubuntu-latest
-  #
-  #   steps:
-  #     - name: Collect extension artifact
-  #       uses: actions/download-artifact@v5
-  #       with:
-  #         path: release-assets
-  #         merge-multiple: true
-  #
-  #     - name: Publish to VS Code Marketplace
-  #       env:
-  #         VSCE_PAT: ${{ secrets.VSCE_PAT }}
-  #       run: |
-  #         set -euo pipefail
-  #         if [ -z "${VSCE_PAT:-}" ]; then
-  #           echo "VSCE_PAT is not configured; skipping Marketplace publish."
-  #           exit 0
-  #         fi
-  #
-  #         npx @vscode/vsce publish --packagePath release-assets/**/*.vsix -p "$VSCE_PAT"

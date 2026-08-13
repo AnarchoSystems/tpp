@@ -158,6 +158,43 @@ If you are working in VS Code with the CMake Tools extension, the equivalent wor
 
 ---
 
+## Fetching Prebuilt Binaries With `get-tpp`
+
+If you just want one or more of the binaries and don't want to build from source, run the `get-tpp` script from the repo root:
+
+```bash
+./get-tpp -o .bin/ tpp tpp2cpp
+./get-tpp -o .bin/ all
+```
+
+- `-o` is optional and defaults to the current directory.
+- With a single target, `-o` may be a directory or an exact file path; with multiple targets, `-o` must be a directory.
+- Targets: `tpp`, `tpp2cpp`, `tpp2java`, `tpp2swift`, `render-tpp`, `tpp-lsp`, `vscode-extension` (or `all`).
+- It first tries to download a matching release asset for your OS/architecture from the repo's latest GitHub release; `vscode-extension` resolves to a `.vsix` package instead of a binary.
+- If no matching release asset exists, it falls back to pulling and building the requested targets from source (via CMake, or via `npm` for `vscode-extension`).
+
+Run `source ./get-tpp` (instead of executing it) to register bash tab-completion for target names in your current shell.
+
+### Getting `get-tpp` Without Cloning The Repo
+
+You don't need a full clone just to run the script — it only needs to be inside a checkout when it has to fall back to building from source. To fetch just the script:
+
+```bash
+curl -fsSL -o get-tpp https://raw.githubusercontent.com/AnarchoSystems/tpp/main/get-tpp
+chmod +x get-tpp
+./get-tpp -o .bin/ tpp
+```
+
+If you'd rather skip the intermediate file, you can pipe it straight into bash:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AnarchoSystems/tpp/main/get-tpp | bash -s -- -o .bin/ tpp
+```
+
+**Be careful with `curl | bash`.** It executes a remote script with your shell's permissions without giving you a chance to inspect it first. Only do this if you trust the source; otherwise, download the script, read it, and run it locally as shown above.
+
+---
+
 ## Quick Start
 
 This assumes you have already built the project. If not, use the configure/build steps above first.
@@ -227,7 +264,7 @@ If you want the short version: read the README for the model, [docs/language.md]
 
 The `tpp-language-support` extension provides syntax highlighting, error diagnostics as you type, and a live preview panel.
 
-It is not published on the VS Code Marketplace yet, so installation is currently manual.
+Marketplace publication is wired into the tagged GitHub Actions release workflow; until the first successful publication, installation is manual.
 
 ### Build the Language Server
 
@@ -274,6 +311,19 @@ code --install-extension tpp-language-support-*.vsix
 ```
 
 If you are developing the extension itself, you can also open `vscode-extension/` in VS Code and press `F5` to launch an Extension Development Host instead of installing a packaged build.
+
+### Publish the Extension
+
+The release workflow publishes tagged releases to the VS Code Marketplace without a Personal Access Token. It uses GitHub Actions workload identity federation with Azure and `vsce --azure-credential`.
+
+The one-time setup is:
+
+1. Create a user-assigned Azure managed identity and a federated credential for this repository's GitHub Actions workflow.
+2. Authorize that managed identity as a Contributor of the `AnarchoSystems` Marketplace publisher.
+3. Add `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID` as GitHub Actions secrets.
+4. Push a `v*` tag. The workflow packages the extension, publishes the GitHub release asset, and publishes the same VSIX to the Marketplace.
+
+This avoids Azure DevOps Personal Access Tokens, which are scheduled for retirement on December 1, 2026. See Microsoft's [secure automated publishing guidance](https://code.visualstudio.com/api/working-with-extensions/publishing-extension#secure-automated-publishing-to-visual-studio-marketplace) for the Azure identity and Marketplace authorization steps.
 
 ### Configure VS Code
 

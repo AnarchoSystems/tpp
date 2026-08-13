@@ -5,7 +5,7 @@
   "description": "Language support for tpp template files with bundled language-server binaries, render previews, and tpp-config schema validation.",
   "version": "0.13.0",
   "author": "AnarchoSystems",
-  "license": "SEE LICENSE IN ../LICENSE",
+  "license": "SEE LICENSE IN LICENSE",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -47,8 +47,8 @@
           ".tpp"
         ],
         "icon": {
-          "light": "./icon.svg",
-          "dark": "./icon.svg"
+          "light": "./icon.png",
+          "dark": "./icon.png"
         },
         "configuration": "./language-configuration-tpp.json"
       }
@@ -117,7 +117,7 @@
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.85.0",
-    "@vscode/vsce": "^3.7.1",
+    "@vscode/vsce": "^3.9.2",
     "esbuild": "^0.20.0",
     "typescript": "^5.0.0"
   }

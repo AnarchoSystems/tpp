@@ -1,5 +1,31 @@
 #!/usr/bin/env bash
+
+# Sourcing this file (instead of executing it) registers bash tab-completion
+# for its own targets and returns, without running the downloader/builder:
+#   source ./get-tpp
+if [[ -n "${BASH_SOURCE:-}" && "${BASH_SOURCE[0]}" != "${0}" ]]; then
+  _get_tpp_completions() {
+    local cur script
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    script="${BASH_SOURCE[0]}"
+    COMPREPLY=($(compgen -W "$("$script" --list-targets)" -- "$cur"))
+  }
+  complete -F _get_tpp_completions get-tpp "${BASH_SOURCE[0]}"
+  return 0
+fi
+
 set -euo pipefail
+
+# Temp/build directories registered here are removed on exit (including error
+# exits), regardless of which function scope created them.
+CLEANUP_DIRS=()
+cleanup_registered_dirs() {
+  local dir
+  for dir in "${CLEANUP_DIRS[@]:-}"; do
+    [[ -n "$dir" ]] && rm -rf "$dir"
+  done
+}
+trap cleanup_registered_dirs EXIT
 
 AVAILABLE_TARGETS=(
   tpp
@@ -8,22 +34,27 @@ AVAILABLE_TARGETS=(
   tpp2swift
   render-tpp
   tpp-lsp
+  vscode-extension
 )
 
 usage() {
   cat <<'EOF'
 Usage:
-  get-tpp -o <output> <target> [target...]
-  get-tpp -o <output> all
+  get-tpp [-o <output>] <target> [target...]
+  get-tpp [-o <output>] all
 
 Targets:
-  tpp, tpp2cpp, tpp2java, tpp2swift, render-tpp, tpp-lsp
+  tpp, tpp2cpp, tpp2java, tpp2swift, render-tpp, tpp-lsp, vscode-extension
 
 Notes:
+  - -o defaults to the current directory if omitted.
   - Use a directory with multiple targets.
   - With a single target, -o may be either a directory or a file path.
+  - vscode-extension resolves to a .vsix package rather than a binary.
   - If no matching release artifact exists for the current OS/arch, the
     script pulls the repo and builds the requested targets from source.
+  - `source ./get-tpp` (instead of executing it) registers bash
+    tab-completion for targets and returns immediately.
 EOF
 }
 
@@ -80,6 +111,40 @@ release_asset_url() {
   printf 'https://github.com/%s/releases/download/%s/%s-%s-%s.tar.gz' "$repo" "$tag" "$target" "$os_name" "$arch_name"
 }
 
+RELEASE_JSON_CACHE=""
+
+fetch_release_json() {
+  local repo="$1"
+  local tag="$2"
+  if [[ -z "$RELEASE_JSON_CACHE" ]]; then
+    RELEASE_JSON_CACHE=$(curl -fsSL "https://api.github.com/repos/${repo}/releases/tags/${tag}") || return 1
+  fi
+  printf '%s' "$RELEASE_JSON_CACHE"
+}
+
+# vscode-extension is packaged as a single platform-independent .vsix asset,
+# so it can't be located via the {target}-{os}-{arch}.tar.gz naming scheme.
+vsix_asset_url() {
+  local repo="$1"
+  local tag="$2"
+  local json
+  json=$(fetch_release_json "$repo" "$tag") || return 1
+  printf '%s' "$json" | sed -n 's/^[[:space:]]*"browser_download_url": "\(.*\.vsix\)".*/\1/p' | head -n1
+}
+
+resolve_release_url() {
+  local repo="$1"
+  local tag="$2"
+  local target="$3"
+  local os_name="$4"
+  local arch_name="$5"
+  if [[ "$target" == vscode-extension ]]; then
+    vsix_asset_url "$repo" "$tag"
+    return
+  fi
+  release_asset_url "$repo" "$tag" "$target" "$os_name" "$arch_name"
+}
+
 validate_targets() {
   local target
   for target in "$@"; do
@@ -107,6 +172,7 @@ extract_single_binary() {
   local destination="$2"
   local temp_dir
   temp_dir=$(mktemp -d)
+  CLEANUP_DIRS+=("$temp_dir")
   tar -xzf "$archive" -C "$temp_dir"
 
   local extracted
@@ -115,7 +181,6 @@ extract_single_binary() {
   mkdir -p "$(dirname "$destination")"
   cp "$extracted" "$destination"
   chmod +x "$destination"
-  rm -rf "$temp_dir"
 }
 
 copy_binary_to_dir() {
@@ -123,6 +188,7 @@ copy_binary_to_dir() {
   local output_dir="$2"
   local temp_dir
   temp_dir=$(mktemp -d)
+  CLEANUP_DIRS+=("$temp_dir")
   tar -xzf "$archive" -C "$temp_dir"
 
   local extracted
@@ -131,7 +197,22 @@ copy_binary_to_dir() {
   mkdir -p "$output_dir"
   cp "$extracted" "$output_dir/"
   chmod +x "$output_dir/$(basename "$extracted")"
-  rm -rf "$temp_dir"
+}
+
+# Places a downloaded .vsix (not a tar.gz archive) at the requested destination.
+place_vsix() {
+  local downloaded_file="$1"
+  local source_url="$2"
+  local destination="$3"
+  local file_name
+  file_name=$(basename "$source_url")
+  if is_dir_like "$destination"; then
+    mkdir -p "$destination"
+    cp "$downloaded_file" "$destination/$file_name"
+  else
+    mkdir -p "$(dirname "$destination")"
+    cp "$downloaded_file" "$destination"
+  fi
 }
 
 build_from_source() {
@@ -157,6 +238,10 @@ main() {
         usage
         exit 0
         ;;
+      --list-targets)
+        printf '%s\n' "${AVAILABLE_TARGETS[@]}" all
+        exit 0
+        ;;
       --)
         shift
         break
@@ -176,7 +261,7 @@ main() {
     shift
   done
 
-  [[ -n "$output_path" ]] || die "missing -o output path"
+  [[ -n "$output_path" ]] || output_path="."
   [[ ${#requested_targets[@]} -gt 0 ]] || die "missing target name"
 
   if [[ ${#requested_targets[@]} -eq 1 && ${requested_targets[0]} == all ]]; then
@@ -201,8 +286,8 @@ main() {
   if [[ -n "$tag" ]]; then
     for target in "${requested_targets[@]}"; do
       local url
-      url=$(release_asset_url "$repo" "$tag" "$target" "$os_name" "$arch_name")
-      if curl -fsI "$url" >/dev/null 2>&1; then
+      url=$(resolve_release_url "$repo" "$tag" "$target" "$os_name" "$arch_name")
+      if [[ -n "$url" ]] && curl -fsI "$url" >/dev/null 2>&1; then
         release_urls+=("$url")
       else
         use_release=false
@@ -216,12 +301,14 @@ main() {
   if [[ "$use_release" == true ]]; then
     local temp_dir
     temp_dir=$(mktemp -d)
-    trap 'rm -rf "$temp_dir"' EXIT
+    CLEANUP_DIRS+=("$temp_dir")
 
     if [[ ${#requested_targets[@]} -eq 1 ]]; then
-      local archive_path="$temp_dir/${requested_targets[0]}.tar.gz"
+      local archive_path="$temp_dir/${requested_targets[0]}.download"
       download_release_artifact "${release_urls[0]}" "$archive_path"
-      if is_dir_like "$output_path"; then
+      if [[ "${requested_targets[0]}" == vscode-extension ]]; then
+        place_vsix "$archive_path" "${release_urls[0]}" "$output_path"
+      elif is_dir_like "$output_path"; then
         copy_binary_to_dir "$archive_path" "$output_path"
       else
         extract_single_binary "$archive_path" "$output_path"
@@ -235,9 +322,13 @@ main() {
 
     local index=0
     for target in "${requested_targets[@]}"; do
-      local archive_path="$temp_dir/${target}.tar.gz"
+      local archive_path="$temp_dir/${target}.download"
       download_release_artifact "${release_urls[$index]}" "$archive_path"
-      copy_binary_to_dir "$archive_path" "$output_path"
+      if [[ "$target" == vscode-extension ]]; then
+        place_vsix "$archive_path" "${release_urls[$index]}" "$output_path"
+      else
+        copy_binary_to_dir "$archive_path" "$output_path"
+      fi
       index=$((index + 1))
     done
 
@@ -246,35 +337,56 @@ main() {
   fi
 
   printf 'no matching release artifacts found for %s/%s; building from source\n' "$os_name" "$arch_name" >&2
-  local build_dir
-  build_dir=$(mktemp -d)
-  trap 'rm -rf "$build_dir"' EXIT
   build_from_source "${requested_targets[@]}"
-  cmake -S . -B "$build_dir" -DCMAKE_BUILD_TYPE=Release
-  cmake --build "$build_dir" --config Release --target "${requested_targets[@]}" --parallel
 
-  local build_output
-  build_output="$build_dir/bin"
+  # vscode-extension isn't a cmake target; it's packaged separately via npm.
+  local -a cmake_targets=()
+  local build_vscode_extension=false
+  for target in "${requested_targets[@]}"; do
+    if [[ "$target" == vscode-extension ]]; then
+      build_vscode_extension=true
+    else
+      cmake_targets+=("$target")
+    fi
+  done
+
+  local build_dir="" build_output=""
+  if [[ ${#cmake_targets[@]} -gt 0 ]]; then
+    build_dir=$(mktemp -d)
+    CLEANUP_DIRS+=("$build_dir")
+    cmake -S . -B "$build_dir" -DCMAKE_BUILD_TYPE=Release
+    cmake --build "$build_dir" --config Release --target "${cmake_targets[@]}" --parallel
+    build_output="$build_dir/bin"
+  fi
+
+  local vsix_path=""
+  if [[ "$build_vscode_extension" == true ]]; then
+    (cd vscode-extension && npm install && npm run package)
+    vsix_path=$(find vscode-extension -maxdepth 1 -name '*.vsix' -type f | head -n1)
+    [[ -n "$vsix_path" ]] || die "built .vsix not found in vscode-extension/"
+  fi
 
   if [[ ${#requested_targets[@]} -eq 1 ]]; then
-    local binary_name="${requested_targets[0]}"
-    if [[ "$os_name" == win32 ]]; then
-      binary_name+='.exe'
-    fi
-    local source_path="$build_output/$binary_name"
-    [[ -f "$source_path" ]] || die "built binary not found at $source_path"
-    local destination_path
-    if is_dir_like "$output_path"; then
-      mkdir -p "$output_path"
-      destination_path="$output_path/$binary_name"
+    if [[ "${requested_targets[0]}" == vscode-extension ]]; then
+      place_vsix "$vsix_path" "$vsix_path" "$output_path"
     else
-      mkdir -p "$(dirname "$output_path")"
-      destination_path="$output_path"
+      local binary_name="${requested_targets[0]}"
+      if [[ "$os_name" == win32 ]]; then
+        binary_name+='.exe'
+      fi
+      local source_path="$build_output/$binary_name"
+      [[ -f "$source_path" ]] || die "built binary not found at $source_path"
+      local destination_path
+      if is_dir_like "$output_path"; then
+        mkdir -p "$output_path"
+        destination_path="$output_path/$binary_name"
+      else
+        mkdir -p "$(dirname "$output_path")"
+        destination_path="$output_path"
+      fi
+      cp "$source_path" "$destination_path"
+      chmod +x "$destination_path"
     fi
-    cp "$source_path" "$destination_path"
-    chmod +x "$destination_path"
-    rm -rf "$build_dir"
-    trap - EXIT
     return 0
   fi
 
@@ -282,6 +394,10 @@ main() {
   mkdir -p "$output_path"
   local built_target source_path output_name
   for built_target in "${requested_targets[@]}"; do
+    if [[ "$built_target" == vscode-extension ]]; then
+      place_vsix "$vsix_path" "$vsix_path" "$output_path"
+      continue
+    fi
     output_name="$built_target"
     if [[ "$os_name" == win32 ]]; then
       output_name+='.exe'
@@ -291,9 +407,6 @@ main() {
     cp "$source_path" "$output_path/"
     chmod +x "$output_path/$output_name"
   done
-
-  rm -rf "$build_dir"
-  trap - EXIT
 }
 
 main "$@"

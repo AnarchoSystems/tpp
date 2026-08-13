@@ -47,6 +47,56 @@ In practice, that gives tpp a very wide range. It can sit in a build pipeline, a
 
 ---
 
+## `get-tpp` — Fetching Prebuilt Binaries
+
+`get-tpp` is a standalone bash script at the repo root for grabbing one or more built tools without doing a full local build.
+
+### Synopsis
+
+```
+get-tpp [-o <output>] <target> [target...]
+get-tpp [-o <output>] all
+```
+
+Targets: `tpp`, `tpp2cpp`, `tpp2java`, `tpp2swift`, `render-tpp`, `tpp-lsp`, `vscode-extension`.
+
+### Behavior
+
+- `-o` is optional; it defaults to the current directory.
+- With a single target, `-o` may point to a directory or an exact file path. With multiple targets (or `all`), `-o` must be a directory.
+- It resolves the repo's latest GitHub release and, for each requested target, looks for a matching `{target}-{os}-{arch}.tar.gz` asset. `vscode-extension` is the exception — it's platform-independent, so it resolves to the release's `.vsix` asset instead of an os/arch archive.
+- If no matching release asset is found for the current OS/architecture, it falls back to building from source: it runs `cmake --build --target <targets>` for the CLI/library targets, and `npm install && npm run package` inside `vscode-extension/` for the extension target.
+
+### Examples
+
+```bash
+./get-tpp -o .bin/ tpp tpp2cpp
+./get-tpp -o /usr/local/bin/tpp tpp
+./get-tpp all
+```
+
+### Shell Completion
+
+Run `source ./get-tpp` (instead of executing it) to register bash tab-completion for target names in the current shell. Sourcing the script only registers completion and returns — it does not run the downloader/builder.
+
+### Getting The Script Without A Clone
+
+The script only needs to run inside a repo checkout when it falls back to building from source; fetching a release asset doesn't. To grab just the script:
+
+```bash
+curl -fsSL -o get-tpp https://raw.githubusercontent.com/AnarchoSystems/tpp/main/get-tpp
+chmod +x get-tpp
+./get-tpp -o .bin/ tpp
+```
+
+A `curl | bash` one-liner also works, but treat it with the same caution you'd give any remote script piped into a shell — read it first if you don't already trust the source:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AnarchoSystems/tpp/main/get-tpp | bash -s -- -o .bin/ tpp
+```
+
+---
+
 ## `tpp` — The Compiler
 
 `tpp` is the compiler frontend. It reads a project directory, compiles all type definitions and templates declared in `tpp-config.json`, and emits the result to stdout as JSON.
@@ -548,7 +598,7 @@ The `tpp-language-support` extension provides a language-aware editing experienc
 
 ### Installation
 
-The extension is not yet published to the VS Code Marketplace. Install it manually:
+Until the first Marketplace publication completes, install it manually:
 
 1. **Build the tpp-lsp binary** (the language server backend):
 
@@ -574,6 +624,19 @@ The extension is not yet published to the VS Code Marketplace. Install it manual
   ```
 
    Or, for development, open the `vscode-extension` folder in VS Code and press **F5** to launch an Extension Development Host.
+
+### Marketplace Publishing
+
+The tagged GitHub Actions release workflow publishes the packaged VSIX to both GitHub Releases and the VS Code Marketplace. Marketplace authentication uses GitHub Actions workload identity federation with Azure and `vsce --azure-credential`, so no Personal Access Token is stored.
+
+Configure it once as follows:
+
+1. Create a user-assigned Azure managed identity and a federated credential for this repository's GitHub Actions workflow.
+2. Grant the managed identity the Contributor role for the `AnarchoSystems` Marketplace publisher.
+3. Add these GitHub Actions repository secrets: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID`.
+4. Push a tag matching `v*` to run `.github/workflows/release-extension.yml`.
+
+The workflow uses `azure/login` with GitHub's OIDC token, then runs `npx @vscode/vsce publish --azure-credential`. This avoids Azure DevOps Personal Access Tokens, which Microsoft is retiring on December 1, 2026. Follow Microsoft's [secure automated publishing guidance](https://code.visualstudio.com/api/working-with-extensions/publishing-extension#secure-automated-publishing-to-visual-studio-marketplace) for the identity, federated credential, and Marketplace authorization details.
 
 ### Configuration
 

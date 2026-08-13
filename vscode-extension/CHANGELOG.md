@@ -4,4 +4,4 @@
 
 - Bundled `tpp-lsp` binaries into release-ready extension packages.
 - Added platform-and-architecture-aware extension packaging.
-- Added optional CI publishing to the VS Code Marketplace.
+- Added PAT-free CI publishing to the VS Code Marketplace through Azure workload identity federation.
