@@ -33,6 +33,7 @@
     "url": "https://github.com/AnarchoSystems/tpp/issues"
   },
   "main": "./out/extension.js",
+  "icon": "./icon.png",
   "contributes": {
     "languages": [
       {
