@@ -164,13 +164,17 @@ If you just want one or more of the binaries and don't want to build from source
 
 ```bash
 ./get-tpp -o .bin/ tpp tpp2cpp
+./get-tpp -min-version v0.12.0 -max-version v0.13.0 -o .bin/ tpp
+./get-tpp -exact-version v0.13.0 -o .bin/ tpp
 ./get-tpp -o .bin/ all
 ```
 
 - `-o` is optional and defaults to the current directory.
+- `-min-version` and `-max-version` select the highest published stable tag in an inclusive range; either bound may be used alone.
+- `-exact-version` selects one published stable tag and cannot be combined with the range options. Version tags use the `vMAJOR.MINOR.PATCH` form.
 - With a single target, `-o` may be a directory or an exact file path; with multiple targets, `-o` must be a directory.
 - Targets: `tpp`, `tpp2cpp`, `tpp2java`, `tpp2swift`, `render-tpp`, `tpp-lsp`, `vscode-extension` (or `all`).
-- It first tries to download a matching release asset for your OS/architecture from the repo's latest GitHub release; `vscode-extension` resolves to a `.vsix` package instead of a binary.
+- It first tries to download a matching release asset for your OS/architecture from the selected GitHub release (the latest release when no version option is given); `vscode-extension` resolves to a `.vsix` package instead of a binary.
 - If no matching release asset exists, it falls back to pulling and building the requested targets from source (via CMake, or via `npm` for `vscode-extension`).
 
 Run `source ./get-tpp` (instead of executing it) to register bash tab-completion for target names in your current shell.

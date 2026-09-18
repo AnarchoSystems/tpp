@@ -1,0 +1,58 @@
+name: Tag Version
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - version.json
+
+permissions:
+  actions: write
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Read version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          major=$(jq -er '.major | select(type == "number" and floor == . and . >= 0)' version.json)
+          minor=$(jq -er '.minor | select(type == "number" and floor == . and . >= 0)' version.json)
+          patch=$(jq -er '.patch | select(type == "number" and floor == . and . >= 0)' version.json)
+          tag="v${major}.${minor}.${patch}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Create version tag
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git rev-parse --verify --quiet "refs/tags/$TAG"; then
+            if [ "$(git rev-list -n 1 "$TAG")" != "$GITHUB_SHA" ]; then
+              echo "Tag $TAG already points to a different commit" >&2
+              exit 1
+            fi
+          else
+            git tag "$TAG" "$GITHUB_SHA"
+            git push origin "$TAG"
+          fi
+
+      - name: Start release workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run release.yml --ref "$TAG"
+          gh workflow run release-extension.yml --ref "$TAG"

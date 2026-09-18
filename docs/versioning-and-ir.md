@@ -30,6 +30,9 @@ The current overhaul target is `0.14.0` once the following are stable:
 
 ## Working Rules
 
+- `version.json` is the authoritative release version
+- when a commit changing `version.json` reaches `main`, GitHub Actions creates the matching `vMAJOR.MINOR.PATCH` tag and starts both release workflows at that tag
+- release workflows reject tags that do not match the checked-out `version.json`
 - if IR shape changes intentionally, update snapshots and documentation in the same change set
 - if CLI contracts or backend input behavior change, update `README.md` and `docs/usage.md` together
 - if public/internal ownership changes, update the architecture docs as the code lands rather than deferring the explanation

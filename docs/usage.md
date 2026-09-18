@@ -54,8 +54,9 @@ In practice, that gives tpp a very wide range. It can sit in a build pipeline, a
 ### Synopsis
 
 ```
-get-tpp [-o <output>] <target> [target...]
-get-tpp [-o <output>] all
+get-tpp [-o <output>] [-min-version <tag>] [-max-version <tag>] <target> [target...]
+get-tpp [-o <output>] -exact-version <tag> <target> [target...]
+get-tpp [version options] [-o <output>] all
 ```
 
 Targets: `tpp`, `tpp2cpp`, `tpp2java`, `tpp2swift`, `render-tpp`, `tpp-lsp`, `vscode-extension`.
@@ -63,8 +64,10 @@ Targets: `tpp`, `tpp2cpp`, `tpp2java`, `tpp2swift`, `render-tpp`, `tpp-lsp`, `vs
 ### Behavior
 
 - `-o` is optional; it defaults to the current directory.
+- `-min-version` and `-max-version` select the highest published stable tag in an inclusive range. Either bound may be omitted.
+- `-exact-version` selects one published stable tag and cannot be combined with `-min-version` or `-max-version`. Tags must use the `vMAJOR.MINOR.PATCH` form.
 - With a single target, `-o` may point to a directory or an exact file path. With multiple targets (or `all`), `-o` must be a directory.
-- It resolves the repo's latest GitHub release and, for each requested target, looks for a matching `{target}-{os}-{arch}.tar.gz` asset. `vscode-extension` is the exception — it's platform-independent, so it resolves to the release's `.vsix` asset instead of an os/arch archive.
+- It resolves the selected GitHub release (the latest release when no version option is given) and, for each requested target, looks for a matching `{target}-{os}-{arch}.tar.gz` asset. `vscode-extension` is the exception — it's platform-independent, so it resolves to the release's `.vsix` asset instead of an os/arch archive.
 - If no matching release asset is found for the current OS/architecture, it falls back to building from source: it runs `cmake --build --target <targets>` for the CLI/library targets, and `npm install && npm run package` inside `vscode-extension/` for the extension target.
 
 ### Examples
@@ -72,6 +75,8 @@ Targets: `tpp`, `tpp2cpp`, `tpp2java`, `tpp2swift`, `render-tpp`, `tpp-lsp`, `vs
 ```bash
 ./get-tpp -o .bin/ tpp tpp2cpp
 ./get-tpp -o /usr/local/bin/tpp tpp
+./get-tpp -min-version v0.12.0 -max-version v0.13.0 tpp
+./get-tpp -exact-version v0.13.0 tpp
 ./get-tpp all
 ```
 
