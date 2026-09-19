@@ -55,6 +55,14 @@ jobs:
             echo "swift not installed on this runner"
           fi
 
+      - name: Select non-Windows parallelism
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          if [[ "${{ matrix.os }}" == *"-arm" || "${{ matrix.os }}" == "ubuntu-24.04" ]]; then
+            echo "NON_WINDOWS_PARALLEL=2" >> "$GITHUB_ENV"
+          fi
+
       - name: Configure (non-Windows)
         if: runner.os != 'Windows'
         run: cmake -B build -DCMAKE_BUILD_TYPE=Debug
@@ -74,8 +82,8 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          if [[ "${{ matrix.os }}" == *"-arm" || "${{ matrix.os }}" == "ubuntu-24.04" ]]; then
-            cmake --build build --parallel 2
+          if [[ -n "${NON_WINDOWS_PARALLEL:-}" ]]; then
+            cmake --build build --parallel "${NON_WINDOWS_PARALLEL}"
           else
             cmake --build build --parallel
           fi
@@ -101,8 +109,8 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          if [[ "${{ matrix.os }}" == *"-arm" || "${{ matrix.os }}" == "ubuntu-24.04" ]]; then
-            cmake --build build --target build_all_tests --parallel 2
+          if [[ -n "${NON_WINDOWS_PARALLEL:-}" ]]; then
+            cmake --build build --target build_all_tests --parallel "${NON_WINDOWS_PARALLEL}"
           else
             cmake --build build --target build_all_tests --parallel
           fi
@@ -128,8 +136,8 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          if [[ "${{ matrix.os }}" == *"-arm" || "${{ matrix.os }}" == "ubuntu-24.04" ]]; then
-            ctest --parallel 2 --progress --output-on-failure --test-dir build
+          if [[ -n "${NON_WINDOWS_PARALLEL:-}" ]]; then
+            ctest --parallel "${NON_WINDOWS_PARALLEL}" --progress --output-on-failure --test-dir build
           else
             ctest --parallel --progress --output-on-failure --test-dir build
           fi
