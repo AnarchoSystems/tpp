@@ -4,10 +4,12 @@ END
 
 template render_cpp_functions(functions: list<CppFunctionDecl>, includes: list<string>, namespaceName: optional<string>, functionPrefix: string)
 #pragma once
+#include <string>
+#include <vector>
+#include <optional>
 @for inc in includes@
 #include "@inc@"
 @end for@
-#include <string>
 @if namespaceName@
 namespace @namespaceName@ {
 @end if@
