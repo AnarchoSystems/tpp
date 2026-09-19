@@ -12,7 +12,7 @@ TEST_P(AcceptanceTestOnlyPositives, CompareRenderByCLI) {
         return; // failure cases are covered by AcceptanceTest
     }
 
-    const auto projectPath = std::filesystem::absolute("TestCases/" + testCase.name).string();
+    const auto projectPath = (std::filesystem::path(TPP_TEST_SOURCE_DIR) / "TestCases" / testCase.name).string();
     auto compileOutput = runCommandDirect({TPP_EXE, projectPath});
 
     ASSERT_TRUE(compileOutput.success)
@@ -44,7 +44,7 @@ TEST_P(AcceptanceTestOnlyPositives, CompareRenderByCLIUsingInputFile) {
         return;
     }
 
-    const auto projectPath = std::filesystem::absolute("TestCases/" + testCase.name).string();
+    const auto projectPath = (std::filesystem::path(TPP_TEST_SOURCE_DIR) / "TestCases" / testCase.name).string();
     auto compileOutput = runCommandDirect({TPP_EXE, projectPath});
 
     ASSERT_TRUE(compileOutput.success)
