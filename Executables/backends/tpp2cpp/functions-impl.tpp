@@ -175,11 +175,13 @@ END
 
 // ── For loop ─────────────────────────────────────────────────────────────────
 
+template cpp_type(t: RenderTypeKind)
+@switch t@@case Str@std::string@end case@@case Int@int@end case@@case Bool@bool@end case@@case Named(n)@@n@@end case@@case List(e)@std::vector<@cpp_type(e)@>@end case@@case Optional(inner)@std::optional<@cpp_type(inner)@>@end case@@end switch@
+END
+
 template cpp_arg_type(t: RenderTypeKind)
 @switch t@@case Str@const std::string&@end case@@case Int@const int&@end case@@case Bool@bool@end case@@case Named(n)@const @n@&@end case@@case List(e)@const std::vector<@cpp_type(e)@>&@end case@@case Optional(inner)@const std::optional<@cpp_type(inner)@>&@end case@@end switch@
 END
-
-template cpp_type(t: RenderTypeKind)
 @switch t@@case Str@std::string@end case@@case Int@int@end case@@case Bool@bool@end case@@case Named(n)@@n@@end case@@case List(e)@std::vector<@cpp_type(e)@>@end case@@case Optional(inner)@std::optional<@cpp_type(inner)@>@end case@@end switch@
 END
 
