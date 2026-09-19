@@ -7,12 +7,23 @@
 #       NAME <name>                # unique prefix for generated output files
 #       [NAMESPACE <name>]         # C++ namespace to wrap generated code in
 #       [EXTRA_INCLUDES <file>...] # additional -i <file> flags passed to tpp2cpp
+#       [EMBED_RUNTIME]            # don't link lib_tpp; use standalone shadow copies
+#                                   # of the runtime headers generated code needs
 #   )
 #
 # Adds generated sources directly to the existing <target>:
 #   <name>_types.h          — C++ struct/enum definitions
 #   <name>_functions.h      — C++ function declarations (depends on types header)
 #   <name>_implementation.cc — C++ function implementations (added as PRIVATE source)
+#
+# By default tpp_add() links lib_tpp into <target> so its generated code can
+# resolve #include <tpp/ArgType.h>, <tpp/Policy.h>, <tpp/Writer.h>. Pass
+# EMBED_RUNTIME to avoid the lib_tpp dependency entirely: `tpp2cpp runtime`
+# (content embedded in the tpp2cpp binary at its own build time, the same way
+# defs.h embeds the compiler's own IR) supplies a standalone <name>_runtime.h,
+# and `tpp2cpp functions/impl --standalone` omit the built-in tpp/ includes in
+# favor of it. The only build-time requirement is the tpp2cpp executable —
+# no lib_tpp headers or source tree are read.
 #
 # The generated headers are accessible via target_include_directories automatically.
 # Code in <target> may #include "<name>_functions.h".
@@ -24,7 +35,7 @@
 function(tpp_add target_name)
     cmake_parse_arguments(
         TPP                           # prefix
-        ""                            # options (none)
+        "EMBED_RUNTIME"               # options
         "SOURCE_DIR;NAME;NAMESPACE"   # single-value keywords
         "EXTRA_INCLUDES"              # multi-value keywords
         ${ARGN}
@@ -46,6 +57,7 @@ function(tpp_add target_name)
     set(out_prefix "${TPP_NAME}")
     set(out_json  "${CMAKE_CURRENT_BINARY_DIR}/${out_prefix}-tpp.json")
     set(out_json_depfile "${out_json}.d")
+    set(out_runtime "${CMAKE_CURRENT_BINARY_DIR}/${out_prefix}_runtime.h")
     set(out_types "${CMAKE_CURRENT_BINARY_DIR}/${out_prefix}_types.h")
     set(out_funs  "${CMAKE_CURRENT_BINARY_DIR}/${out_prefix}_functions.h")
     set(out_impl  "${CMAKE_CURRENT_BINARY_DIR}/${out_prefix}_implementation.cc")
@@ -61,6 +73,26 @@ function(tpp_add target_name)
     foreach(inc IN LISTS TPP_EXTRA_INCLUDES)
         list(APPEND extra_include_args -i "${inc}")
     endforeach()
+
+    set(standalone_args "")
+    set(runtime_include_args "")
+    if(TPP_EMBED_RUNTIME)
+        set(standalone_args --standalone)
+        set(runtime_include_args -i "${out_prefix}_runtime.h")
+
+        # Step 0: ask tpp2cpp for its embedded standalone runtime header
+        add_custom_command(
+            OUTPUT "${out_runtime}"
+            COMMAND ${CMAKE_COMMAND}
+                -DCMD=$<TARGET_FILE:tpp2cpp>
+                "-DARGS=runtime"
+                -DOUT=${out_runtime}
+                -P ${TPP_SOURCE}/cmake/StdoutToFile.cmake
+            DEPENDS $<TARGET_FILE:tpp2cpp>
+            COMMENT "tpp2cpp runtime ${out_prefix}"
+            VERBATIM
+        )
+    endif()
 
     # Step 1: compile templates to JSON
     add_custom_command(
@@ -94,7 +126,7 @@ function(tpp_add target_name)
     )
 
     # Step 3: generate C++ functions header (includes types header)
-    set(_funs_args functions ${ns_args} -i "${out_prefix}_types.h" ${extra_include_args} --input "${out_json}")
+    set(_funs_args functions ${ns_args} ${standalone_args} ${runtime_include_args} -i "${out_prefix}_types.h" ${extra_include_args} --input "${out_json}")
     add_custom_command(
         OUTPUT "${out_funs}"
         COMMAND ${CMAKE_COMMAND}
@@ -108,7 +140,7 @@ function(tpp_add target_name)
     )
 
     # Step 4: generate C++ implementation (includes functions header)
-    set(_impl_args impl ${ns_args} -i "${out_prefix}_functions.h" ${extra_include_args} --input "${out_json}")
+    set(_impl_args impl ${ns_args} ${standalone_args} ${runtime_include_args} -i "${out_prefix}_functions.h" ${extra_include_args} --input "${out_json}")
     add_custom_command(
         OUTPUT "${out_impl}"
         COMMAND ${CMAKE_COMMAND}
@@ -124,12 +156,20 @@ function(tpp_add target_name)
     # Add generated sources directly to the existing target.
     # Listing the headers as sources makes CMake enforce their generation
     # before any compilation in the target (no separate custom_target needed).
-    target_sources(${target_name} PRIVATE "${out_impl}" "${out_types}" "${out_funs}")
+    set(_generated_sources "${out_impl}" "${out_types}" "${out_funs}")
+    if(TPP_EMBED_RUNTIME)
+        list(APPEND _generated_sources "${out_runtime}")
+    endif()
+    target_sources(${target_name} PRIVATE ${_generated_sources})
 
     get_target_property(_tpp_add_initialized ${target_name} TPP_ADD_INITIALIZED)
     if(NOT _tpp_add_initialized)
         target_include_directories(${target_name} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
-        target_link_libraries(${target_name} PRIVATE lib_tpp)
+        if(TPP_EMBED_RUNTIME)
+            target_link_libraries(${target_name} PRIVATE ${TPP_NLOHMANN_JSON_TARGET})
+        else()
+            target_link_libraries(${target_name} PRIVATE lib_tpp)
+        endif()
         add_dependencies(${target_name} tpp tpp2cpp)
         set_target_properties(${target_name} PROPERTIES TPP_ADD_INITIALIZED TRUE)
     endif()

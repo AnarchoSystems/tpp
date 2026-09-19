@@ -2,6 +2,7 @@
 #include <tpp/Runtime.h>
 #include <CodegenHelpers.h>
 #include "defs.h"
+#include "runtime_defs.h"
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
@@ -14,16 +15,21 @@
 //   types     — produces a header file with type definitions
 //   functions — produces a header file rendering the template functions as C++ functions
 //   impl      — produces a .cc file with the implementations of the functions declared by 'functions'
+//   runtime   — prints a standalone header with the tpp:: runtime pieces functions/impl need
+//               (Writer/Policy/ArgType/etc.), so generated code can avoid depending on lib_tpp
 // options:
 //   -ns <name>       wrap generated code in a namespace
 //   -i <file>        files to include at the top of the generated code (repeatable)
 //   --input <file>   read IR JSON from file instead of stdin
+//   --standalone     (functions/impl only) omit the built-in #include <tpp/...> lines;
+//                     supply their contents yourself, e.g. via `-i` and `tpp2cpp runtime`
 
 enum Mode {
     None,
     Types,
     Functions,
-    Implementation
+    Implementation,
+    Runtime
 };
 
 void printUsage();
@@ -46,6 +52,7 @@ struct ParsedCommandLine {
     std::string inputFile;
     std::string namespaceName;
     std::vector<std::string> includes;
+    bool standalone = false;
 };
 
 static std::string readTextInputOrExit(const std::string &inputFile) {
@@ -89,6 +96,9 @@ static Mode parseModeOrExit(const std::string &command) {
     }
     if (command == "impl") {
         return Mode::Implementation;
+    }
+    if (command == "runtime") {
+        return Mode::Runtime;
     }
 
     std::cerr << "Unknown command: " << command << "\n\n";
@@ -141,6 +151,10 @@ static ParsedCommandLine parseCommandLineOrExit(int argc, char *argv[]) {
             result.includes.push_back(argv[++index]);
             continue;
         }
+        if (arg == "--standalone") {
+            result.standalone = true;
+            continue;
+        }
 
         std::cerr << "Unknown option: " << arg << "\nUse -h for usage info.\n";
         std::exit(EXIT_FAILURE);
@@ -153,6 +167,12 @@ static ParsedCommandLine parseCommandLineOrExit(int argc, char *argv[]) {
 
 int main(int argc, char *argv[]) {
     const auto cli = parseCommandLineOrExit(argc, argv);
+
+    if (cli.mode == Mode::Runtime) {
+        std::cout << runtime_header_src;
+        return EXIT_SUCCESS;
+    }
+
     const auto input = loadIRInputOrExit(cli.inputFile);
     const auto &iRep = mainIR();
 
@@ -166,9 +186,26 @@ int main(int argc, char *argv[]) {
         return output;
     };
 
+    // (functions/impl only) drop the built-in tpp/ includes so callers can
+    // substitute their own (e.g. the output of `tpp2cpp runtime`) via `-i`.
+    auto stripStandaloneIncludes = [&](std::string text, std::initializer_list<const char *> lines) {
+        if (!cli.standalone) {
+            return text;
+        }
+        for (const char *line : lines) {
+            const std::string needle = std::string(line) + "\n";
+            const auto pos = text.find(needle);
+            if (pos != std::string::npos) {
+                text.erase(pos, needle.size());
+            }
+        }
+        return text;
+    };
+
     std::string output;
     switch (cli.mode) {
     case Mode::None:
+    case Mode::Runtime:
     {
         printUsage();
         return EXIT_FAILURE;
@@ -181,11 +218,14 @@ int main(int argc, char *argv[]) {
     case Mode::Functions:
     {
         output = renderFunction("render_cpp_functions", to_render_cpp_functions_input(input, cli.includes, cli.namespaceName));
+        output = stripStandaloneIncludes(std::move(output), {"#include <tpp/ArgType.h>"});
         break;
     }
     case Mode::Implementation: {
         auto ctx = buildFunctionsContext(input, "", cli.includes, cli.namespaceName);
         output = renderFunction("render_cpp_native_implementation", nlohmann::json(ctx));
+        output = stripStandaloneIncludes(std::move(output),
+                                         {"#include <tpp/ArgType.h>", "#include <tpp/Policy.h>", "#include <tpp/Writer.h>"});
         break;
     }
     }
@@ -201,11 +241,14 @@ void printUsage() {
                  "  types      Produce a header with C++ type definitions\n"
                  "  functions  Produce a header with C++ function declarations\n"
                  "  impl       Produce a .cc with function implementations\n"
+                 "  runtime    Print a standalone header with the tpp:: runtime pieces\n"
+                 "             (Writer/Policy/ArgType/etc.) generated code needs\n"
                  "\n"
                  "Options:\n"
                  "  -ns <name>        Wrap generated code in a namespace\n"
                  "  -i <file>         Include file at top of generated code (repeatable)\n"
                  "  --input <file>    Read IR JSON from file instead of stdin\n"
+                 "  --standalone      (functions/impl) omit built-in #include <tpp/...> lines\n"
                  "  -h, --help        Print this message\n";
 }
 

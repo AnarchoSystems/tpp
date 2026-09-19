@@ -1,0 +1,4312 @@
+{
+  "tests": 728,
+  "name": "AllTests",
+  "testsuites": [
+    {
+      "name": "static_tests",
+      "tests": 148,
+      "testsuite": [
+        {
+          "name": "basic_variant_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/basic_variant_test.cc",
+          "line": 7
+        },
+        {
+          "name": "basic_variant_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/basic_variant_test.cc",
+          "line": 32
+        },
+        {
+          "name": "for_align_basic_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/for_align_basic_test.cc",
+          "line": 7
+        },
+        {
+          "name": "for_align_basic_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/for_align_basic_test.cc",
+          "line": 16
+        },
+        {
+          "name": "for_separator_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/for_separator_test.cc",
+          "line": 7
+        },
+        {
+          "name": "for_separator_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/for_separator_test.cc",
+          "line": 14
+        },
+        {
+          "name": "if_optional_null_allowed_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/if_optional_null_allowed_test.cc",
+          "line": 7
+        },
+        {
+          "name": "if_optional_null_allowed_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/if_optional_null_allowed_test.cc",
+          "line": 14
+        },
+        {
+          "name": "inline_unicode_adjacent_directives_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/inline_unicode_adjacent_directives_test.cc",
+          "line": 7
+        },
+        {
+          "name": "inline_unicode_adjacent_directives_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/inline_unicode_adjacent_directives_test.cc",
+          "line": 14
+        },
+        {
+          "name": "multi_source_files_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/multi_source_files_test.cc",
+          "line": 7
+        },
+        {
+          "name": "multi_source_files_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/multi_source_files_test.cc",
+          "line": 16
+        },
+        {
+          "name": "policy_individual_var_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/policy_individual_var_test.cc",
+          "line": 7
+        },
+        {
+          "name": "policy_individual_var_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/policy_individual_var_test.cc",
+          "line": 14
+        },
+        {
+          "name": "policy_scope_propagate_for_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/policy_scope_propagate_for_test.cc",
+          "line": 7
+        },
+        {
+          "name": "policy_scope_propagate_for_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/policy_scope_propagate_for_test.cc",
+          "line": 14
+        },
+        {
+          "name": "switch_missing_case_non_exhaustive_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/switch_missing_case_non_exhaustive_test.cc",
+          "line": 7
+        },
+        {
+          "name": "switch_missing_case_non_exhaustive_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/switch_missing_case_non_exhaustive_test.cc",
+          "line": 14
+        },
+        {
+          "name": "basic_struct_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/basic_struct_test.cc",
+          "line": 7
+        },
+        {
+          "name": "basic_struct_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/basic_struct_test.cc",
+          "line": 18
+        },
+        {
+          "name": "for_align_all_right_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/for_align_all_right_test.cc",
+          "line": 7
+        },
+        {
+          "name": "for_align_all_right_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/for_align_all_right_test.cc",
+          "line": 16
+        },
+        {
+          "name": "for_sep_newline_else_if_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/for_sep_newline_else_if_test.cc",
+          "line": 7
+        },
+        {
+          "name": "for_sep_newline_else_if_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/for_sep_newline_else_if_test.cc",
+          "line": 15
+        },
+        {
+          "name": "if_optional_missing_allowed_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/if_optional_missing_allowed_test.cc",
+          "line": 7
+        },
+        {
+          "name": "if_optional_missing_allowed_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/if_optional_missing_allowed_test.cc",
+          "line": 14
+        },
+        {
+          "name": "inline_switch_following_block_lines_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/inline_switch_following_block_lines_test.cc",
+          "line": 7
+        },
+        {
+          "name": "inline_switch_following_block_lines_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/inline_switch_following_block_lines_test.cc",
+          "line": 15
+        },
+        {
+          "name": "multi_param_main_with_structs_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/multi_param_main_with_structs_test.cc",
+          "line": 7
+        },
+        {
+          "name": "multi_param_main_with_structs_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/multi_param_main_with_structs_test.cc",
+          "line": 16
+        },
+        {
+          "name": "policy_in_switch_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/policy_in_switch_test.cc",
+          "line": 7
+        },
+        {
+          "name": "policy_in_switch_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/policy_in_switch_test.cc",
+          "line": 14
+        },
+        {
+          "name": "policy_scope_override_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/policy_scope_override_test.cc",
+          "line": 7
+        },
+        {
+          "name": "policy_scope_override_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/policy_scope_override_test.cc",
+          "line": 14
+        },
+        {
+          "name": "switch_missing_case_allowed_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/switch_missing_case_allowed_test.cc",
+          "line": 7
+        },
+        {
+          "name": "switch_missing_case_allowed_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/switch_missing_case_allowed_test.cc",
+          "line": 14
+        },
+        {
+          "name": "wildcard_types_tpp_types_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/wildcard_types_tpp_types_test.cc",
+          "line": 7
+        },
+        {
+          "name": "wildcard_types_tpp_types_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/wildcard_types_tpp_types_test.cc",
+          "line": 18
+        },
+        {
+          "name": "conditional_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/conditional_test.cc",
+          "line": 7
+        },
+        {
+          "name": "conditional_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/conditional_test.cc",
+          "line": 15
+        },
+        {
+          "name": "for_align_center_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/for_align_center_test.cc",
+          "line": 7
+        },
+        {
+          "name": "for_align_center_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/for_align_center_test.cc",
+          "line": 15
+        },
+        {
+          "name": "for_separator_newline_indent_equivalence_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/for_separator_newline_indent_equivalence_test.cc",
+          "line": 7
+        },
+        {
+          "name": "for_separator_newline_indent_equivalence_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/for_separator_newline_indent_equivalence_test.cc",
+          "line": 26
+        },
+        {
+          "name": "if_optional_present_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/if_optional_present_test.cc",
+          "line": 7
+        },
+        {
+          "name": "if_optional_present_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/if_optional_present_test.cc",
+          "line": 14
+        },
+        {
+          "name": "lsp_multi_file_sources_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/lsp_multi_file_sources_test.cc",
+          "line": 7
+        },
+        {
+          "name": "lsp_multi_file_sources_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/lsp_multi_file_sources_test.cc",
+          "line": 16
+        },
+        {
+          "name": "multiple_function_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/multiple_function_test.cc",
+          "line": 7
+        },
+        {
+          "name": "multiple_function_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/multiple_function_test.cc",
+          "line": 16
+        },
+        {
+          "name": "policy_length_ok_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/policy_length_ok_test.cc",
+          "line": 7
+        },
+        {
+          "name": "policy_length_ok_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/policy_length_ok_test.cc",
+          "line": 14
+        },
+        {
+          "name": "recursive_expr_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/recursive_expr_test.cc",
+          "line": 7
+        },
+        {
+          "name": "recursive_expr_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/recursive_expr_test.cc",
+          "line": 14
+        },
+        {
+          "name": "template_comment_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/template_comment_test.cc",
+          "line": 7
+        },
+        {
+          "name": "template_comment_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/template_comment_test.cc",
+          "line": 14
+        },
+        {
+          "name": "apostrophe_in_input_string_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/apostrophe_in_input_string_test.cc",
+          "line": 7
+        },
+        {
+          "name": "apostrophe_in_input_string_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/apostrophe_in_input_string_test.cc",
+          "line": 14
+        },
+        {
+          "name": "escape_end_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/escape_end_test.cc",
+          "line": 7
+        },
+        {
+          "name": "escape_end_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/escape_end_test.cc",
+          "line": 15
+        },
+        {
+          "name": "for_preceded_by_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/for_preceded_by_test.cc",
+          "line": 7
+        },
+        {
+          "name": "for_preceded_by_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/for_preceded_by_test.cc",
+          "line": 14
+        },
+        {
+          "name": "if_not_optional_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/if_not_optional_test.cc",
+          "line": 7
+        },
+        {
+          "name": "if_not_optional_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/if_not_optional_test.cc",
+          "line": 14
+        },
+        {
+          "name": "inline_if_following_block_lines_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/inline_if_following_block_lines_test.cc",
+          "line": 7
+        },
+        {
+          "name": "inline_if_following_block_lines_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/inline_if_following_block_lines_test.cc",
+          "line": 15
+        },
+        {
+          "name": "multi_param_main_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/multi_param_main_test.cc",
+          "line": 7
+        },
+        {
+          "name": "multi_param_main_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/multi_param_main_test.cc",
+          "line": 16
+        },
+        {
+          "name": "policy_in_render_via_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/policy_in_render_via_test.cc",
+          "line": 7
+        },
+        {
+          "name": "policy_in_render_via_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/policy_in_render_via_test.cc",
+          "line": 14
+        },
+        {
+          "name": "policy_scope_none_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/policy_scope_none_test.cc",
+          "line": 7
+        },
+        {
+          "name": "policy_scope_none_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/policy_scope_none_test.cc",
+          "line": 14
+        },
+        {
+          "name": "switch_default_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/switch_default_test.cc",
+          "line": 7
+        },
+        {
+          "name": "switch_default_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/switch_default_test.cc",
+          "line": 14
+        },
+        {
+          "name": "unary_wrapped_struct_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/unary_wrapped_struct_test.cc",
+          "line": 7
+        },
+        {
+          "name": "unary_wrapped_struct_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/unary_wrapped_struct_test.cc",
+          "line": 14
+        },
+        {
+          "name": "escape_at_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/escape_at_test.cc",
+          "line": 7
+        },
+        {
+          "name": "escape_at_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/escape_at_test.cc",
+          "line": 13
+        },
+        {
+          "name": "for_loop_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/for_loop_test.cc",
+          "line": 7
+        },
+        {
+          "name": "for_loop_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/for_loop_test.cc",
+          "line": 17
+        },
+        {
+          "name": "if_bool_and_not_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/if_bool_and_not_test.cc",
+          "line": 7
+        },
+        {
+          "name": "if_bool_and_not_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/if_bool_and_not_test.cc",
+          "line": 14
+        },
+        {
+          "name": "inline_for_following_block_lines_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/inline_for_following_block_lines_test.cc",
+          "line": 7
+        },
+        {
+          "name": "inline_for_following_block_lines_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/inline_for_following_block_lines_test.cc",
+          "line": 16
+        },
+        {
+          "name": "multi_line_variable_in_for_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/multi_line_variable_in_for_test.cc",
+          "line": 7
+        },
+        {
+          "name": "multi_line_variable_in_for_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/multi_line_variable_in_for_test.cc",
+          "line": 16
+        },
+        {
+          "name": "pointfree_visitor_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/pointfree_visitor_test.cc",
+          "line": 7
+        },
+        {
+          "name": "pointfree_visitor_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/pointfree_visitor_test.cc",
+          "line": 16
+        },
+        {
+          "name": "policy_require_match_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/policy_require_match_test.cc",
+          "line": 7
+        },
+        {
+          "name": "policy_require_match_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/policy_require_match_test.cc",
+          "line": 14
+        },
+        {
+          "name": "simple_interpolation_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/simple_interpolation_test.cc",
+          "line": 7
+        },
+        {
+          "name": "simple_interpolation_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/simple_interpolation_test.cc",
+          "line": 14
+        },
+        {
+          "name": "unary_wrapped_string_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/unary_wrapped_string_test.cc",
+          "line": 7
+        },
+        {
+          "name": "unary_wrapped_string_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/unary_wrapped_string_test.cc",
+          "line": 14
+        },
+        {
+          "name": "direct_function_call_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/direct_function_call_test.cc",
+          "line": 7
+        },
+        {
+          "name": "direct_function_call_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/direct_function_call_test.cc",
+          "line": 16
+        },
+        {
+          "name": "for_align_spec_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/for_align_spec_test.cc",
+          "line": 7
+        },
+        {
+          "name": "for_align_spec_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/for_align_spec_test.cc",
+          "line": 16
+        },
+        {
+          "name": "for_separator_newline_middle_indent_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/for_separator_newline_middle_indent_test.cc",
+          "line": 7
+        },
+        {
+          "name": "for_separator_newline_middle_indent_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/for_separator_newline_middle_indent_test.cc",
+          "line": 18
+        },
+        {
+          "name": "inline_case_function_call_in_switch_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/inline_case_function_call_in_switch_test.cc",
+          "line": 7
+        },
+        {
+          "name": "inline_case_function_call_in_switch_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/inline_case_function_call_in_switch_test.cc",
+          "line": 14
+        },
+        {
+          "name": "multi_arg_function_call_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/multi_arg_function_call_test.cc",
+          "line": 7
+        },
+        {
+          "name": "multi_arg_function_call_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/multi_arg_function_call_test.cc",
+          "line": 24
+        },
+        {
+          "name": "multiple_main_signature_preview_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/multiple_main_signature_preview_test.cc",
+          "line": 7
+        },
+        {
+          "name": "multiple_main_signature_preview_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/multiple_main_signature_preview_test.cc",
+          "line": 14
+        },
+        {
+          "name": "policy_on_template_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/policy_on_template_test.cc",
+          "line": 7
+        },
+        {
+          "name": "policy_on_template_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/policy_on_template_test.cc",
+          "line": 15
+        },
+        {
+          "name": "recursive_list_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/recursive_list_test.cc",
+          "line": 7
+        },
+        {
+          "name": "recursive_list_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/recursive_list_test.cc",
+          "line": 14
+        },
+        {
+          "name": "typedef_doc_comment_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/typedef_doc_comment_test.cc",
+          "line": 7
+        },
+        {
+          "name": "typedef_doc_comment_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/typedef_doc_comment_test.cc",
+          "line": 14
+        },
+        {
+          "name": "direct_function_call_zero_args_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/direct_function_call_zero_args_test.cc",
+          "line": 7
+        },
+        {
+          "name": "direct_function_call_zero_args_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/direct_function_call_zero_args_test.cc",
+          "line": 13
+        },
+        {
+          "name": "for_align_three_cols_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/for_align_three_cols_test.cc",
+          "line": 7
+        },
+        {
+          "name": "for_align_three_cols_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/for_align_three_cols_test.cc",
+          "line": 15
+        },
+        {
+          "name": "for_separator_text_newline_text_newline_text_indent_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/for_separator_text_newline_text_newline_text_indent_test.cc",
+          "line": 7
+        },
+        {
+          "name": "for_separator_text_newline_text_newline_text_indent_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/for_separator_text_newline_text_newline_text_indent_test.cc",
+          "line": 20
+        },
+        {
+          "name": "inline_case_multiline_body_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/inline_case_multiline_body_test.cc",
+          "line": 7
+        },
+        {
+          "name": "inline_case_multiline_body_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/inline_case_multiline_body_test.cc",
+          "line": 31
+        },
+        {
+          "name": "multi_line_variable_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/multi_line_variable_test.cc",
+          "line": 7
+        },
+        {
+          "name": "multi_line_variable_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/multi_line_variable_test.cc",
+          "line": 16
+        },
+        {
+          "name": "pointfree_function_call_in_for_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/pointfree_function_call_in_for_test.cc",
+          "line": 7
+        },
+        {
+          "name": "pointfree_function_call_in_for_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/pointfree_function_call_in_for_test.cc",
+          "line": 16
+        },
+        {
+          "name": "policy_output_filter_ok_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/policy_output_filter_ok_test.cc",
+          "line": 7
+        },
+        {
+          "name": "policy_output_filter_ok_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/policy_output_filter_ok_test.cc",
+          "line": 14
+        },
+        {
+          "name": "render_via_single_enum_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/render_via_single_enum_test.cc",
+          "line": 7
+        },
+        {
+          "name": "render_via_single_enum_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/render_via_single_enum_test.cc",
+          "line": 14
+        },
+        {
+          "name": "typedef_line_comment_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/typedef_line_comment_test.cc",
+          "line": 7
+        },
+        {
+          "name": "typedef_line_comment_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/typedef_line_comment_test.cc",
+          "line": 14
+        },
+        {
+          "name": "enum_cpp_variant_api_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/enum_cpp_variant_api_test.cc",
+          "line": 7
+        },
+        {
+          "name": "enum_cpp_variant_api_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/enum_cpp_variant_api_test.cc",
+          "line": 14
+        },
+        {
+          "name": "for_iterator_var_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/for_iterator_var_test.cc",
+          "line": 7
+        },
+        {
+          "name": "for_iterator_var_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/for_iterator_var_test.cc",
+          "line": 14
+        },
+        {
+          "name": "hello_world_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/hello_world_test.cc",
+          "line": 7
+        },
+        {
+          "name": "hello_world_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/hello_world_test.cc",
+          "line": 13
+        },
+        {
+          "name": "inline_empty_case_in_switch_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/inline_empty_case_in_switch_test.cc",
+          "line": 7
+        },
+        {
+          "name": "inline_empty_case_in_switch_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/inline_empty_case_in_switch_test.cc",
+          "line": 14
+        },
+        {
+          "name": "multi_line_variable_col_zero_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/multi_line_variable_col_zero_test.cc",
+          "line": 7
+        },
+        {
+          "name": "multi_line_variable_col_zero_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/multi_line_variable_col_zero_test.cc",
+          "line": 16
+        },
+        {
+          "name": "pointfree_function_call_in_switch_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/pointfree_function_call_in_switch_test.cc",
+          "line": 7
+        },
+        {
+          "name": "pointfree_function_call_in_switch_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/pointfree_function_call_in_switch_test.cc",
+          "line": 16
+        },
+        {
+          "name": "policy_replacements_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/policy_replacements_test.cc",
+          "line": 7
+        },
+        {
+          "name": "policy_replacements_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/policy_replacements_test.cc",
+          "line": 14
+        },
+        {
+          "name": "render_via_single_enum_bare_tag_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/render_via_single_enum_bare_tag_test.cc",
+          "line": 7
+        },
+        {
+          "name": "render_via_single_enum_bare_tag_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/render_via_single_enum_bare_tag_test.cc",
+          "line": 14
+        },
+        {
+          "name": "unary_list_wrapped_compiled",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/unary_list_wrapped_test.cc",
+          "line": 7
+        },
+        {
+          "name": "unary_list_wrapped_dynamic_binding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/build\/Test\/unary_list_wrapped_test.cc",
+          "line": 16
+        }
+      ]
+    },
+    {
+      "name": "EnumCppVariantApiTest",
+      "tests": 1,
+      "testsuite": [
+        {
+          "name": "SupportsNestedTagTypesAssignmentAndEmplace",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/EnumCppVariantApiTest.cc",
+          "line": 5
+        }
+      ]
+    },
+    {
+      "name": "FunctionLookupTest",
+      "tests": 2,
+      "testsuite": [
+        {
+          "name": "NameLookupAmbiguous",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/FunctionLookupTest.cc",
+          "line": 31
+        },
+        {
+          "name": "SignatureLookupAndTypedLookupDisambiguate",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/FunctionLookupTest.cc",
+          "line": 41
+        }
+      ]
+    },
+    {
+      "name": "IRStability",
+      "tests": 6,
+      "testsuite": [
+        {
+          "name": "GeneratedImplementationContainsTakeOutput",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/IRStabilityTest.cc",
+          "line": 129
+        },
+        {
+          "name": "GeneratedImplementationContainsTppWriter",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/IRStabilityTest.cc",
+          "line": 133
+        },
+        {
+          "name": "GeneratedImplementationDoesNotContainTppVM",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/IRStabilityTest.cc",
+          "line": 137
+        },
+        {
+          "name": "GeneratedImplementationUsesNativeVmHelpers",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/IRStabilityTest.cc",
+          "line": 141
+        },
+        {
+          "name": "GeneratedImplementationDoesNotUseManualVmScaffolding",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/IRStabilityTest.cc",
+          "line": 148
+        },
+        {
+          "name": "SchemaCheck",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/IRStabilityTest.cc",
+          "line": 158
+        }
+      ]
+    },
+    {
+      "name": "LspWatchTest",
+      "tests": 3,
+      "testsuite": [
+        {
+          "name": "PolicyChangesReloadProjectAndPublishPolicyDiagnostics",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 456
+        },
+        {
+          "name": "DirtyPolicyEditsRecompileProjectWithoutSave",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 534
+        },
+        {
+          "name": "EncodedWorkspaceUriAndConfigPathResolveToProject",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 630
+        }
+      ]
+    },
+    {
+      "name": "ToolingTest",
+      "tests": 1,
+      "testsuite": [
+        {
+          "name": "ParseTemplateSourceSkipsCommentsAndIndentedHeaders",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 695
+        }
+      ]
+    },
+    {
+      "name": "LspCompletionTest",
+      "tests": 1,
+      "testsuite": [
+        {
+          "name": "FieldAndTypeNameCompletions",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 725
+        }
+      ]
+    },
+    {
+      "name": "WorkspaceProjectTest",
+      "tests": 1,
+      "testsuite": [
+        {
+          "name": "DependsOnWatchedPathRejectsSiblingWithMatchingPrefix",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/WorkspaceProjectTest.cc",
+          "line": 48
+        }
+      ]
+    },
+    {
+      "name": "TppCliTest",
+      "tests": 1,
+      "testsuite": [
+        {
+          "name": "PrintInputsEmitsResolvedSourcesAndPoliciesInStableOrder",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/TppCliTest.cc",
+          "line": 48
+        }
+      ]
+    },
+    {
+      "name": "Tpp2CppCliTest",
+      "tests": 2,
+      "testsuite": [
+        {
+          "name": "EmitsDocCommentsInTypesAndFunctions",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/Tpp2CppCliTest.cc",
+          "line": 21
+        },
+        {
+          "name": "FunctionsHandlesMakeJavaTestFixture",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/Tpp2CppCliTest.cc",
+          "line": 47
+        }
+      ]
+    },
+    {
+      "name": "Tpp2JavaCliTest",
+      "tests": 2,
+      "testsuite": [
+        {
+          "name": "SourceEmitsDocsAndOmitsRuntime",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/Tpp2JavaCliTest.cc",
+          "line": 16
+        },
+        {
+          "name": "SharedRuntimeContainsOnlyRuntimeSupport",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/Tpp2JavaCliTest.cc",
+          "line": 41
+        }
+      ]
+    },
+    {
+      "name": "Tpp2SwiftCliTest",
+      "tests": 2,
+      "testsuite": [
+        {
+          "name": "SourceEmitsDocsAndOmitsRuntime",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/Tpp2SwiftCliTest.cc",
+          "line": 16
+        },
+        {
+          "name": "SharedRuntimeContainsOnlyRuntimeSupport",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/Tpp2SwiftCliTest.cc",
+          "line": 43
+        }
+      ]
+    },
+    {
+      "name": "WriterTest",
+      "tests": 18,
+      "testsuite": [
+        {
+          "name": "ConstructionEmpty",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/WriterTest.cc",
+          "line": 21
+        },
+        {
+          "name": "EmitLiteral",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/WriterTest.cc",
+          "line": 29
+        },
+        {
+          "name": "TakeOutputCanStripSingleTrailingNewline",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/WriterTest.cc",
+          "line": 38
+        },
+        {
+          "name": "EmitValueWithPolicy",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/WriterTest.cc",
+          "line": 48
+        },
+        {
+          "name": "EmitValueWithActivePolicy",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/WriterTest.cc",
+          "line": 57
+        },
+        {
+          "name": "EmitValueWithNoneOverride",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/WriterTest.cc",
+          "line": 69
+        },
+        {
+          "name": "PolicyScopeUnderflow",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/WriterTest.cc",
+          "line": 81
+        },
+        {
+          "name": "CapturedBlockScopeUnderflow",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/WriterTest.cc",
+          "line": 89
+        },
+        {
+          "name": "EmitCapturedBlockAtColumn",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/WriterTest.cc",
+          "line": 97
+        },
+        {
+          "name": "BeginAndEmitCapturedBlock",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/WriterTest.cc",
+          "line": 108
+        },
+        {
+          "name": "BeginCapturedBlockFallsBackToRuntimeColumn",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/WriterTest.cc",
+          "line": 120
+        },
+        {
+          "name": "EmitForEach",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/WriterTest.cc",
+          "line": 132
+        },
+        {
+          "name": "EmitCapturedBlockForEach",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/WriterTest.cc",
+          "line": 149
+        },
+        {
+          "name": "EmitCapturedBlockForEachJoinsTrailingNewlineBeforeSeparator",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/WriterTest.cc",
+          "line": 165
+        },
+        {
+          "name": "EmitCapturedBlockForEachKeepsRuntimeColumnForNewlineSeparator",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/WriterTest.cc",
+          "line": 180
+        },
+        {
+          "name": "EmitAlignedForEach",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/WriterTest.cc",
+          "line": 195
+        },
+        {
+          "name": "MultiLineIndent",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/WriterTest.cc",
+          "line": 225
+        },
+        {
+          "name": "BeginEndCapture",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/WriterTest.cc",
+          "line": 235
+        }
+      ]
+    },
+    {
+      "name": "AcceptanceTests\/AcceptanceTest",
+      "tests": 246,
+      "testsuite": [
+        {
+          "name": "RunTestCase\/apostrophe_in_input_string",
+          "value_param": "apostrophe in input string",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/basic_struct",
+          "value_param": "basic struct",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/basic_variant",
+          "value_param": "basic variant",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/conditional",
+          "value_param": "conditional",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/direct_function_call",
+          "value_param": "direct function call",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/direct_function_call_zero_args",
+          "value_param": "direct function call zero args",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/enum_cpp_variant_api",
+          "value_param": "enum cpp variant api",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_align_multiline_dynamic_data",
+          "value_param": "error align multiline dynamic data",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_align_multiline_literal",
+          "value_param": "error align multiline literal",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_align_spec_too_short",
+          "value_param": "error align spec too short",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_align_without_option",
+          "value_param": "error align without option",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_case_trailing_tokens",
+          "value_param": "error case trailing tokens",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_content_after_inline_end_case",
+          "value_param": "error content after inline end case",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_duplicate_function",
+          "value_param": "error duplicate function",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_duplicate_type",
+          "value_param": "error duplicate type",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_empty_directive",
+          "value_param": "error empty directive",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_for_option_without_pipe",
+          "value_param": "error for option without pipe",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_for_unknown_option",
+          "value_param": "error for unknown option",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_if_not_non_bool",
+          "value_param": "error if not non bool",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_infinite_enum",
+          "value_param": "error infinite enum",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_infinite_struct",
+          "value_param": "error infinite struct",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_interpolate_enum",
+          "value_param": "error interpolate enum",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_interpolate_list",
+          "value_param": "error interpolate list",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_interpolate_struct",
+          "value_param": "error interpolate struct",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_main_lookup_ambiguous",
+          "value_param": "error main lookup ambiguous",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_main_not_found",
+          "value_param": "error main not found",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_missing_colon_in_typedef",
+          "value_param": "error missing colon in typedef",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_missing_end_case",
+          "value_param": "error missing end case",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_missing_end_for",
+          "value_param": "error missing end for",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_missing_end_switch",
+          "value_param": "error missing end switch",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_missing_field_in_input",
+          "value_param": "error missing field in input",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_missing_template_end",
+          "value_param": "error missing template end",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_optional_else_forbidden",
+          "value_param": "error optional else forbidden",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_optional_guard_in_absent_branch",
+          "value_param": "error optional guard in absent branch",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_optional_guarded_in_absent_branch",
+          "value_param": "error optional guarded in absent branch",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_optional_unguarded_access",
+          "value_param": "error optional unguarded access",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_policy_length_too_long",
+          "value_param": "error policy length too long",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_policy_length_too_short",
+          "value_param": "error policy length too short",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_policy_output_filter_fail",
+          "value_param": "error policy output filter fail",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_policy_reject_if",
+          "value_param": "error policy reject if",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_policy_require_no_match",
+          "value_param": "error policy require no match",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_render_member_access_on_list",
+          "value_param": "error render member access on list",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_render_unknown_option",
+          "value_param": "error render unknown option",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_render_via_missing_enum_overload",
+          "value_param": "error render via missing enum overload",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_render_via_missing_struct_overload",
+          "value_param": "error render via missing struct overload",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_switch_extraneous_options",
+          "value_param": "error switch extraneous options",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_switch_missing_case_check_exhaustive",
+          "value_param": "error switch missing case check exhaustive",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_switch_missing_case_check_exhaustive_block",
+          "value_param": "error switch missing case check exhaustive block",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_template_uses_undefined_field",
+          "value_param": "error template uses undefined field",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_undefined_type",
+          "value_param": "error undefined type",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_undefined_type_in_template",
+          "value_param": "error undefined type in template",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_undefined_type_in_template_param",
+          "value_param": "error undefined type in template param",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_unknown_policy_in_switch",
+          "value_param": "error unknown policy in switch",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_wrong_arg_count_empty",
+          "value_param": "error wrong arg count empty",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_wrong_arg_count_over",
+          "value_param": "error wrong arg count over",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/error_wrong_arg_count_under",
+          "value_param": "error wrong arg count under",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/escape_at",
+          "value_param": "escape at",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/escape_end",
+          "value_param": "escape end",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/for_align_all_right",
+          "value_param": "for align all right",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/for_align_basic",
+          "value_param": "for align basic",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/for_align_center",
+          "value_param": "for align center",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/for_align_spec",
+          "value_param": "for align spec",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/for_align_three_cols",
+          "value_param": "for align three cols",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/for_iterator_var",
+          "value_param": "for iterator var",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/for_loop",
+          "value_param": "for loop",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/for_preceded_by",
+          "value_param": "for preceded by",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/for_sep_newline_else_if",
+          "value_param": "for sep newline else if",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/for_separator",
+          "value_param": "for separator",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/for_separator_newline_indent_equivalence",
+          "value_param": "for separator newline indent equivalence",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/for_separator_newline_middle_indent",
+          "value_param": "for separator newline middle indent",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/for_separator_text_newline_text_newline_text_indent",
+          "value_param": "for separator text newline text newline text indent",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/hello_world",
+          "value_param": "hello world",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/if_bool_and_not",
+          "value_param": "if bool and not",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/if_not_optional",
+          "value_param": "if not optional",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/if_optional_missing_allowed",
+          "value_param": "if optional missing allowed",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/if_optional_null_allowed",
+          "value_param": "if optional null allowed",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/if_optional_present",
+          "value_param": "if optional present",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/inline_case_function_call_in_switch",
+          "value_param": "inline case function call in switch",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/inline_case_multiline_body",
+          "value_param": "inline case multiline body",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/inline_empty_case_in_switch",
+          "value_param": "inline empty case in switch",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/inline_for_following_block_lines",
+          "value_param": "inline for following block lines",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/inline_if_following_block_lines",
+          "value_param": "inline if following block lines",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/inline_switch_following_block_lines",
+          "value_param": "inline switch following block lines",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/inline_unicode_adjacent_directives",
+          "value_param": "inline unicode adjacent directives",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/lsp_multi_file_sources",
+          "value_param": "lsp multi file sources",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/multi_arg_function_call",
+          "value_param": "multi arg function call",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/multi_line_variable",
+          "value_param": "multi line variable",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/multi_line_variable_col_zero",
+          "value_param": "multi line variable col zero",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/multi_line_variable_in_for",
+          "value_param": "multi line variable in for",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/multi_param_main",
+          "value_param": "multi param main",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/multi_param_main_with_structs",
+          "value_param": "multi param main with structs",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/multi_source_files",
+          "value_param": "multi source files",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/multiple_function",
+          "value_param": "multiple function",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/multiple_main_signature_preview",
+          "value_param": "multiple main signature preview",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/pointfree_function_call_in_for",
+          "value_param": "pointfree function call in for",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/pointfree_function_call_in_switch",
+          "value_param": "pointfree function call in switch",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/pointfree_visitor",
+          "value_param": "pointfree visitor",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/policy_in_render_via",
+          "value_param": "policy in render via",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/policy_in_switch",
+          "value_param": "policy in switch",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/policy_individual_var",
+          "value_param": "policy individual var",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/policy_length_ok",
+          "value_param": "policy length ok",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/policy_on_template",
+          "value_param": "policy on template",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/policy_output_filter_ok",
+          "value_param": "policy output filter ok",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/policy_replacements",
+          "value_param": "policy replacements",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/policy_require_match",
+          "value_param": "policy require match",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/policy_scope_none",
+          "value_param": "policy scope none",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/policy_scope_override",
+          "value_param": "policy scope override",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/policy_scope_propagate_for",
+          "value_param": "policy scope propagate for",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/recursive_expr",
+          "value_param": "recursive expr",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/recursive_list",
+          "value_param": "recursive list",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/render_via_single_enum",
+          "value_param": "render via single enum",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/render_via_single_enum_bare_tag",
+          "value_param": "render via single enum bare tag",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/simple_interpolation",
+          "value_param": "simple interpolation",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/switch_default",
+          "value_param": "switch default",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/switch_missing_case_allowed",
+          "value_param": "switch missing case allowed",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/switch_missing_case_non_exhaustive",
+          "value_param": "switch missing case non exhaustive",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/template_comment",
+          "value_param": "template comment",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/typedef_doc_comment",
+          "value_param": "typedef doc comment",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/typedef_line_comment",
+          "value_param": "typedef line comment",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/unary_list_wrapped",
+          "value_param": "unary list wrapped",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/unary_wrapped_string",
+          "value_param": "unary wrapped string",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/unary_wrapped_struct",
+          "value_param": "unary wrapped struct",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "RunTestCase\/wildcard_types_tpp_types",
+          "value_param": "wildcard types tpp types",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 35
+        },
+        {
+          "name": "CompareCompileByCLI\/apostrophe_in_input_string",
+          "value_param": "apostrophe in input string",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/basic_struct",
+          "value_param": "basic struct",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/basic_variant",
+          "value_param": "basic variant",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/conditional",
+          "value_param": "conditional",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/direct_function_call",
+          "value_param": "direct function call",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/direct_function_call_zero_args",
+          "value_param": "direct function call zero args",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/enum_cpp_variant_api",
+          "value_param": "enum cpp variant api",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_align_multiline_dynamic_data",
+          "value_param": "error align multiline dynamic data",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_align_multiline_literal",
+          "value_param": "error align multiline literal",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_align_spec_too_short",
+          "value_param": "error align spec too short",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_align_without_option",
+          "value_param": "error align without option",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_case_trailing_tokens",
+          "value_param": "error case trailing tokens",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_content_after_inline_end_case",
+          "value_param": "error content after inline end case",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_duplicate_function",
+          "value_param": "error duplicate function",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_duplicate_type",
+          "value_param": "error duplicate type",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_empty_directive",
+          "value_param": "error empty directive",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_for_option_without_pipe",
+          "value_param": "error for option without pipe",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_for_unknown_option",
+          "value_param": "error for unknown option",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_if_not_non_bool",
+          "value_param": "error if not non bool",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_infinite_enum",
+          "value_param": "error infinite enum",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_infinite_struct",
+          "value_param": "error infinite struct",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_interpolate_enum",
+          "value_param": "error interpolate enum",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_interpolate_list",
+          "value_param": "error interpolate list",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_interpolate_struct",
+          "value_param": "error interpolate struct",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_main_lookup_ambiguous",
+          "value_param": "error main lookup ambiguous",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_main_not_found",
+          "value_param": "error main not found",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_missing_colon_in_typedef",
+          "value_param": "error missing colon in typedef",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_missing_end_case",
+          "value_param": "error missing end case",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_missing_end_for",
+          "value_param": "error missing end for",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_missing_end_switch",
+          "value_param": "error missing end switch",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_missing_field_in_input",
+          "value_param": "error missing field in input",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_missing_template_end",
+          "value_param": "error missing template end",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_optional_else_forbidden",
+          "value_param": "error optional else forbidden",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_optional_guard_in_absent_branch",
+          "value_param": "error optional guard in absent branch",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_optional_guarded_in_absent_branch",
+          "value_param": "error optional guarded in absent branch",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_optional_unguarded_access",
+          "value_param": "error optional unguarded access",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_policy_length_too_long",
+          "value_param": "error policy length too long",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_policy_length_too_short",
+          "value_param": "error policy length too short",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_policy_output_filter_fail",
+          "value_param": "error policy output filter fail",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_policy_reject_if",
+          "value_param": "error policy reject if",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_policy_require_no_match",
+          "value_param": "error policy require no match",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_render_member_access_on_list",
+          "value_param": "error render member access on list",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_render_unknown_option",
+          "value_param": "error render unknown option",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_render_via_missing_enum_overload",
+          "value_param": "error render via missing enum overload",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_render_via_missing_struct_overload",
+          "value_param": "error render via missing struct overload",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_switch_extraneous_options",
+          "value_param": "error switch extraneous options",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_switch_missing_case_check_exhaustive",
+          "value_param": "error switch missing case check exhaustive",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_switch_missing_case_check_exhaustive_block",
+          "value_param": "error switch missing case check exhaustive block",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_template_uses_undefined_field",
+          "value_param": "error template uses undefined field",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_undefined_type",
+          "value_param": "error undefined type",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_undefined_type_in_template",
+          "value_param": "error undefined type in template",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_undefined_type_in_template_param",
+          "value_param": "error undefined type in template param",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_unknown_policy_in_switch",
+          "value_param": "error unknown policy in switch",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_wrong_arg_count_empty",
+          "value_param": "error wrong arg count empty",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_wrong_arg_count_over",
+          "value_param": "error wrong arg count over",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/error_wrong_arg_count_under",
+          "value_param": "error wrong arg count under",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/escape_at",
+          "value_param": "escape at",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/escape_end",
+          "value_param": "escape end",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/for_align_all_right",
+          "value_param": "for align all right",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/for_align_basic",
+          "value_param": "for align basic",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/for_align_center",
+          "value_param": "for align center",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/for_align_spec",
+          "value_param": "for align spec",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/for_align_three_cols",
+          "value_param": "for align three cols",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/for_iterator_var",
+          "value_param": "for iterator var",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/for_loop",
+          "value_param": "for loop",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/for_preceded_by",
+          "value_param": "for preceded by",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/for_sep_newline_else_if",
+          "value_param": "for sep newline else if",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/for_separator",
+          "value_param": "for separator",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/for_separator_newline_indent_equivalence",
+          "value_param": "for separator newline indent equivalence",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/for_separator_newline_middle_indent",
+          "value_param": "for separator newline middle indent",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/for_separator_text_newline_text_newline_text_indent",
+          "value_param": "for separator text newline text newline text indent",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/hello_world",
+          "value_param": "hello world",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/if_bool_and_not",
+          "value_param": "if bool and not",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/if_not_optional",
+          "value_param": "if not optional",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/if_optional_missing_allowed",
+          "value_param": "if optional missing allowed",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/if_optional_null_allowed",
+          "value_param": "if optional null allowed",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/if_optional_present",
+          "value_param": "if optional present",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/inline_case_function_call_in_switch",
+          "value_param": "inline case function call in switch",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/inline_case_multiline_body",
+          "value_param": "inline case multiline body",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/inline_empty_case_in_switch",
+          "value_param": "inline empty case in switch",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/inline_for_following_block_lines",
+          "value_param": "inline for following block lines",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/inline_if_following_block_lines",
+          "value_param": "inline if following block lines",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/inline_switch_following_block_lines",
+          "value_param": "inline switch following block lines",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/inline_unicode_adjacent_directives",
+          "value_param": "inline unicode adjacent directives",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/lsp_multi_file_sources",
+          "value_param": "lsp multi file sources",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/multi_arg_function_call",
+          "value_param": "multi arg function call",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/multi_line_variable",
+          "value_param": "multi line variable",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/multi_line_variable_col_zero",
+          "value_param": "multi line variable col zero",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/multi_line_variable_in_for",
+          "value_param": "multi line variable in for",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/multi_param_main",
+          "value_param": "multi param main",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/multi_param_main_with_structs",
+          "value_param": "multi param main with structs",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/multi_source_files",
+          "value_param": "multi source files",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/multiple_function",
+          "value_param": "multiple function",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/multiple_main_signature_preview",
+          "value_param": "multiple main signature preview",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/pointfree_function_call_in_for",
+          "value_param": "pointfree function call in for",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/pointfree_function_call_in_switch",
+          "value_param": "pointfree function call in switch",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/pointfree_visitor",
+          "value_param": "pointfree visitor",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/policy_in_render_via",
+          "value_param": "policy in render via",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/policy_in_switch",
+          "value_param": "policy in switch",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/policy_individual_var",
+          "value_param": "policy individual var",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/policy_length_ok",
+          "value_param": "policy length ok",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/policy_on_template",
+          "value_param": "policy on template",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/policy_output_filter_ok",
+          "value_param": "policy output filter ok",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/policy_replacements",
+          "value_param": "policy replacements",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/policy_require_match",
+          "value_param": "policy require match",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/policy_scope_none",
+          "value_param": "policy scope none",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/policy_scope_override",
+          "value_param": "policy scope override",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/policy_scope_propagate_for",
+          "value_param": "policy scope propagate for",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/recursive_expr",
+          "value_param": "recursive expr",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/recursive_list",
+          "value_param": "recursive list",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/render_via_single_enum",
+          "value_param": "render via single enum",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/render_via_single_enum_bare_tag",
+          "value_param": "render via single enum bare tag",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/simple_interpolation",
+          "value_param": "simple interpolation",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/switch_default",
+          "value_param": "switch default",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/switch_missing_case_allowed",
+          "value_param": "switch missing case allowed",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/switch_missing_case_non_exhaustive",
+          "value_param": "switch missing case non exhaustive",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/template_comment",
+          "value_param": "template comment",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/typedef_doc_comment",
+          "value_param": "typedef doc comment",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/typedef_line_comment",
+          "value_param": "typedef line comment",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/unary_list_wrapped",
+          "value_param": "unary list wrapped",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/unary_wrapped_string",
+          "value_param": "unary wrapped string",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/unary_wrapped_struct",
+          "value_param": "unary wrapped struct",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        },
+        {
+          "name": "CompareCompileByCLI\/wildcard_types_tpp_types",
+          "value_param": "wildcard types tpp types",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/AcceptanceTest.cc",
+          "line": 79
+        }
+      ]
+    },
+    {
+      "name": "AcceptanceTestOnlyPositives\/AcceptanceTestOnlyPositives",
+      "tests": 154,
+      "testsuite": [
+        {
+          "name": "CompareRenderByCLI\/apostrophe_in_input_string",
+          "value_param": "apostrophe in input string",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/basic_struct",
+          "value_param": "basic struct",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/basic_variant",
+          "value_param": "basic variant",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/conditional",
+          "value_param": "conditional",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/direct_function_call",
+          "value_param": "direct function call",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/direct_function_call_zero_args",
+          "value_param": "direct function call zero args",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/enum_cpp_variant_api",
+          "value_param": "enum cpp variant api",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/error_interpolate_enum",
+          "value_param": "error interpolate enum",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/error_interpolate_list",
+          "value_param": "error interpolate list",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/error_interpolate_struct",
+          "value_param": "error interpolate struct",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/escape_at",
+          "value_param": "escape at",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/escape_end",
+          "value_param": "escape end",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/for_align_all_right",
+          "value_param": "for align all right",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/for_align_basic",
+          "value_param": "for align basic",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/for_align_center",
+          "value_param": "for align center",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/for_align_spec",
+          "value_param": "for align spec",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/for_align_three_cols",
+          "value_param": "for align three cols",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/for_iterator_var",
+          "value_param": "for iterator var",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/for_loop",
+          "value_param": "for loop",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/for_preceded_by",
+          "value_param": "for preceded by",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/for_sep_newline_else_if",
+          "value_param": "for sep newline else if",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/for_separator",
+          "value_param": "for separator",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/for_separator_newline_indent_equivalence",
+          "value_param": "for separator newline indent equivalence",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/for_separator_newline_middle_indent",
+          "value_param": "for separator newline middle indent",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/for_separator_text_newline_text_newline_text_indent",
+          "value_param": "for separator text newline text newline text indent",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/hello_world",
+          "value_param": "hello world",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/if_bool_and_not",
+          "value_param": "if bool and not",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/if_not_optional",
+          "value_param": "if not optional",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/if_optional_missing_allowed",
+          "value_param": "if optional missing allowed",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/if_optional_null_allowed",
+          "value_param": "if optional null allowed",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/if_optional_present",
+          "value_param": "if optional present",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/inline_case_function_call_in_switch",
+          "value_param": "inline case function call in switch",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/inline_case_multiline_body",
+          "value_param": "inline case multiline body",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/inline_empty_case_in_switch",
+          "value_param": "inline empty case in switch",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/inline_for_following_block_lines",
+          "value_param": "inline for following block lines",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/inline_if_following_block_lines",
+          "value_param": "inline if following block lines",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/inline_switch_following_block_lines",
+          "value_param": "inline switch following block lines",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/inline_unicode_adjacent_directives",
+          "value_param": "inline unicode adjacent directives",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/lsp_multi_file_sources",
+          "value_param": "lsp multi file sources",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/multi_arg_function_call",
+          "value_param": "multi arg function call",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/multi_line_variable",
+          "value_param": "multi line variable",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/multi_line_variable_col_zero",
+          "value_param": "multi line variable col zero",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/multi_line_variable_in_for",
+          "value_param": "multi line variable in for",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/multi_param_main",
+          "value_param": "multi param main",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/multi_param_main_with_structs",
+          "value_param": "multi param main with structs",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/multi_source_files",
+          "value_param": "multi source files",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/multiple_function",
+          "value_param": "multiple function",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/multiple_main_signature_preview",
+          "value_param": "multiple main signature preview",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/pointfree_function_call_in_for",
+          "value_param": "pointfree function call in for",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/pointfree_function_call_in_switch",
+          "value_param": "pointfree function call in switch",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/pointfree_visitor",
+          "value_param": "pointfree visitor",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/policy_in_render_via",
+          "value_param": "policy in render via",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/policy_in_switch",
+          "value_param": "policy in switch",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/policy_individual_var",
+          "value_param": "policy individual var",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/policy_length_ok",
+          "value_param": "policy length ok",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/policy_on_template",
+          "value_param": "policy on template",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/policy_output_filter_ok",
+          "value_param": "policy output filter ok",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/policy_replacements",
+          "value_param": "policy replacements",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/policy_require_match",
+          "value_param": "policy require match",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/policy_scope_none",
+          "value_param": "policy scope none",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/policy_scope_override",
+          "value_param": "policy scope override",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/policy_scope_propagate_for",
+          "value_param": "policy scope propagate for",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/recursive_expr",
+          "value_param": "recursive expr",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/recursive_list",
+          "value_param": "recursive list",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/render_via_single_enum",
+          "value_param": "render via single enum",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/render_via_single_enum_bare_tag",
+          "value_param": "render via single enum bare tag",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/simple_interpolation",
+          "value_param": "simple interpolation",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/switch_default",
+          "value_param": "switch default",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/switch_missing_case_allowed",
+          "value_param": "switch missing case allowed",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/switch_missing_case_non_exhaustive",
+          "value_param": "switch missing case non exhaustive",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/template_comment",
+          "value_param": "template comment",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/typedef_doc_comment",
+          "value_param": "typedef doc comment",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/typedef_line_comment",
+          "value_param": "typedef line comment",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/unary_list_wrapped",
+          "value_param": "unary list wrapped",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/unary_wrapped_string",
+          "value_param": "unary wrapped string",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/unary_wrapped_struct",
+          "value_param": "unary wrapped struct",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLI\/wildcard_types_tpp_types",
+          "value_param": "wildcard types tpp types",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 8
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/apostrophe_in_input_string",
+          "value_param": "apostrophe in input string",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/basic_struct",
+          "value_param": "basic struct",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/basic_variant",
+          "value_param": "basic variant",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/conditional",
+          "value_param": "conditional",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/direct_function_call",
+          "value_param": "direct function call",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/direct_function_call_zero_args",
+          "value_param": "direct function call zero args",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/enum_cpp_variant_api",
+          "value_param": "enum cpp variant api",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/error_interpolate_enum",
+          "value_param": "error interpolate enum",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/error_interpolate_list",
+          "value_param": "error interpolate list",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/error_interpolate_struct",
+          "value_param": "error interpolate struct",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/escape_at",
+          "value_param": "escape at",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/escape_end",
+          "value_param": "escape end",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/for_align_all_right",
+          "value_param": "for align all right",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/for_align_basic",
+          "value_param": "for align basic",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/for_align_center",
+          "value_param": "for align center",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/for_align_spec",
+          "value_param": "for align spec",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/for_align_three_cols",
+          "value_param": "for align three cols",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/for_iterator_var",
+          "value_param": "for iterator var",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/for_loop",
+          "value_param": "for loop",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/for_preceded_by",
+          "value_param": "for preceded by",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/for_sep_newline_else_if",
+          "value_param": "for sep newline else if",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/for_separator",
+          "value_param": "for separator",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/for_separator_newline_indent_equivalence",
+          "value_param": "for separator newline indent equivalence",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/for_separator_newline_middle_indent",
+          "value_param": "for separator newline middle indent",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/for_separator_text_newline_text_newline_text_indent",
+          "value_param": "for separator text newline text newline text indent",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/hello_world",
+          "value_param": "hello world",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/if_bool_and_not",
+          "value_param": "if bool and not",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/if_not_optional",
+          "value_param": "if not optional",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/if_optional_missing_allowed",
+          "value_param": "if optional missing allowed",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/if_optional_null_allowed",
+          "value_param": "if optional null allowed",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/if_optional_present",
+          "value_param": "if optional present",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/inline_case_function_call_in_switch",
+          "value_param": "inline case function call in switch",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/inline_case_multiline_body",
+          "value_param": "inline case multiline body",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/inline_empty_case_in_switch",
+          "value_param": "inline empty case in switch",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/inline_for_following_block_lines",
+          "value_param": "inline for following block lines",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/inline_if_following_block_lines",
+          "value_param": "inline if following block lines",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/inline_switch_following_block_lines",
+          "value_param": "inline switch following block lines",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/inline_unicode_adjacent_directives",
+          "value_param": "inline unicode adjacent directives",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/lsp_multi_file_sources",
+          "value_param": "lsp multi file sources",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/multi_arg_function_call",
+          "value_param": "multi arg function call",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/multi_line_variable",
+          "value_param": "multi line variable",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/multi_line_variable_col_zero",
+          "value_param": "multi line variable col zero",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/multi_line_variable_in_for",
+          "value_param": "multi line variable in for",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/multi_param_main",
+          "value_param": "multi param main",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/multi_param_main_with_structs",
+          "value_param": "multi param main with structs",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/multi_source_files",
+          "value_param": "multi source files",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/multiple_function",
+          "value_param": "multiple function",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/multiple_main_signature_preview",
+          "value_param": "multiple main signature preview",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/pointfree_function_call_in_for",
+          "value_param": "pointfree function call in for",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/pointfree_function_call_in_switch",
+          "value_param": "pointfree function call in switch",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/pointfree_visitor",
+          "value_param": "pointfree visitor",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/policy_in_render_via",
+          "value_param": "policy in render via",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/policy_in_switch",
+          "value_param": "policy in switch",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/policy_individual_var",
+          "value_param": "policy individual var",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/policy_length_ok",
+          "value_param": "policy length ok",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/policy_on_template",
+          "value_param": "policy on template",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/policy_output_filter_ok",
+          "value_param": "policy output filter ok",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/policy_replacements",
+          "value_param": "policy replacements",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/policy_require_match",
+          "value_param": "policy require match",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/policy_scope_none",
+          "value_param": "policy scope none",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/policy_scope_override",
+          "value_param": "policy scope override",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/policy_scope_propagate_for",
+          "value_param": "policy scope propagate for",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/recursive_expr",
+          "value_param": "recursive expr",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/recursive_list",
+          "value_param": "recursive list",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/render_via_single_enum",
+          "value_param": "render via single enum",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/render_via_single_enum_bare_tag",
+          "value_param": "render via single enum bare tag",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/simple_interpolation",
+          "value_param": "simple interpolation",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/switch_default",
+          "value_param": "switch default",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/switch_missing_case_allowed",
+          "value_param": "switch missing case allowed",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/switch_missing_case_non_exhaustive",
+          "value_param": "switch missing case non exhaustive",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/template_comment",
+          "value_param": "template comment",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/typedef_doc_comment",
+          "value_param": "typedef doc comment",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/typedef_line_comment",
+          "value_param": "typedef line comment",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/unary_list_wrapped",
+          "value_param": "unary list wrapped",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/unary_wrapped_string",
+          "value_param": "unary wrapped string",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/unary_wrapped_struct",
+          "value_param": "unary wrapped struct",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        },
+        {
+          "name": "CompareRenderByCLIUsingInputFile\/wildcard_types_tpp_types",
+          "value_param": "wildcard types tpp types",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/RenderCLITest.cc",
+          "line": 40
+        }
+      ]
+    },
+    {
+      "name": "LspTests\/LspPreviewTest",
+      "tests": 77,
+      "testsuite": [
+        {
+          "name": "RenderMatchesExpected\/apostrophe_in_input_string",
+          "value_param": "apostrophe in input string",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/basic_struct",
+          "value_param": "basic struct",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/basic_variant",
+          "value_param": "basic variant",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/conditional",
+          "value_param": "conditional",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/direct_function_call",
+          "value_param": "direct function call",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/direct_function_call_zero_args",
+          "value_param": "direct function call zero args",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/enum_cpp_variant_api",
+          "value_param": "enum cpp variant api",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/error_interpolate_enum",
+          "value_param": "error interpolate enum",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/error_interpolate_list",
+          "value_param": "error interpolate list",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/error_interpolate_struct",
+          "value_param": "error interpolate struct",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/escape_at",
+          "value_param": "escape at",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/escape_end",
+          "value_param": "escape end",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/for_align_all_right",
+          "value_param": "for align all right",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/for_align_basic",
+          "value_param": "for align basic",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/for_align_center",
+          "value_param": "for align center",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/for_align_spec",
+          "value_param": "for align spec",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/for_align_three_cols",
+          "value_param": "for align three cols",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/for_iterator_var",
+          "value_param": "for iterator var",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/for_loop",
+          "value_param": "for loop",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/for_preceded_by",
+          "value_param": "for preceded by",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/for_sep_newline_else_if",
+          "value_param": "for sep newline else if",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/for_separator",
+          "value_param": "for separator",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/for_separator_newline_indent_equivalence",
+          "value_param": "for separator newline indent equivalence",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/for_separator_newline_middle_indent",
+          "value_param": "for separator newline middle indent",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/for_separator_text_newline_text_newline_text_indent",
+          "value_param": "for separator text newline text newline text indent",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/hello_world",
+          "value_param": "hello world",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/if_bool_and_not",
+          "value_param": "if bool and not",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/if_not_optional",
+          "value_param": "if not optional",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/if_optional_missing_allowed",
+          "value_param": "if optional missing allowed",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/if_optional_null_allowed",
+          "value_param": "if optional null allowed",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/if_optional_present",
+          "value_param": "if optional present",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/inline_case_function_call_in_switch",
+          "value_param": "inline case function call in switch",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/inline_case_multiline_body",
+          "value_param": "inline case multiline body",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/inline_empty_case_in_switch",
+          "value_param": "inline empty case in switch",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/inline_for_following_block_lines",
+          "value_param": "inline for following block lines",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/inline_if_following_block_lines",
+          "value_param": "inline if following block lines",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/inline_switch_following_block_lines",
+          "value_param": "inline switch following block lines",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/inline_unicode_adjacent_directives",
+          "value_param": "inline unicode adjacent directives",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/lsp_multi_file_sources",
+          "value_param": "lsp multi file sources",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/multi_arg_function_call",
+          "value_param": "multi arg function call",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/multi_line_variable",
+          "value_param": "multi line variable",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/multi_line_variable_col_zero",
+          "value_param": "multi line variable col zero",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/multi_line_variable_in_for",
+          "value_param": "multi line variable in for",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/multi_param_main",
+          "value_param": "multi param main",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/multi_param_main_with_structs",
+          "value_param": "multi param main with structs",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/multi_source_files",
+          "value_param": "multi source files",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/multiple_function",
+          "value_param": "multiple function",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/multiple_main_signature_preview",
+          "value_param": "multiple main signature preview",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/pointfree_function_call_in_for",
+          "value_param": "pointfree function call in for",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/pointfree_function_call_in_switch",
+          "value_param": "pointfree function call in switch",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/pointfree_visitor",
+          "value_param": "pointfree visitor",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/policy_in_render_via",
+          "value_param": "policy in render via",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/policy_in_switch",
+          "value_param": "policy in switch",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/policy_individual_var",
+          "value_param": "policy individual var",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/policy_length_ok",
+          "value_param": "policy length ok",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/policy_on_template",
+          "value_param": "policy on template",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/policy_output_filter_ok",
+          "value_param": "policy output filter ok",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/policy_replacements",
+          "value_param": "policy replacements",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/policy_require_match",
+          "value_param": "policy require match",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/policy_scope_none",
+          "value_param": "policy scope none",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/policy_scope_override",
+          "value_param": "policy scope override",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/policy_scope_propagate_for",
+          "value_param": "policy scope propagate for",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/recursive_expr",
+          "value_param": "recursive expr",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/recursive_list",
+          "value_param": "recursive list",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/render_via_single_enum",
+          "value_param": "render via single enum",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/render_via_single_enum_bare_tag",
+          "value_param": "render via single enum bare tag",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/simple_interpolation",
+          "value_param": "simple interpolation",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/switch_default",
+          "value_param": "switch default",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/switch_missing_case_allowed",
+          "value_param": "switch missing case allowed",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/switch_missing_case_non_exhaustive",
+          "value_param": "switch missing case non exhaustive",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/template_comment",
+          "value_param": "template comment",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/typedef_doc_comment",
+          "value_param": "typedef doc comment",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/typedef_line_comment",
+          "value_param": "typedef line comment",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/unary_list_wrapped",
+          "value_param": "unary list wrapped",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/unary_wrapped_string",
+          "value_param": "unary wrapped string",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/unary_wrapped_struct",
+          "value_param": "unary wrapped struct",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        },
+        {
+          "name": "RenderMatchesExpected\/wildcard_types_tpp_types",
+          "value_param": "wildcard types tpp types",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 270
+        }
+      ]
+    },
+    {
+      "name": "LspTests\/LspDiagnosticsTest",
+      "tests": 33,
+      "testsuite": [
+        {
+          "name": "PublishDiagnostics\/error_align_spec_too_short",
+          "value_param": "error align spec too short",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 441
+        },
+        {
+          "name": "PublishDiagnostics\/error_align_without_option",
+          "value_param": "error align without option",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 441
+        },
+        {
+          "name": "PublishDiagnostics\/error_case_trailing_tokens",
+          "value_param": "error case trailing tokens",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 441
+        },
+        {
+          "name": "PublishDiagnostics\/error_content_after_inline_end_case",
+          "value_param": "error content after inline end case",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 441
+        },
+        {
+          "name": "PublishDiagnostics\/error_duplicate_function",
+          "value_param": "error duplicate function",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 441
+        },
+        {
+          "name": "PublishDiagnostics\/error_duplicate_type",
+          "value_param": "error duplicate type",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 441
+        },
+        {
+          "name": "PublishDiagnostics\/error_empty_directive",
+          "value_param": "error empty directive",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 441
+        },
+        {
+          "name": "PublishDiagnostics\/error_for_option_without_pipe",
+          "value_param": "error for option without pipe",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 441
+        },
+        {
+          "name": "PublishDiagnostics\/error_for_unknown_option",
+          "value_param": "error for unknown option",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 441
+        },
+        {
+          "name": "PublishDiagnostics\/error_if_not_non_bool",
+          "value_param": "error if not non bool",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 441
+        },
+        {
+          "name": "PublishDiagnostics\/error_infinite_enum",
+          "value_param": "error infinite enum",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 441
+        },
+        {
+          "name": "PublishDiagnostics\/error_infinite_struct",
+          "value_param": "error infinite struct",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 441
+        },
+        {
+          "name": "PublishDiagnostics\/error_missing_colon_in_typedef",
+          "value_param": "error missing colon in typedef",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 441
+        },
+        {
+          "name": "PublishDiagnostics\/error_missing_end_case",
+          "value_param": "error missing end case",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 441
+        },
+        {
+          "name": "PublishDiagnostics\/error_missing_end_for",
+          "value_param": "error missing end for",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 441
+        },
+        {
+          "name": "PublishDiagnostics\/error_missing_end_switch",
+          "value_param": "error missing end switch",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 441
+        },
+        {
+          "name": "PublishDiagnostics\/error_missing_template_end",
+          "value_param": "error missing template end",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 441
+        },
+        {
+          "name": "PublishDiagnostics\/error_optional_else_forbidden",
+          "value_param": "error optional else forbidden",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 441
+        },
+        {
+          "name": "PublishDiagnostics\/error_optional_guard_in_absent_branch",
+          "value_param": "error optional guard in absent branch",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 441
+        },
+        {
+          "name": "PublishDiagnostics\/error_optional_guarded_in_absent_branch",
+          "value_param": "error optional guarded in absent branch",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 441
+        },
+        {
+          "name": "PublishDiagnostics\/error_optional_unguarded_access",
+          "value_param": "error optional unguarded access",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 441
+        },
+        {
+          "name": "PublishDiagnostics\/error_render_member_access_on_list",
+          "value_param": "error render member access on list",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 441
+        },
+        {
+          "name": "PublishDiagnostics\/error_render_unknown_option",
+          "value_param": "error render unknown option",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 441
+        },
+        {
+          "name": "PublishDiagnostics\/error_render_via_missing_enum_overload",
+          "value_param": "error render via missing enum overload",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 441
+        },
+        {
+          "name": "PublishDiagnostics\/error_render_via_missing_struct_overload",
+          "value_param": "error render via missing struct overload",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 441
+        },
+        {
+          "name": "PublishDiagnostics\/error_switch_extraneous_options",
+          "value_param": "error switch extraneous options",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 441
+        },
+        {
+          "name": "PublishDiagnostics\/error_switch_missing_case_check_exhaustive",
+          "value_param": "error switch missing case check exhaustive",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 441
+        },
+        {
+          "name": "PublishDiagnostics\/error_switch_missing_case_check_exhaustive_block",
+          "value_param": "error switch missing case check exhaustive block",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 441
+        },
+        {
+          "name": "PublishDiagnostics\/error_template_uses_undefined_field",
+          "value_param": "error template uses undefined field",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 441
+        },
+        {
+          "name": "PublishDiagnostics\/error_undefined_type",
+          "value_param": "error undefined type",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 441
+        },
+        {
+          "name": "PublishDiagnostics\/error_undefined_type_in_template",
+          "value_param": "error undefined type in template",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 441
+        },
+        {
+          "name": "PublishDiagnostics\/error_undefined_type_in_template_param",
+          "value_param": "error undefined type in template param",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 441
+        },
+        {
+          "name": "PublishDiagnostics\/error_unknown_policy_in_switch",
+          "value_param": "error unknown policy in switch",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 441
+        }
+      ]
+    },
+    {
+      "name": "LspTests\/LspTokenTest",
+      "tests": 12,
+      "testsuite": [
+        {
+          "name": "ExpectedTokensPresent\/basic_struct",
+          "value_param": "basic_struct\/template.tpp",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 782
+        },
+        {
+          "name": "ExpectedTokensPresent\/basic_variant",
+          "value_param": "basic_variant\/template.tpp",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 782
+        },
+        {
+          "name": "ExpectedTokensPresent\/direct_function_call_zero_args",
+          "value_param": "direct_function_call_zero_args\/template.tpp",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 782
+        },
+        {
+          "name": "ExpectedTokensPresent\/error_render_unknown_option",
+          "value_param": "error_render_unknown_option\/template.tpp",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 782
+        },
+        {
+          "name": "ExpectedTokensPresent\/error_unknown_policy_in_switch",
+          "value_param": "error_unknown_policy_in_switch\/template.tpp",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 782
+        },
+        {
+          "name": "ExpectedTokensPresent\/for_loop",
+          "value_param": "for_loop\/template.tpp",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 782
+        },
+        {
+          "name": "ExpectedTokensPresent\/inline_case_function_call_in_switch",
+          "value_param": "inline_case_function_call_in_switch\/template.tpp",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 782
+        },
+        {
+          "name": "ExpectedTokensPresent\/inline_empty_case_in_switch",
+          "value_param": "inline_empty_case_in_switch\/template.tpp",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 782
+        },
+        {
+          "name": "ExpectedTokensPresent\/inline_unicode_adjacent_directives",
+          "value_param": "inline_unicode_adjacent_directives\/template.tpp",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 782
+        },
+        {
+          "name": "ExpectedTokensPresent\/policy_scope_none",
+          "value_param": "policy_scope_none\/template.tpp",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 782
+        },
+        {
+          "name": "ExpectedTokensPresent\/recursive_expr",
+          "value_param": "recursive_expr\/typedefs.tpp",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 782
+        },
+        {
+          "name": "ExpectedTokensPresent\/template_comment",
+          "value_param": "template_comment\/template.tpp",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 782
+        }
+      ]
+    },
+    {
+      "name": "LspTests\/LspFoldingTest",
+      "tests": 5,
+      "testsuite": [
+        {
+          "name": "ExactFoldingRanges\/basic_struct",
+          "value_param": "basic_struct\/template.tpp",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 827
+        },
+        {
+          "name": "ExactFoldingRanges\/for_loop",
+          "value_param": "for_loop\/template.tpp",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 827
+        },
+        {
+          "name": "ExactFoldingRanges\/if_bool_and_not",
+          "value_param": "if_bool_and_not\/template.tpp",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 827
+        },
+        {
+          "name": "ExactFoldingRanges\/inline_unicode_adjacent_directives",
+          "value_param": "inline_unicode_adjacent_directives\/template.tpp",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 827
+        },
+        {
+          "name": "ExactFoldingRanges\/template_comment",
+          "value_param": "template_comment\/template.tpp",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 827
+        }
+      ]
+    },
+    {
+      "name": "LspTests\/LspDefinitionTest",
+      "tests": 6,
+      "testsuite": [
+        {
+          "name": "TargetLocation\/TypeDef_ref",
+          "value_param": "basic_struct 'TypeDef_ref'",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 875
+        },
+        {
+          "name": "TargetLocation\/type_in_header_uses_declaring_file",
+          "value_param": "lsp_multi_file_sources 'type_in_header_uses_declaring_file'",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 875
+        },
+        {
+          "name": "TargetLocation\/field_uses_declaring_file",
+          "value_param": "lsp_multi_file_sources 'field_uses_declaring_file'",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 875
+        },
+        {
+          "name": "TargetLocation\/call_uses_helper_template",
+          "value_param": "lsp_multi_file_sources 'call_uses_helper_template'",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 875
+        },
+        {
+          "name": "TargetLocation\/helper_call_resolves_other_file",
+          "value_param": "multi_source_files 'helper_call_resolves_other_file'",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 875
+        },
+        {
+          "name": "TargetLocation\/inline_call_resolves_local_template",
+          "value_param": "policy_scope_propagate_for 'inline_call_resolves_local_template'",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 875
+        }
+      ]
+    },
+    {
+      "name": "LspTests\/LspHoverTest",
+      "tests": 7,
+      "testsuite": [
+        {
+          "name": "ContainsExpectedText\/def_name_type",
+          "value_param": "basic_struct 'def_name_type'",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 935
+        },
+        {
+          "name": "ContainsExpectedText\/optional_condition_hover_type",
+          "value_param": "if_optional_present 'optional_condition_hover_type'",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 935
+        },
+        {
+          "name": "ContainsExpectedText\/helper_call_hover",
+          "value_param": "lsp_multi_file_sources 'helper_call_hover'",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 935
+        },
+        {
+          "name": "ContainsExpectedText\/header_type_hover",
+          "value_param": "lsp_multi_file_sources 'header_type_hover'",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 935
+        },
+        {
+          "name": "ContainsExpectedText\/field_hover",
+          "value_param": "lsp_multi_file_sources 'field_hover'",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 935
+        },
+        {
+          "name": "ContainsExpectedText\/helper_call_hover_signature",
+          "value_param": "multi_source_files 'helper_call_hover_signature'",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 935
+        },
+        {
+          "name": "ContainsExpectedText\/inline_call_hover_signature",
+          "value_param": "policy_scope_propagate_for 'inline_call_hover_signature'",
+          "file": "\/home\/markus\/Documents\/Projects\/tpp\/Test\/src\/LspTest.cc",
+          "line": 935
+        }
+      ]
+    }
+  ]
+}
