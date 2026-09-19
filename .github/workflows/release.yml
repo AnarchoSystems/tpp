@@ -15,7 +15,9 @@ jobs:
       fail-fast: false
       matrix:
         runner:
-          - ubuntu-latest
+          # Build Linux artifacts on the oldest supported Ubuntu release so
+          # they remain usable on Ubuntu 24.04 and newer, including 26.04.
+          - ubuntu-24.04
           - ubuntu-24.04-arm
           - macos-latest
           - windows-latest
@@ -27,7 +29,7 @@ jobs:
           - render-tpp
           - tpp-lsp
         include:
-          - runner: ubuntu-latest
+          - runner: ubuntu-24.04
             platform: linux
             arch: x64
           - runner: ubuntu-24.04-arm
@@ -84,7 +86,7 @@ jobs:
   publish-release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build-executables
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Collect release artifacts

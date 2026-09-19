@@ -15,12 +15,14 @@ jobs:
       fail-fast: false
       matrix:
         runner:
-          - ubuntu-latest
+          # Build Linux artifacts on Ubuntu 24.04 for forward compatibility
+          # with Ubuntu 26.04.
+          - ubuntu-24.04
           - ubuntu-24.04-arm
           - macos-latest
           - windows-latest
         include:
-          - runner: ubuntu-latest
+          - runner: ubuntu-24.04
             platform: linux
             arch: x64
           - runner: ubuntu-24.04-arm
@@ -76,7 +78,7 @@ jobs:
 
   package-extension:
     needs: build-lsp
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v5
@@ -123,7 +125,7 @@ jobs:
   publish-release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: package-extension
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Collect extension artifact
