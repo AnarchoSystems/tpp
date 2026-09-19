@@ -223,11 +223,11 @@ int main(int argc, char *argv[]) {
     case Mode::Implementation: {
         auto ctx = buildFunctionsContext(input, "", cli.includes, cli.namespaceName);
         output = renderFunction("render_cpp_native_implementation", nlohmann::json(ctx));
+        output = stripStandaloneIncludes(std::move(output),
+                                         {"#include <tpp/ArgType.h>", "#include <tpp/Policy.h>", "#include <tpp/Writer.h>"});
         if (cli.standalone) {
             output.insert(0, std::string(runtime_header_src) + "\n");
         }
-        output = stripStandaloneIncludes(std::move(output),
-                                         {"#include <tpp/ArgType.h>", "#include <tpp/Policy.h>", "#include <tpp/Writer.h>"});
         break;
     }
     }
