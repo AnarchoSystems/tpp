@@ -26,3 +26,5 @@ vscode-extension/resources/lsp/
 # dev
 tmp/
 temp/
+# CMake GoogleTest discovery artifacts
+cmake_test_discovery_*.json

@@ -3,6 +3,7 @@ set -eu
 
 REPO_ROOT=$(git rev-parse --show-toplevel)
 BUILD_DIR="$REPO_ROOT/build"
+JOBS=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 8)
 
 require_build_dir() {
     if [ ! -d "$BUILD_DIR" ]; then
@@ -53,7 +54,7 @@ if [ "$need_ir_check" -eq 1 ] || [ "$need_codegen_check" -eq 1 ]; then
     if [ "$need_codegen_check" -eq 1 ]; then
         targets="$targets update-codegen-types"
     fi
-    (cd "$BUILD_DIR" && cmake --build . --target $targets -j8)
+    (cd "$BUILD_DIR" && cmake --build . --target $targets -j"$JOBS")
 
     if [ "$need_ir_check" -eq 1 ]; then
         check_generated_header_clean \
@@ -69,7 +70,7 @@ if [ "$need_ir_check" -eq 1 ] || [ "$need_codegen_check" -eq 1 ]; then
 fi
 
 echo "Building project..."
-(cd "$BUILD_DIR" && cmake --build . -j8)
+(cd "$BUILD_DIR" && cmake --build . -j"$JOBS")
 
 echo "Running tests..."
-(cd "$BUILD_DIR" && ctest -j8 --output-on-failure)
+(cd "$BUILD_DIR" && ctest -j"$JOBS" --output-on-failure)

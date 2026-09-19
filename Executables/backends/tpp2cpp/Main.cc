@@ -4,9 +4,11 @@
 #include "defs.h"
 #include "runtime_defs.h"
 #include <cstdlib>
+#include <algorithm>
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -53,6 +55,47 @@ struct ParsedCommandLine {
     std::vector<std::string> includes;
     bool standalone = false;
 };
+
+// Wraps the embedded runtime in an anonymous namespace, hoisting its #include
+// lines out of the namespace and dropping its `#pragma once` markers.
+static std::string embedRuntimeInAnonymousNamespace() {
+    std::istringstream runtimeStream{std::string(runtime_header_src)};
+    std::vector<std::string> includes;
+    std::string body;
+    std::string line;
+    while (std::getline(runtimeStream, line)) {
+        if (line.rfind("#pragma once", 0) == 0) {
+            continue;
+        }
+        if (line.rfind("#include", 0) == 0) {
+            if (std::find(includes.begin(), includes.end(), line) == includes.end()) {
+                includes.push_back(line);
+            }
+            continue;
+        }
+        body += line;
+        body += '\n';
+    }
+
+    std::string result;
+    for (const auto &include : includes) {
+        result += include;
+        result += '\n';
+    }
+    // A few runtime declarations (e.g. load_policy_json) are defined in lib_tpp
+    // sources, not in the headers; internal linkage makes them look unused here.
+    result += "#if defined(__GNUC__) || defined(__clang__)\n"
+              "#pragma GCC diagnostic push\n"
+              "#pragma GCC diagnostic ignored \"-Wunused-function\"\n"
+              "#endif\n";
+    result += "namespace {\n";
+    result += body;
+    result += "} // namespace\n";
+    result += "#if defined(__GNUC__) || defined(__clang__)\n"
+              "#pragma GCC diagnostic pop\n"
+              "#endif\n\n";
+    return result;
+}
 
 static std::string readTextInputOrExit(const std::string &inputFile) {
     if (!inputFile.empty()) {
@@ -227,7 +270,7 @@ int main(int argc, char *argv[]) {
                                          {"#include <tpp/ArgType.h>", "#include <tpp/Policy.h>", "#include <tpp/Writer.h>"});
         if (cli.standalone) {
             // internal linkage keeps this TU's runtime copy from colliding with lib_tpp elsewhere in the binary
-            output.insert(0, "namespace {\n" + std::string(runtime_header_src) + "\n} // namespace\n\n");
+            output.insert(0, embedRuntimeInAnonymousNamespace());
         }
         break;
     }

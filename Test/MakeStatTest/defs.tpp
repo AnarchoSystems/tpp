@@ -1,11 +1,13 @@
 template render_test(defs: Defs)
 #include <gtest/gtest.h>
+@if not defs.standalone@
 #include <tpp/Compiler.h>
 #include <tpp/IR.h>
 #include <tpp/Runtime.h>
-#include "@defs.testName@_functions.h"
+@end if@
+#include "@defs.includePrefix@_functions.h"
 
-TEST(static_tests, @defs.testName@_compiled)
+TEST(@defs.suiteName@, @defs.testName@_compiled)
 {
     @for input in defs.inputs | enumerator=idx sep="\n"@
     @input.type@ input@idx@ = nlohmann::json::parse(R"_(@input.value@)_").get<@input.type@>();
@@ -13,8 +15,9 @@ TEST(static_tests, @defs.testName@_compiled)
     auto output = @defs.testName@::main(@for input in defs.inputs | enumerator=idx sep=", "@input@idx@@end for@);
     EXPECT_EQ(output, @defs.expectedOutput@);
 }
+@if not defs.standalone@
 
-TEST(static_tests, @defs.testName@_dynamic_binding)
+TEST(@defs.suiteName@, @defs.testName@_dynamic_binding)
 {
     tpp::IR iRep = nlohmann::json::parse(@defs.iRepJson@).get<tpp::IR>();
     const tpp::FunctionDef *fn = nullptr;
@@ -29,5 +32,6 @@ TEST(static_tests, @defs.testName@_dynamic_binding)
     ASSERT_TRUE(tpp::render_function(iRep, *fn, inputArray, dynOutput, renderError)) << renderError;
     EXPECT_EQ(dynOutput, @defs.expectedOutput@);
 }
+@end if@
 
 END

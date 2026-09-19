@@ -63,12 +63,18 @@ std::string toGoodConstexprString(const std::string &content) {
 }
 
 int main(int argc, char *argv[]) {
-    if (argc != 2) {
-        std::cerr << "Usage: make-stat-test <input_folder>" << std::endl;
+    bool standalone = false;
+    int argIndex = 1;
+    if (argc > argIndex && std::string(argv[argIndex]) == "--standalone") {
+        standalone = true;
+        ++argIndex;
+    }
+    if (argc != argIndex + 1) {
+        std::cerr << "Usage: make-stat-test [--standalone] <input_folder>" << std::endl;
         return EXIT_FAILURE;
     }
 
-    std::filesystem::path testDir(argv[1]);
+    std::filesystem::path testDir(argv[argIndex]);
     std::string testName = testDir.filename().string();
 
     // Read and resolve tpp-config.json
@@ -162,6 +168,9 @@ int main(int argc, char *argv[]) {
     defs.previewFunctionName = templateName;
     defs.previewSignature = signature;
     defs.hasPreviewSignature = !signature.empty();
+    defs.standalone = standalone;
+    defs.suiteName = standalone ? "standalone_tests" : "static_tests";
+    defs.includePrefix = standalone ? (testName + "_standalone") : testName;
 
     const auto &params = mainFunc->params;
     if (params.size() == 1) {

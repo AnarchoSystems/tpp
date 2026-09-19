@@ -13,4 +13,7 @@ struct Defs
     previewFunctionName : string;
     previewSignature : list<string>;
     hasPreviewSignature : bool;
+    suiteName : string;
+    standalone : bool;
+    includePrefix : string;
 }

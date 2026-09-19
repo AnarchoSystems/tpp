@@ -201,7 +201,8 @@ tLoadedTestCase tTestCase::extract() const {
 
 static std::vector<tTestCase> scanTestCases() {
     std::vector<tTestCase> cases;
-    const std::filesystem::path root = "TestCases";
+    // Absolute: test discovery runs this binary from the build tree, not Test/.
+    const std::filesystem::path root = std::filesystem::path(TPP_TEST_SOURCE_DIR) / "TestCases";
     if (!std::filesystem::is_directory(root)) {
         return cases;
     }
