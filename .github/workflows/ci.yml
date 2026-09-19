@@ -55,6 +55,14 @@ jobs:
             echo "swift not installed on this runner"
           fi
 
+      - name: Select non-Windows parallelism
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          if [[ "${{ matrix.os }}" == *"-arm" || "${{ matrix.os }}" == "ubuntu-24.04" ]]; then
+            echo "NON_WINDOWS_PARALLEL=2" >> "$GITHUB_ENV"
+          fi
+
       - name: Configure (non-Windows)
         if: runner.os != 'Windows'
         run: cmake -B build -DCMAKE_BUILD_TYPE=Debug
@@ -72,7 +80,13 @@ jobs:
 
       - name: Build (non-Windows)
         if: runner.os != 'Windows'
-        run: cmake --build build --parallel
+        shell: bash
+        run: |
+          if [[ -n "${NON_WINDOWS_PARALLEL:-}" ]]; then
+            cmake --build build --parallel "${NON_WINDOWS_PARALLEL}"
+          else
+            cmake --build build --parallel
+          fi
 
       - name: Build (Windows)
         if: runner.os == 'Windows'
@@ -93,7 +107,13 @@ jobs:
 
       - name: Build Java & Swift tests (non-Windows)
         if: runner.os != 'Windows'
-        run: cmake --build build --target build_all_tests --parallel
+        shell: bash
+        run: |
+          if [[ -n "${NON_WINDOWS_PARALLEL:-}" ]]; then
+            cmake --build build --target build_all_tests --parallel "${NON_WINDOWS_PARALLEL}"
+          else
+            cmake --build build --target build_all_tests --parallel
+          fi
 
       - name: Build Java & Swift tests (Windows)
         if: runner.os == 'Windows'
@@ -114,7 +134,13 @@ jobs:
 
       - name: Test (non-Windows)
         if: runner.os != 'Windows'
-        run: ctest --parallel --progress --output-on-failure --test-dir build
+        shell: bash
+        run: |
+          if [[ -n "${NON_WINDOWS_PARALLEL:-}" ]]; then
+            ctest --parallel "${NON_WINDOWS_PARALLEL}" --progress --output-on-failure --test-dir build
+          else
+            ctest --parallel --progress --output-on-failure --test-dir build
+          fi
 
       - name: Test (Windows)
         if: runner.os == 'Windows'
