@@ -15,14 +15,13 @@
 //   types     — produces a header file with type definitions
 //   functions — produces a header file rendering the template functions as C++ functions
 //   impl      — produces a .cc file with the implementations of the functions declared by 'functions'
-//   runtime   — prints a standalone header with the tpp:: runtime pieces functions/impl need
-//               (Writer/Policy/ArgType/etc.), so generated code can avoid depending on lib_tpp
+//   runtime   — prints the embedded standalone runtime header (legacy/manual use)
 // options:
 //   -ns <name>       wrap generated code in a namespace
 //   -i <file>        files to include at the top of the generated code (repeatable)
 //   --input <file>   read IR JSON from file instead of stdin
-//   --standalone     (functions/impl only) omit the built-in #include <tpp/...> lines;
-//                     supply their contents yourself, e.g. via `-i` and `tpp2cpp runtime`
+//   --standalone     (functions/impl only) embed the runtime in the generated implementation
+//                     and omit built-in #include <tpp/...> lines
 
 enum Mode {
     None,
@@ -224,6 +223,9 @@ int main(int argc, char *argv[]) {
     case Mode::Implementation: {
         auto ctx = buildFunctionsContext(input, "", cli.includes, cli.namespaceName);
         output = renderFunction("render_cpp_native_implementation", nlohmann::json(ctx));
+        if (cli.standalone) {
+            output.insert(0, std::string(runtime_header_src) + "\n");
+        }
         output = stripStandaloneIncludes(std::move(output),
                                          {"#include <tpp/ArgType.h>", "#include <tpp/Policy.h>", "#include <tpp/Writer.h>"});
         break;
