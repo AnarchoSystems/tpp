@@ -78,8 +78,9 @@ TEST_P(AcceptanceTest, RunTestCase) {
 
 TEST_P(AcceptanceTest, CompareCompileByCLI) {
     // Run tpp directly (no shell) to avoid pipe inheritance issues on macOS.
-    auto cliOutput = runCommandDirect({TPP_EXE,
-                                       std::filesystem::absolute("TestCases/" + testCase.name).string()});
+    auto cliOutput = runCommandDirect(
+        {TPP_EXE,
+         (std::filesystem::path(TPP_TEST_SOURCE_DIR) / "TestCases" / testCase.name).string()});
 
     bool expectedSuccess = compileSuccess;
 
@@ -98,7 +99,8 @@ TEST_P(AcceptanceTest, CompareCompileByCLI) {
         std::vector<std::string> expectedDiagStrings;
         for (const auto &fd : testCase.expectedDiagnostics) {
             auto copy = fd;
-            copy.uri = std::filesystem::absolute("TestCases/" + copy.uri).string();
+            copy.uri =
+                (std::filesystem::path(TPP_TEST_SOURCE_DIR) / "TestCases" / copy.uri).lexically_normal().string();
             for (const auto &d : copy.toGCCDiagnostics()) {
                 expectedDiagStrings.push_back(d);
             }

@@ -104,9 +104,17 @@ static void writeFileStr(const std::filesystem::path &p, const std::string &cont
     out << content;
 }
 
+static std::filesystem::path testCasesRootPath() {
+    return std::filesystem::path(TPP_TEST_SOURCE_DIR) / "TestCases";
+}
+
+static std::filesystem::path testCasePath(const std::filesystem::path &relPath) {
+    return std::filesystem::weakly_canonical(testCasesRootPath() / relPath);
+}
+
 // Relative source URL ("testname/file.tpp") → absolute file:// URI.
 static std::string srcUri(const std::string &relUrl) {
-    return fileUri(std::filesystem::weakly_canonical("TestCases/" + relUrl));
+    return fileUri(testCasePath(relUrl));
 }
 
 static std::string hoverText(const nlohmann::json &result) {
@@ -234,7 +242,7 @@ class LspParamFixture : public ::testing::TestWithParam<T> {
     void SetUp() final {
         namespace fs = std::filesystem;
         spec_ = this->GetParam();
-        tcDir = fs::weakly_canonical(std::string("TestCases/") + getTestCaseName());
+        tcDir = testCasePath(getTestCaseName());
         client_ = std::make_unique<tpp_test::LspClient>(TPP_LSP_EXE);
         client_->initialize(fileUri(tcDir));
         additionalSetUp();
@@ -269,7 +277,7 @@ class LspPreviewTest : public LspTestWithLoading {
 
 TEST_P(LspPreviewTest, RenderMatchesExpected) {
     namespace fs = std::filesystem;
-    fs::path tcDir = fs::weakly_canonical("TestCases/" + loaded_.name);
+    fs::path tcDir = testCasePath(loaded_.name);
 
     auto result = client_->request("tpp/renderPreview", {{"configPath", (tcDir / "tpp-config.json").string()},
                                                          {"previewIndex", 0}});
@@ -396,8 +404,8 @@ TEST_P(LspPreviewTest, RenderMatchesExpected) {
 
     if (loaded_.name == "lsp_multi_file_sources") {
         namespace fs = std::filesystem;
-        const std::string templateUri = fileUri(fs::weakly_canonical("TestCases/lsp_multi_file_sources/template.tpp"));
-        const std::string helperUri = fileUri(fs::weakly_canonical("TestCases/lsp_multi_file_sources/helper.tpp"));
+        const std::string templateUri = fileUri(testCasePath("lsp_multi_file_sources/template.tpp"));
+        const std::string helperUri = fileUri(testCasePath("lsp_multi_file_sources/helper.tpp"));
 
         ASSERT_TRUE(result.contains("mappings"))
             << "tpp/renderPreview missing 'mappings' field\nTest: " << loaded_.name;
@@ -725,7 +733,7 @@ TEST(ToolingTest, ParseTemplateSourceSkipsCommentsAndIndentedHeaders) {
 TEST(LspCompletionTest, FieldAndTypeNameCompletions) {
     namespace fs = std::filesystem;
 
-    const fs::path tcDir = fs::weakly_canonical("TestCases/basic_struct");
+    const fs::path tcDir = testCasePath("basic_struct");
     const fs::path templatePath = tcDir / "template.tpp";
     const fs::path typesPath = tcDir / "typedefs.tpp";
 
@@ -874,8 +882,8 @@ class LspDefinitionTest : public LspParamFixture<LspDefinitionSpec> {
 
 TEST_P(LspDefinitionTest, TargetLocation) {
     namespace fs = std::filesystem;
-    std::string uri = fileUri(fs::weakly_canonical(
-        std::string("TestCases/") + spec_.testCase + "/" + spec_.file));
+    std::string uri = fileUri(testCasePath(
+        std::filesystem::path(spec_.testCase) / spec_.file));
 
     auto result = client_->request("textDocument/definition", {{"textDocument", {{"uri", uri}}},
                                                                {"position", {{"line", spec_.line}, {"character", spec_.character}}}});
@@ -891,8 +899,8 @@ TEST_P(LspDefinitionTest, TargetLocation) {
     ASSERT_FALSE(result.is_null())
         << "Expected a definition location but got null";
 
-    std::string exp_uri = fileUri(fs::weakly_canonical(
-        std::string("TestCases/") + spec_.testCase + "/" + spec_.expected_file.value()));
+    std::string exp_uri = fileUri(testCasePath(
+        std::filesystem::path(spec_.testCase) / spec_.expected_file.value()));
 
     auto check = [&](const nlohmann::json &loc) {
         EXPECT_EQ(loc.value("uri", ""), exp_uri);
@@ -934,8 +942,8 @@ class LspHoverTest : public LspParamFixture<LspHoverSpec> {
 
 TEST_P(LspHoverTest, ContainsExpectedText) {
     namespace fs = std::filesystem;
-    std::string uri = fileUri(fs::weakly_canonical(
-        std::string("TestCases/") + spec_.testCase + "/" + spec_.file));
+    std::string uri = fileUri(testCasePath(
+        std::filesystem::path(spec_.testCase) / spec_.file));
 
     auto result = client_->request("textDocument/hover", {{"textDocument", {{"uri", uri}}},
                                                           {"position", {{"line", spec_.line}, {"character", spec_.character}}}});
