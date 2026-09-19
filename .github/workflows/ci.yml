@@ -74,7 +74,7 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          if [[ "${{ matrix.os }}" == *"-arm" ]]; then
+          if [[ "${{ matrix.os }}" == *"-arm" || "${{ matrix.os }}" == "ubuntu-24.04" ]]; then
             cmake --build build --parallel 2
           else
             cmake --build build --parallel
@@ -101,7 +101,7 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          if [[ "${{ matrix.os }}" == *"-arm" ]]; then
+          if [[ "${{ matrix.os }}" == *"-arm" || "${{ matrix.os }}" == "ubuntu-24.04" ]]; then
             cmake --build build --target build_all_tests --parallel 2
           else
             cmake --build build --target build_all_tests --parallel
@@ -128,7 +128,7 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          if [[ "${{ matrix.os }}" == *"-arm" ]]; then
+          if [[ "${{ matrix.os }}" == *"-arm" || "${{ matrix.os }}" == "ubuntu-24.04" ]]; then
             ctest --parallel 2 --progress --output-on-failure --test-dir build
           else
             ctest --parallel --progress --output-on-failure --test-dir build
