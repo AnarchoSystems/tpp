@@ -14,7 +14,7 @@ template render_cpp_functions(functions: list<CppFunctionDecl>, includes: list<s
 namespace @namespaceName@ {
 @end if@
 @for function in functions@
-@if function.docComment@@function.docComment@@end if@std::string @functionPrefix@@function.name@(@for param in function.params | sep=", "@cpp_arg_type(param.type)@ @param.name@@end for@);
+@if function.docComment@@function.docComment@@end if@std::string @functionPrefix@@function.name@(@for param in function.params | sep=", "@@cpp_arg_type(param.type)@ @param.name@@end for@);
 @end for@
 @if namespaceName@
 } // namespace @namespaceName@
