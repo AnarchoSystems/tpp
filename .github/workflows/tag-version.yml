@@ -1,7 +1,9 @@
 name: Tag Version
 
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches:
       - main
     paths:
@@ -12,12 +14,38 @@ permissions:
   contents: write
 
 jobs:
+  version-changed:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    outputs:
+      changed: ${{ steps.version.outputs.changed }}
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 2
+
+      - name: Check version change
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff-tree --no-commit-id --name-only -r --root HEAD -- version.json | grep -qx 'version.json'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
   tag:
+    needs: version-changed
+    if: needs.version-changed.outputs.changed == 'true'
     runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v5
         with:
+          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
 
       - name: Read version
@@ -37,13 +65,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          commit_sha=$(git rev-parse HEAD)
           if git rev-parse --verify --quiet "refs/tags/$TAG"; then
-            if [ "$(git rev-list -n 1 "$TAG")" != "$GITHUB_SHA" ]; then
+            if [ "$(git rev-list -n 1 "$TAG")" != "$commit_sha" ]; then
               echo "Tag $TAG already points to a different commit" >&2
               exit 1
             fi
           else
-            git tag "$TAG" "$GITHUB_SHA"
+            git tag "$TAG" "$commit_sha"
             git push origin "$TAG"
           fi
 
