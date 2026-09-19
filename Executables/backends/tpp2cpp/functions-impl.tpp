@@ -396,7 +396,7 @@ static std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep="
 @for fn in ctx.functions@
 
 @if ctx.policies@
-static std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@[[maybe_unused]] @cpp_arg_type(param.type)@ @param.name@@end for@, [[maybe_unused]] const tpp::TppPolicy& _policy) {
+static std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@[[maybe_unused]] @@cpp_arg_type(param.type)@ @param.name@@end for@, [[maybe_unused]] const tpp::TppPolicy& _policy) {
     tpp::Writer _writer;
     @for instr in fn.body@
     @emit_instr(instr)@
@@ -404,7 +404,7 @@ static std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep="
     return _writer.takeOutput(tpp::Writer::OutputPostProcessing::StripSingleTrailingNewline);
 }
 
-@if ctx.needsStatic@static @end if@std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@cpp_arg_type(param.type)@ @param.name@@end for@) {
+@if ctx.needsStatic@static @end if@std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@@cpp_arg_type(param.type)@ @param.name@@end for@) {
     return @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@@param.name@@end for@, _tppPolicyPure);
 }
 @else@
