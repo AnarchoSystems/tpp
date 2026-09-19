@@ -7,8 +7,7 @@
 #       NAME <name>                # unique prefix for generated output files
 #       [NAMESPACE <name>]         # C++ namespace to wrap generated code in
 #       [EXTRA_INCLUDES <file>...] # additional -i <file> flags passed to tpp2cpp
-#       [EMBED_RUNTIME]            # don't link lib_tpp; use standalone shadow copies
-#                                   # of the runtime headers generated code needs
+#       [EMBED_RUNTIME]            # don't link lib_tpp; embed the runtime in the generated .cc
 #   )
 #
 # Adds generated sources directly to the existing <target>:
@@ -18,12 +17,9 @@
 #
 # By default tpp_add() links lib_tpp into <target> so its generated code can
 # resolve #include <tpp/ArgType.h>, <tpp/Policy.h>, <tpp/Writer.h>. Pass
-# EMBED_RUNTIME to avoid the lib_tpp dependency entirely: `tpp2cpp runtime`
-# (content embedded in the tpp2cpp binary at its own build time, the same way
-# defs.h embeds the compiler's own IR) supplies a standalone <name>_runtime.h,
-# and `tpp2cpp functions/impl --standalone` omit the built-in tpp/ includes in
-# favor of it. The only build-time requirement is the tpp2cpp executable —
-# no lib_tpp headers or source tree are read.
+# EMBED_RUNTIME to avoid the lib_tpp dependency entirely: `tpp2cpp impl --standalone`
+# embeds the runtime directly in the generated .cc. The only build-time requirement
+# is the tpp2cpp executable — no lib_tpp headers or source tree are read.
 #
 # The generated headers are accessible via target_include_directories automatically.
 # Code in <target> may #include "<name>_functions.h".
@@ -57,7 +53,6 @@ function(tpp_add target_name)
     set(out_prefix "${TPP_NAME}")
     set(out_json  "${CMAKE_CURRENT_BINARY_DIR}/${out_prefix}-tpp.json")
     set(out_json_depfile "${out_json}.d")
-    set(out_runtime "${CMAKE_CURRENT_BINARY_DIR}/${out_prefix}_runtime.h")
     set(out_types "${CMAKE_CURRENT_BINARY_DIR}/${out_prefix}_types.h")
     set(out_funs  "${CMAKE_CURRENT_BINARY_DIR}/${out_prefix}_functions.h")
     set(out_impl  "${CMAKE_CURRENT_BINARY_DIR}/${out_prefix}_implementation.cc")
@@ -75,23 +70,8 @@ function(tpp_add target_name)
     endforeach()
 
     set(standalone_args "")
-    set(runtime_include_args "")
     if(TPP_EMBED_RUNTIME)
         set(standalone_args --standalone)
-        set(runtime_include_args -i "${out_prefix}_runtime.h")
-
-        # Step 0: ask tpp2cpp for its embedded standalone runtime header
-        add_custom_command(
-            OUTPUT "${out_runtime}"
-            COMMAND ${CMAKE_COMMAND}
-                -DCMD=$<TARGET_FILE:tpp2cpp>
-                "-DARGS=runtime"
-                -DOUT=${out_runtime}
-                -P ${TPP_SOURCE}/cmake/StdoutToFile.cmake
-            DEPENDS $<TARGET_FILE:tpp2cpp>
-            COMMENT "tpp2cpp runtime ${out_prefix}"
-            VERBATIM
-        )
     endif()
 
     # Step 1: compile templates to JSON
@@ -126,7 +106,7 @@ function(tpp_add target_name)
     )
 
     # Step 3: generate C++ functions header (includes types header)
-    set(_funs_args functions ${ns_args} ${standalone_args} ${runtime_include_args} -i "${out_prefix}_types.h" ${extra_include_args} --input "${out_json}")
+    set(_funs_args functions ${ns_args} ${standalone_args} -i "${out_prefix}_types.h" ${extra_include_args} --input "${out_json}")
     add_custom_command(
         OUTPUT "${out_funs}"
         COMMAND ${CMAKE_COMMAND}
@@ -140,7 +120,7 @@ function(tpp_add target_name)
     )
 
     # Step 4: generate C++ implementation (includes functions header)
-    set(_impl_args impl ${ns_args} ${standalone_args} ${runtime_include_args} -i "${out_prefix}_functions.h" ${extra_include_args} --input "${out_json}")
+    set(_impl_args impl ${ns_args} ${standalone_args} -i "${out_prefix}_functions.h" ${extra_include_args} --input "${out_json}")
     add_custom_command(
         OUTPUT "${out_impl}"
         COMMAND ${CMAKE_COMMAND}
@@ -157,9 +137,6 @@ function(tpp_add target_name)
     # Listing the headers as sources makes CMake enforce their generation
     # before any compilation in the target (no separate custom_target needed).
     set(_generated_sources "${out_impl}" "${out_types}" "${out_funs}")
-    if(TPP_EMBED_RUNTIME)
-        list(APPEND _generated_sources "${out_runtime}")
-    endif()
     target_sources(${target_name} PRIVATE ${_generated_sources})
 
     get_target_property(_tpp_add_initialized ${target_name} TPP_ADD_INITIALIZED)
