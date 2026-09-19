@@ -380,6 +380,7 @@ template render_cpp_native_implementation(ctx: RenderFunctionsInput)
 @if ctx.namespaceName@
 namespace @ctx.namespaceName@ {
 @end if@
+namespace {
 
 @emit_switch_payload_helpers()@
 
@@ -403,7 +404,14 @@ static std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep="
     @end for@
     return _writer.takeOutput(tpp::Writer::OutputPostProcessing::StripSingleTrailingNewline);
 }
+@end if@
+@end for@
 
+} // namespace
+
+@for fn in ctx.functions@
+
+@if ctx.policies@
 @if ctx.needsStatic@static @end if@std::string @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@@cpp_arg_type(param.type)@ @param.name@@end for@) {
     return @ctx.functionPrefix@@fn.name@(@for param in fn.params | sep=", "@@param.name@@end for@, _tppPolicyPure);
 }
