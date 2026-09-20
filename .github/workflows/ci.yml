@@ -55,14 +55,6 @@ jobs:
             echo "swift not installed on this runner"
           fi
 
-      - name: Select non-Windows parallelism
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          if [[ "${{ matrix.os }}" == *"-arm" || "${{ matrix.os }}" == "ubuntu-24.04" ]]; then
-            echo "NON_WINDOWS_PARALLEL=2" >> "$GITHUB_ENV"
-          fi
-
       - name: Configure (non-Windows)
         if: runner.os != 'Windows'
         run: cmake -B build -DCMAKE_BUILD_TYPE=Debug
@@ -81,12 +73,7 @@ jobs:
       - name: Build (non-Windows)
         if: runner.os != 'Windows'
         shell: bash
-        run: |
-          if [[ -n "${NON_WINDOWS_PARALLEL:-}" ]]; then
-            cmake --build build --parallel "${NON_WINDOWS_PARALLEL}"
-          else
-            cmake --build build --parallel
-          fi
+        run: cmake --build build --parallel 2
 
       - name: Build (Windows)
         if: runner.os == 'Windows'
@@ -96,7 +83,7 @@ jobs:
           $parallelLog = 'build/windows-build-parallel.log'
           $serialLog = 'build/windows-build-serial.log'
 
-          cmake --build build --config Debug --parallel *>&1 | Tee-Object -FilePath $parallelLog
+          cmake --build build --config Debug --parallel 2 *>&1 | Tee-Object -FilePath $parallelLog
           if ($LASTEXITCODE -ne 0) {
             Write-Host 'Parallel build failed; retrying serialized with minimal MSBuild verbosity...'
             cmake --build build --config Debug -- /m:1 /v:minimal *>&1 | Tee-Object -FilePath $serialLog
@@ -108,12 +95,7 @@ jobs:
       - name: Build Java & Swift tests (non-Windows)
         if: runner.os != 'Windows'
         shell: bash
-        run: |
-          if [[ -n "${NON_WINDOWS_PARALLEL:-}" ]]; then
-            cmake --build build --target build_all_tests --parallel "${NON_WINDOWS_PARALLEL}"
-          else
-            cmake --build build --target build_all_tests --parallel
-          fi
+        run: cmake --build build --target build_all_tests --parallel 2
 
       - name: Build Java & Swift tests (Windows)
         if: runner.os == 'Windows'
@@ -123,7 +105,7 @@ jobs:
           $parallelLog = 'build/windows-codegen-tests-build-parallel.log'
           $serialLog = 'build/windows-codegen-tests-build-serial.log'
 
-          cmake --build build --config Debug --target java_tests swift_tests --parallel *>&1 | Tee-Object -FilePath $parallelLog
+          cmake --build build --config Debug --target java_tests swift_tests --parallel 2 *>&1 | Tee-Object -FilePath $parallelLog
           if ($LASTEXITCODE -ne 0) {
             Write-Host 'Parallel codegen test-target build failed; retrying serialized with minimal MSBuild verbosity...'
             cmake --build build --config Debug --target java_tests swift_tests -- /m:1 /v:minimal *>&1 | Tee-Object -FilePath $serialLog
@@ -135,14 +117,9 @@ jobs:
       - name: Test (non-Windows)
         if: runner.os != 'Windows'
         shell: bash
-        run: |
-          if [[ -n "${NON_WINDOWS_PARALLEL:-}" ]]; then
-            ctest --parallel "${NON_WINDOWS_PARALLEL}" --progress --output-on-failure --test-dir build
-          else
-            ctest --parallel --progress --output-on-failure --test-dir build
-          fi
+        run: ctest --parallel 2 --progress --output-on-failure --test-dir build
 
       - name: Test (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: ctest --build-config Debug --parallel --progress --output-on-failure --test-dir build
+        run: ctest --build-config Debug --parallel 2 --progress --output-on-failure --test-dir build
