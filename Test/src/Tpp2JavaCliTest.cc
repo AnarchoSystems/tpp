@@ -10,7 +10,7 @@ namespace
 
 std::string fixtureProjectPath()
 {
-    return std::filesystem::absolute("Fixtures/tpp2cpp_doc_comments").string();
+    return (std::filesystem::path(TPP_TEST_SOURCE_DIR) / "Fixtures" / "tpp2cpp_doc_comments").string();
 }
 
 TEST(Tpp2JavaCliTest, SourceEmitsDocsAndOmitsRuntime)
